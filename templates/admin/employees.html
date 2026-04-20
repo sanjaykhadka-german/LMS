@@ -1,38 +1,62 @@
 {% extends "base.html" %}
-{% block title %}Employees{% endblock %}
+{% block title %}Users{% endblock %}
 {% block content %}
-<h2 class="mb-3">Employees</h2>
+<h2 class="mb-3">Users</h2>
 
 <div class="card p-3 mb-4">
-  <h5>Add employee</h5>
+  <h5>Add user</h5>
   <form method="post" action="{{ url_for('admin_employee_new') }}" class="row g-2">
-    <div class="col-md-5"><input name="name" required class="form-control" placeholder="Full name"></div>
-    <div class="col-md-5"><input name="email" type="email" required class="form-control" placeholder="Email"></div>
+    <div class="col-md-4"><input name="name" required class="form-control" placeholder="Full name"></div>
+    <div class="col-md-4"><input name="email" type="email" required class="form-control" placeholder="Email"></div>
+    <div class="col-md-2">
+      <select name="role" class="form-select">
+        <option value="employee">Employee</option>
+        <option value="admin">Administrator</option>
+      </select>
+    </div>
     <div class="col-md-2"><button class="btn btn-primary w-100">Add</button></div>
   </form>
-  <div class="form-text mt-2">A temporary password is generated and emailed (if Resend is configured) — otherwise shown here on the next page.</div>
+  <div class="form-text mt-2">A temporary password is generated and emailed (if Resend is configured) — it is also shown here on the next page.</div>
 </div>
 
 <div class="card p-3">
   <table class="table align-middle">
-    <thead><tr><th>Name</th><th>Email</th><th>Status</th><th></th></tr></thead>
+    <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th class="text-end">Actions</th></tr></thead>
     <tbody>
     {% for e in employees %}
       <tr>
         <td>{{ e.name }}</td>
         <td>{{ e.email }}</td>
         <td>
+          {% if e.role == 'admin' %}<span class="badge bg-primary">Administrator</span>
+          {% else %}<span class="badge bg-secondary">Employee</span>{% endif %}
+        </td>
+        <td>
           {% if e.is_active_flag %}<span class="badge bg-success">Active</span>
           {% else %}<span class="badge bg-secondary">Disabled</span>{% endif %}
         </td>
         <td class="text-end">
-          <form method="post" action="{{ url_for('admin_employee_toggle', uid=e.id) }}">
-            <button class="btn btn-sm btn-outline-secondary">Toggle</button>
-          </form>
+          {% if e.id != current_user.id %}
+            <form method="post" action="{{ url_for('admin_employee_role', uid=e.id) }}" class="d-inline">
+              <input type="hidden" name="role"
+                     value="{{ 'employee' if e.role == 'admin' else 'admin' }}">
+              <button class="btn btn-sm btn-outline-primary"
+                      onclick="return confirm('Change role?');">
+                Make {{ 'employee' if e.role == 'admin' else 'admin' }}
+              </button>
+            </form>
+            <form method="post" action="{{ url_for('admin_employee_toggle', uid=e.id) }}" class="d-inline">
+              <button class="btn btn-sm btn-outline-secondary">
+                {{ 'Disable' if e.is_active_flag else 'Enable' }}
+              </button>
+            </form>
+          {% else %}
+            <span class="text-muted small">you</span>
+          {% endif %}
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="4" class="text-muted">No employees yet.</td></tr>
+      <tr><td colspan="5" class="text-muted">No users yet.</td></tr>
     {% endfor %}
     </tbody>
   </table>

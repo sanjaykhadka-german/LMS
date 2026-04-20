@@ -281,11 +281,11 @@ def register_routes(app):
         db.session.commit()
         return redirect(url_for("admin_module_edit", module_id=mid))
 
-    # employees
+    # users (employees + admins)
     @app.route("/admin/employees")
     @admin_required
     def admin_employees():
-        employees = User.query.filter_by(role="employee").order_by(User.name).all()
+        employees = User.query.order_by(User.role.desc(), User.name).all()
         return render_template("admin/employees.html", employees=employees)
 
     @app.route("/admin/employees/new", methods=["POST"])
@@ -293,24 +293,45 @@ def register_routes(app):
     def admin_employee_new():
         name = request.form["name"].strip()
         email = request.form["email"].strip().lower()
+        role = request.form.get("role", "employee")
+        if role not in ("employee", "admin"):
+            role = "employee"
         if User.query.filter_by(email=email).first():
             flash("A user with this email already exists.", "danger")
             return redirect(url_for("admin_employees"))
         temp_pw = secrets.token_urlsafe(9)
-        u = User(name=name, email=email, role="employee")
+        u = User(name=name, email=email, role=role)
         u.set_password(temp_pw)
         db.session.add(u)
         db.session.commit()
         notify_invite(u, temp_pw, app.config["APP_BASE_URL"])
-        flash(f"Employee created. Temporary password: {temp_pw}", "success")
+        label = "Administrator" if role == "admin" else "Employee"
+        flash(f"{label} created. Temporary password: {temp_pw}", "success")
         return redirect(url_for("admin_employees"))
 
     @app.route("/admin/employees/<int:uid>/toggle", methods=["POST"])
     @admin_required
     def admin_employee_toggle(uid):
         u = db.session.get(User, uid) or abort(404)
+        if u.id == current_user.id:
+            flash("You cannot disable your own account.", "danger")
+            return redirect(url_for("admin_employees"))
         u.is_active_flag = not u.is_active_flag
         db.session.commit()
+        return redirect(url_for("admin_employees"))
+
+    @app.route("/admin/employees/<int:uid>/role", methods=["POST"])
+    @admin_required
+    def admin_employee_role(uid):
+        u = db.session.get(User, uid) or abort(404)
+        if u.id == current_user.id:
+            flash("You cannot change your own role.", "danger")
+            return redirect(url_for("admin_employees"))
+        new_role = request.form.get("role", "")
+        if new_role in ("employee", "admin"):
+            u.role = new_role
+            db.session.commit()
+            flash(f"{u.name} is now {new_role}.", "success")
         return redirect(url_for("admin_employees"))
 
     # assignments
