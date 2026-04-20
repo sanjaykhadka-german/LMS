@@ -41,11 +41,24 @@ def create_app():
 
 
 def bootstrap_admin(app):
-    """Create an initial admin account if none exists."""
-    if User.query.filter_by(role="admin").first():
-        return
+    """Create an admin if none exists, or reset the admin password
+    to the value of the ADMIN_RESET_PASSWORD env var if it is set."""
     admin_email = app.config.get("ADMIN_EMAIL") or "admin@example.com"
-    temp_pw = secrets.token_urlsafe(9)
+    reset_pw = os.environ.get("ADMIN_RESET_PASSWORD", "").strip()
+    admin = User.query.filter_by(role="admin").first()
+
+    if admin:
+        if reset_pw:
+            admin.set_password(reset_pw)
+            db.session.commit()
+            app.logger.warning("=" * 60)
+            app.logger.warning("ADMIN PASSWORD RESET via ADMIN_RESET_PASSWORD env var")
+            app.logger.warning("Email: %s", admin.email)
+            app.logger.warning("Now UNSET the env var to avoid resets on every boot.")
+            app.logger.warning("=" * 60)
+        return
+
+    temp_pw = reset_pw or secrets.token_urlsafe(9)
     admin = User(email=admin_email, name="Administrator", role="admin")
     admin.set_password(temp_pw)
     db.session.add(admin)
