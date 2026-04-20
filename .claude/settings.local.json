@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m py_compile app.py models.py config.py email_service.py)",
+      "Bash(python -c ' *)",
+      "Bash(python _check_jinja.py)",
+      "Bash(python _check_scoring.py)"
+    ]
+  }
+}

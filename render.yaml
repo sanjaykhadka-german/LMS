@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: lms
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: lms-db
+          property: connectionString
+      - key: RESEND_API_KEY
+        sync: false
+      - key: MAIL_FROM
+        value: training@germanbutchery.com.au
+      - key: MAIL_FROM_NAME
+        value: German Butchery Training
+      - key: APP_BASE_URL
+        sync: false
+      - key: ADMIN_EMAIL
+        value: sanjay.khadka@germanbutchery.com.au
+      - key: PASS_THRESHOLD
+        value: "80"
+
+databases:
+  - name: lms-db
+    plan: free

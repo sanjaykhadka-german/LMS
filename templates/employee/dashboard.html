@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}My training{% endblock %}
+{% block content %}
+<h2 class="mb-3">My training</h2>
+
+<div class="row g-3">
+{% for a in assignments %}
+  <div class="col-md-6">
+    <div class="card p-3 h-100">
+      <div class="d-flex justify-content-between">
+        <h5>{{ a.module.title }}</h5>
+        {% if a.completed_at %}
+          <span class="badge bg-success">Completed</span>
+        {% else %}
+          <span class="badge bg-warning text-dark">Outstanding</span>
+        {% endif %}
+      </div>
+      <p class="text-muted">{{ a.module.description }}</p>
+      <a class="btn btn-primary" href="{{ url_for('my_module', module_id=a.module_id) }}">
+        {{ 'Review' if a.completed_at else 'Open' }}
+      </a>
+    </div>
+  </div>
+{% else %}
+  <div class="col-12"><div class="card p-3 text-muted">No training assigned yet.</div></div>
+{% endfor %}
+</div>
+{% endblock %}

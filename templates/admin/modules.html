@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Modules{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2>Modules</h2>
+  <a class="btn btn-primary" href="{{ url_for('admin_module_new') }}">+ New module</a>
+</div>
+
+<div class="card p-3">
+  <table class="table align-middle">
+    <thead><tr><th>Title</th><th>Content</th><th>Questions</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for m in modules %}
+      <tr>
+        <td><a href="{{ url_for('admin_module_edit', module_id=m.id) }}">{{ m.title }}</a></td>
+        <td>{{ m.content_items|length }}</td>
+        <td>{{ m.questions|length }}</td>
+        <td>
+          {% if m.is_published %}<span class="badge bg-success">Published</span>
+          {% else %}<span class="badge bg-secondary">Draft</span>{% endif %}
+        </td>
+        <td class="text-end">
+          <form method="post" action="{{ url_for('admin_module_delete', module_id=m.id) }}"
+                class="d-inline" onsubmit="return confirm('Delete this module?');">
+            <button class="btn btn-sm btn-outline-danger">Delete</button>
+          </form>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" class="text-muted">No modules yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

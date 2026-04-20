@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}{{ module.title }}{% endblock %}
+{% block content %}
+<a href="{{ url_for('my_modules') }}" class="small text-decoration-none">&larr; Back</a>
+<h2 class="mb-3">{{ module.title }}</h2>
+<p class="text-muted">{{ module.description }}</p>
+
+{% for ci in module.content_items %}
+  <div class="card p-3 mb-3">
+    <h5>{{ ci.title }}</h5>
+    {% if ci.kind == 'text' %}
+      <p class="mb-0" style="white-space:pre-wrap">{{ ci.body }}</p>
+    {% elif ci.kind == 'link' %}
+      <a href="{{ ci.body }}" target="_blank">{{ ci.body }}</a>
+    {% elif ci.kind == 'pdf' and ci.file_path %}
+      <embed src="{{ url_for('uploaded_file', name=ci.file_path) }}" type="application/pdf"
+             style="width:100%;height:70vh">
+      <a href="{{ url_for('uploaded_file', name=ci.file_path) }}" target="_blank" class="small">Open PDF</a>
+    {% elif ci.kind == 'audio' and ci.file_path %}
+      <audio controls class="w-100"><source src="{{ url_for('uploaded_file', name=ci.file_path) }}"></audio>
+    {% elif ci.kind == 'video' and ci.file_path %}
+      <video controls class="w-100"><source src="{{ url_for('uploaded_file', name=ci.file_path) }}"></video>
+    {% elif ci.kind == 'image' and ci.file_path %}
+      <img src="{{ url_for('uploaded_file', name=ci.file_path) }}" class="img-fluid">
+    {% endif %}
+  </div>
+{% endfor %}
+
+{% if module.questions %}
+  <a class="btn btn-primary btn-lg" href="{{ url_for('my_quiz', module_id=module.id) }}">
+    {{ 'Retake quiz' if assignment.completed_at else 'Start quiz' }}
+  </a>
+{% else %}
+  <div class="alert alert-info">No quiz attached to this module.</div>
+{% endif %}
+{% endblock %}

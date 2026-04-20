@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}{{ 'New module' if not module else module.title }}{% endblock %}
+{% block content %}
+<h2 class="mb-3">{{ 'New module' if not module else 'Edit module' }}</h2>
+
+<div class="card p-3 mb-4">
+  <form method="post">
+    <div class="mb-3">
+      <label class="form-label">Title</label>
+      <input name="title" required class="form-control"
+             value="{{ module.title if module else '' }}">
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Description</label>
+      <textarea name="description" rows="3" class="form-control">{{ module.description if module else '' }}</textarea>
+    </div>
+    {% if module %}
+    <div class="form-check mb-3">
+      <input class="form-check-input" type="checkbox" name="is_published" id="pub"
+             {% if module.is_published %}checked{% endif %}>
+      <label class="form-check-label" for="pub">Published</label>
+    </div>
+    {% endif %}
+    <button class="btn btn-primary">Save</button>
+  </form>
+</div>
+
+{% if module %}
+<div class="row">
+  <div class="col-md-6">
+    <div class="card p-3 mb-4">
+      <h5>Content items</h5>
+      <ul class="list-group mb-3">
+        {% for ci in module.content_items %}
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            <span>
+              <span class="badge bg-info text-dark">{{ ci.kind }}</span>
+              {{ ci.title }}
+              {% if ci.file_path %}<a class="small" href="{{ url_for('uploaded_file', name=ci.file_path) }}" target="_blank">(file)</a>{% endif %}
+            </span>
+            <form method="post" action="{{ url_for('admin_content_delete', item_id=ci.id) }}">
+              <button class="btn btn-sm btn-outline-danger">Remove</button>
+            </form>
+          </li>
+        {% else %}
+          <li class="list-group-item text-muted">No content yet.</li>
+        {% endfor %}
+      </ul>
+
+      <form method="post" enctype="multipart/form-data"
+            action="{{ url_for('admin_content_add', module_id=module.id) }}">
+        <div class="mb-2">
+          <label class="form-label small">Type</label>
+          <select name="kind" class="form-select">
+            <option value="pdf">PDF</option>
+            <option value="audio">Audio</option>
+            <option value="video">Video</option>
+            <option value="image">Image</option>
+            <option value="text">Text</option>
+            <option value="link">External link</option>
+          </select>
+        </div>
+        <div class="mb-2">
+          <input name="title" placeholder="Title" required class="form-control">
+        </div>
+        <div class="mb-2">
+          <textarea name="body" rows="2" class="form-control"
+                    placeholder="Text body / link URL (optional)"></textarea>
+        </div>
+        <div class="mb-2">
+          <input type="file" name="file" class="form-control">
+        </div>
+        <button class="btn btn-outline-primary btn-sm">Add content</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="card p-3 mb-4">
+      <h5>Quiz questions</h5>
+      <ol class="mb-3">
+        {% for q in module.questions %}
+          <li class="mb-2">
+            <div class="d-flex justify-content-between">
+              <span><b>[{{ q.kind }}]</b> {{ q.prompt }}</span>
+              <form method="post" action="{{ url_for('admin_question_delete', q_id=q.id) }}">
+                <button class="btn btn-sm btn-outline-danger">x</button>
+              </form>
+            </div>
+            <ul class="small">
+              {% for c in q.choices %}
+                <li>{% if c.is_correct %}<b>{{ c.text }}</b> ✓{% else %}{{ c.text }}{% endif %}</li>
+              {% endfor %}
+            </ul>
+          </li>
+        {% else %}
+          <li class="text-muted">No questions yet.</li>
+        {% endfor %}
+      </ol>
+
+      <form method="post" action="{{ url_for('admin_question_add', module_id=module.id) }}">
+        <div class="mb-2">
+          <textarea name="prompt" rows="2" required placeholder="Question"
+                    class="form-control"></textarea>
+        </div>
+        <div class="mb-2">
+          <select name="kind" class="form-select">
+            <option value="single">Single answer</option>
+            <option value="multi">Multiple answers</option>
+          </select>
+        </div>
+        <div class="mb-2 small text-muted">Tick the correct answer(s).</div>
+        {% for i in range(4) %}
+          <div class="input-group mb-1">
+            <div class="input-group-text">
+              <input type="checkbox" name="correct" value="{{ i }}">
+            </div>
+            <input name="choice_text" class="form-control" placeholder="Choice {{ i+1 }}">
+          </div>
+        {% endfor %}
+        <button class="btn btn-outline-primary btn-sm">Add question</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
