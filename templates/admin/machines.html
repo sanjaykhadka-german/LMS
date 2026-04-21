@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Machines{% endblock %}
+{% block content %}
+<h2 class="mb-3">Machines</h2>
+
+<div class="card p-3 mb-4">
+  <h5>Add machine</h5>
+  <form method="post" class="row g-2">
+    <div class="col-md-8"><input name="name" required class="form-control" placeholder="Machine name"></div>
+    <div class="col-md-4"><button class="btn btn-primary w-100">Add</button></div>
+  </form>
+</div>
+
+<div class="card p-3">
+  <table class="table align-middle">
+    <thead><tr><th>Name</th><th class="text-end">Actions</th></tr></thead>
+    <tbody>
+    {% for m in machines %}
+      <tr>
+        <td>{{ m.name }}</td>
+        <td class="text-end">
+          <form method="post" action="{{ url_for('admin_machine_delete', mid=m.id) }}"
+                class="d-inline"
+                onsubmit="return confirm('Delete this machine? It will be removed from any employees assigned to it.');">
+            <button class="btn btn-sm btn-outline-danger">Delete</button>
+          </form>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="2" class="text-muted">No machines yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

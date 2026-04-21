@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Edit user{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="mb-0">Edit user</h2>
+  <a href="{{ url_for('admin_employees') }}" class="btn btn-sm btn-outline-secondary">&larr; Back to users</a>
+</div>
+
+<div class="card p-3">
+  <form method="post" class="row g-3">
+    <div class="col-md-6">
+      <label class="form-label">Name</label>
+      <input name="name" required class="form-control" value="{{ employee.name }}">
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Email</label>
+      <input class="form-control" value="{{ employee.email }}" disabled>
+    </div>
+
+    <div class="col-md-6">
+      <label class="form-label">Phone</label>
+      <input name="phone" class="form-control" value="{{ employee.phone or '' }}">
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Department</label>
+      <select name="department_id" class="form-select">
+        <option value="">— None —</option>
+        {% for d in departments %}
+          <option value="{{ d.id }}" {% if employee.department_id == d.id %}selected{% endif %}>{{ d.name }}</option>
+        {% endfor %}
+      </select>
+      <div class="form-text">Manage the list on the <a href="{{ url_for('admin_departments') }}">Departments</a> page.</div>
+    </div>
+
+    <div class="col-12">
+      <label class="form-label">Machines</label>
+      {% if machines %}
+        <div class="row">
+          {% set assigned_ids = employee.machines|map(attribute='id')|list %}
+          {% for m in machines %}
+            <div class="col-md-3 col-sm-4 col-6">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="machine_ids"
+                       value="{{ m.id }}" id="m{{ m.id }}"
+                       {% if m.id in assigned_ids %}checked{% endif %}>
+                <label class="form-check-label" for="m{{ m.id }}">{{ m.name }}</label>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="text-muted">No machines yet — add some on the <a href="{{ url_for('admin_machines') }}">Machines</a> page.</div>
+      {% endif %}
+    </div>
+
+    <div class="col-md-6">
+      <label class="form-label">Role</label>
+      <select name="role" class="form-select" {% if employee.id == current_user.id %}disabled{% endif %}>
+        <option value="employee" {% if employee.role == 'employee' %}selected{% endif %}>Employee</option>
+        <option value="qaqc"     {% if employee.role == 'qaqc' %}selected{% endif %}>QA/QC</option>
+        <option value="admin"    {% if employee.role == 'admin' %}selected{% endif %}>Administrator</option>
+      </select>
+      {% if employee.id == current_user.id %}
+        <div class="form-text">You can't change your own role.</div>
+      {% endif %}
+    </div>
+
+    <div class="col-12 d-flex gap-2">
+      <button class="btn btn-primary">Save</button>
+      <a href="{{ url_for('admin_employees') }}" class="btn btn-outline-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

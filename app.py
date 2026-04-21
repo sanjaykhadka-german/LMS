@@ -1,3 +1,5 @@
+import csv
+import io
 import json
 import os
 import secrets
@@ -12,7 +14,7 @@ from werkzeug.utils import secure_filename
 
 from config import Config
 from models import (db, User, Module, ContentItem, Question, Choice,
-                    Assignment, Attempt)
+                    Assignment, Attempt, Department, Machine)
 from email_service import (notify_invite, notify_assignment,
                            notify_attempt, notify_reminder)
 
@@ -34,10 +36,31 @@ def create_app():
 
     with app.app_context():
         db.create_all()
+        ensure_user_columns()
         bootstrap_admin(app)
 
     register_routes(app)
     return app
+
+
+def ensure_user_columns():
+    """Add new columns to the existing users table if missing.
+    db.create_all() does not alter existing tables — this handles phone/department_id
+    idempotently on both SQLite (dev) and Postgres (prod)."""
+    from sqlalchemy import inspect, text
+    insp = inspect(db.engine)
+    if "users" not in insp.get_table_names():
+        return
+    cols = {c["name"] for c in insp.get_columns("users")}
+    stmts = []
+    if "phone" not in cols:
+        stmts.append("ALTER TABLE users ADD COLUMN phone VARCHAR(30) DEFAULT ''")
+    if "department_id" not in cols:
+        stmts.append("ALTER TABLE users ADD COLUMN department_id INTEGER REFERENCES departments(id)")
+    if stmts:
+        with db.engine.begin() as conn:
+            for s in stmts:
+                conn.execute(text(s))
 
 
 def bootstrap_admin(app):
@@ -82,6 +105,32 @@ def admin_required(fn):
     return wrapper
 
 
+def author_required(fn):
+    """Admin or QA/QC — anyone who can author modules and manage assignments."""
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not current_user.is_authenticated:
+            return redirect(url_for("login"))
+        if not current_user.can_author:
+            abort(403)
+        return fn(*args, **kwargs)
+    return wrapper
+
+
+def qaqc_required(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not current_user.is_authenticated:
+            return redirect(url_for("login"))
+        if not current_user.is_qaqc:
+            abort(403)
+        return fn(*args, **kwargs)
+    return wrapper
+
+
+VALID_ROLES = ("admin", "qaqc", "employee")
+
+
 def allowed_file(filename):
     return ("." in filename
             and filename.rsplit(".", 1)[1].lower() in Config.ALLOWED_EXTENSIONS)
@@ -107,8 +156,11 @@ def register_routes(app):
     @app.route("/")
     def index():
         if current_user.is_authenticated:
-            return redirect(url_for("admin_dashboard" if current_user.is_admin
-                                    else "my_modules"))
+            if current_user.is_admin:
+                return redirect(url_for("admin_dashboard"))
+            if current_user.is_qaqc:
+                return redirect(url_for("qaqc_dashboard"))
+            return redirect(url_for("my_modules"))
         return redirect(url_for("login"))
 
     # --- auth ---
@@ -163,19 +215,33 @@ def register_routes(app):
         recent = Attempt.query.order_by(Attempt.created_at.desc()).limit(10).all()
         return render_template("admin/dashboard.html", stats=stats, recent=recent)
 
+    # --- qa/qc ---
+    @app.route("/qaqc")
+    @qaqc_required
+    def qaqc_dashboard():
+        stats = {
+            "modules": Module.query.count(),
+            "published": Module.query.filter_by(is_published=True).count(),
+            "assignments": Assignment.query.count(),
+            "attempts": Attempt.query.count(),
+        }
+        recent = Attempt.query.order_by(Attempt.created_at.desc()).limit(10).all()
+        return render_template("qaqc/dashboard.html", stats=stats, recent=recent)
+
     # modules
     @app.route("/admin/modules")
-    @admin_required
+    @author_required
     def admin_modules():
         modules = Module.query.order_by(Module.created_at.desc()).all()
         return render_template("admin/modules.html", modules=modules)
 
     @app.route("/admin/modules/new", methods=["GET", "POST"])
-    @admin_required
+    @author_required
     def admin_module_new():
         if request.method == "POST":
             m = Module(title=request.form["title"].strip(),
-                       description=request.form.get("description", ""))
+                       description=request.form.get("description", ""),
+                       created_by_id=current_user.id)
             db.session.add(m)
             db.session.commit()
             flash("Module created.", "success")
@@ -183,7 +249,7 @@ def register_routes(app):
         return render_template("admin/module_form.html", module=None)
 
     @app.route("/admin/modules/<int:module_id>", methods=["GET", "POST"])
-    @admin_required
+    @author_required
     def admin_module_edit(module_id):
         m = db.session.get(Module, module_id) or abort(404)
         if request.method == "POST":
@@ -195,7 +261,7 @@ def register_routes(app):
         return render_template("admin/module_form.html", module=m)
 
     @app.route("/admin/modules/<int:module_id>/delete", methods=["POST"])
-    @admin_required
+    @author_required
     def admin_module_delete(module_id):
         m = db.session.get(Module, module_id) or abort(404)
         db.session.delete(m)
@@ -205,7 +271,7 @@ def register_routes(app):
 
     # content items
     @app.route("/admin/modules/<int:module_id>/content/add", methods=["POST"])
-    @admin_required
+    @author_required
     def admin_content_add(module_id):
         m = db.session.get(Module, module_id) or abort(404)
         kind = request.form.get("kind", "text")
@@ -233,7 +299,7 @@ def register_routes(app):
         return redirect(url_for("admin_module_edit", module_id=m.id))
 
     @app.route("/admin/content/<int:item_id>/delete", methods=["POST"])
-    @admin_required
+    @author_required
     def admin_content_delete(item_id):
         ci = db.session.get(ContentItem, item_id) or abort(404)
         mid = ci.module_id
@@ -243,7 +309,7 @@ def register_routes(app):
 
     # questions
     @app.route("/admin/modules/<int:module_id>/questions/add", methods=["POST"])
-    @admin_required
+    @author_required
     def admin_question_add(module_id):
         m = db.session.get(Module, module_id) or abort(404)
         prompt = request.form.get("prompt", "").strip()
@@ -273,7 +339,7 @@ def register_routes(app):
         return redirect(url_for("admin_module_edit", module_id=m.id))
 
     @app.route("/admin/questions/<int:q_id>/delete", methods=["POST"])
-    @admin_required
+    @author_required
     def admin_question_delete(q_id):
         q = db.session.get(Question, q_id) or abort(404)
         mid = q.module_id
@@ -285,7 +351,11 @@ def register_routes(app):
     @app.route("/admin/employees")
     @admin_required
     def admin_employees():
-        employees = User.query.order_by(User.role.desc(), User.name).all()
+        employees = (User.query
+                     .options(db.joinedload(User.department),
+                              db.selectinload(User.machines))
+                     .order_by(User.role.desc(), User.name)
+                     .all())
         return render_template("admin/employees.html", employees=employees)
 
     @app.route("/admin/employees/new", methods=["POST"])
@@ -294,7 +364,7 @@ def register_routes(app):
         name = request.form["name"].strip()
         email = request.form["email"].strip().lower()
         role = request.form.get("role", "employee")
-        if role not in ("employee", "admin"):
+        if role not in VALID_ROLES:
             role = "employee"
         if User.query.filter_by(email=email).first():
             flash("A user with this email already exists.", "danger")
@@ -305,8 +375,7 @@ def register_routes(app):
         db.session.add(u)
         db.session.commit()
         notify_invite(u, temp_pw, app.config["APP_BASE_URL"])
-        label = "Administrator" if role == "admin" else "Employee"
-        flash(f"{label} created. Temporary password: {temp_pw}", "success")
+        flash(f"{u.role_label} created. Temporary password: {temp_pw}", "success")
         return redirect(url_for("admin_employees"))
 
     @app.route("/admin/employees/<int:uid>/toggle", methods=["POST"])
@@ -328,15 +397,159 @@ def register_routes(app):
             flash("You cannot change your own role.", "danger")
             return redirect(url_for("admin_employees"))
         new_role = request.form.get("role", "")
-        if new_role in ("employee", "admin"):
+        if new_role in VALID_ROLES:
             u.role = new_role
             db.session.commit()
-            flash(f"{u.name} is now {new_role}.", "success")
+            flash(f"{u.name} is now {u.role_label}.", "success")
         return redirect(url_for("admin_employees"))
+
+    @app.route("/admin/employees/<int:uid>/edit", methods=["GET", "POST"])
+    @admin_required
+    def admin_employee_edit(uid):
+        u = db.session.get(User, uid) or abort(404)
+        if request.method == "POST":
+            u.name = request.form.get("name", u.name).strip() or u.name
+            u.phone = request.form.get("phone", "").strip()
+            dept_raw = request.form.get("department_id", "").strip()
+            u.department_id = int(dept_raw) if dept_raw else None
+            machine_ids = [int(x) for x in request.form.getlist("machine_ids") if x.isdigit()]
+            u.machines = Machine.query.filter(Machine.id.in_(machine_ids)).all() if machine_ids else []
+            new_role = request.form.get("role", u.role)
+            if new_role in VALID_ROLES and u.id != current_user.id:
+                u.role = new_role
+            db.session.commit()
+            flash(f"{u.name} updated.", "success")
+            return redirect(url_for("admin_employees"))
+        departments = Department.query.order_by(Department.name).all()
+        machines = Machine.query.order_by(Machine.name).all()
+        return render_template("admin/employee_edit.html",
+                               employee=u, departments=departments, machines=machines)
+
+    @app.route("/admin/employees/upload", methods=["POST"])
+    @admin_required
+    def admin_employees_upload():
+        f = request.files.get("csv")
+        if not f or not f.filename:
+            flash("No file selected.", "danger")
+            return redirect(url_for("admin_employees"))
+        try:
+            text = f.stream.read().decode("utf-8-sig")
+        except UnicodeDecodeError:
+            flash("CSV must be UTF-8 encoded.", "danger")
+            return redirect(url_for("admin_employees"))
+        reader = csv.DictReader(io.StringIO(text))
+        if not reader.fieldnames or "email" not in [h.lower().strip() for h in reader.fieldnames]:
+            flash("CSV must have a header row with at least an 'email' column.", "danger")
+            return redirect(url_for("admin_employees"))
+        header_map = {h.lower().strip(): h for h in reader.fieldnames}
+
+        def cell(row, key):
+            return (row.get(header_map.get(key, ""), "") or "").strip()
+
+        created, skipped, invited = 0, 0, 0
+        for row in reader:
+            email = cell(row, "email").lower()
+            name = cell(row, "name") or email.split("@")[0]
+            if not email or "@" not in email:
+                skipped += 1
+                continue
+            if User.query.filter_by(email=email).first():
+                skipped += 1
+                continue
+            phone = cell(row, "phone")
+            dept_name = cell(row, "department")
+            machines_raw = cell(row, "machines")
+            role = cell(row, "role").lower() or "employee"
+            if role not in VALID_ROLES:
+                role = "employee"
+
+            dept = None
+            if dept_name:
+                dept = Department.query.filter_by(name=dept_name).first()
+                if not dept:
+                    dept = Department(name=dept_name)
+                    db.session.add(dept)
+                    db.session.flush()
+
+            machine_objs = []
+            if machines_raw:
+                for mname in [m.strip() for m in machines_raw.replace("|", ",").split(",") if m.strip()]:
+                    m = Machine.query.filter_by(name=mname).first()
+                    if not m:
+                        m = Machine(name=mname)
+                        db.session.add(m)
+                        db.session.flush()
+                    machine_objs.append(m)
+
+            temp_pw = secrets.token_urlsafe(9)
+            u = User(name=name, email=email, role=role, phone=phone,
+                     department_id=dept.id if dept else None)
+            u.set_password(temp_pw)
+            u.machines = machine_objs
+            db.session.add(u)
+            db.session.commit()
+            try:
+                notify_invite(u, temp_pw, app.config["APP_BASE_URL"])
+                invited += 1
+            except Exception:
+                pass
+            created += 1
+
+        flash(f"Imported {created} user(s); skipped {skipped}; invites sent: {invited}.", "success")
+        return redirect(url_for("admin_employees"))
+
+    @app.route("/admin/departments", methods=["GET", "POST"])
+    @admin_required
+    def admin_departments():
+        if request.method == "POST":
+            name = request.form.get("name", "").strip()
+            if name and not Department.query.filter_by(name=name).first():
+                db.session.add(Department(name=name))
+                db.session.commit()
+                flash(f"Department '{name}' added.", "success")
+            elif name:
+                flash("That department already exists.", "warning")
+            return redirect(url_for("admin_departments"))
+        depts = Department.query.order_by(Department.name).all()
+        return render_template("admin/departments.html", departments=depts)
+
+    @app.route("/admin/departments/<int:did>/delete", methods=["POST"])
+    @admin_required
+    def admin_department_delete(did):
+        d = db.session.get(Department, did) or abort(404)
+        User.query.filter_by(department_id=d.id).update({"department_id": None})
+        db.session.delete(d)
+        db.session.commit()
+        flash(f"Department '{d.name}' deleted.", "success")
+        return redirect(url_for("admin_departments"))
+
+    @app.route("/admin/machines", methods=["GET", "POST"])
+    @admin_required
+    def admin_machines():
+        if request.method == "POST":
+            name = request.form.get("name", "").strip()
+            if name and not Machine.query.filter_by(name=name).first():
+                db.session.add(Machine(name=name))
+                db.session.commit()
+                flash(f"Machine '{name}' added.", "success")
+            elif name:
+                flash("That machine already exists.", "warning")
+            return redirect(url_for("admin_machines"))
+        machines = Machine.query.order_by(Machine.name).all()
+        return render_template("admin/machines.html", machines=machines)
+
+    @app.route("/admin/machines/<int:mid>/delete", methods=["POST"])
+    @admin_required
+    def admin_machine_delete(mid):
+        m = db.session.get(Machine, mid) or abort(404)
+        db.session.delete(m)
+        db.session.commit()
+        flash(f"Machine '{m.name}' deleted.", "success")
+        return redirect(url_for("admin_machines"))
 
     # assignments
     @app.route("/admin/assignments", methods=["GET", "POST"])
-    @admin_required
+    @author_required
     def admin_assignments():
         if request.method == "POST":
             mid = int(request.form["module_id"])
@@ -367,7 +580,7 @@ def register_routes(app):
                                assignments=assignments)
 
     @app.route("/admin/assignments/<int:aid>/delete", methods=["POST"])
-    @admin_required
+    @author_required
     def admin_assignment_delete(aid):
         a = db.session.get(Assignment, aid) or abort(404)
         db.session.delete(a)
@@ -376,13 +589,13 @@ def register_routes(app):
 
     # register / completion log
     @app.route("/admin/register")
-    @admin_required
+    @author_required
     def admin_register():
         attempts = Attempt.query.order_by(Attempt.created_at.desc()).all()
         return render_template("admin/register.html", attempts=attempts)
 
     @app.route("/admin/register.csv")
-    @admin_required
+    @author_required
     def admin_register_csv():
         import csv, io
         buf = io.StringIO()
@@ -400,7 +613,7 @@ def register_routes(app):
                                  "attachment; filename=register.csv"})
 
     @app.route("/admin/reminders/send", methods=["POST"])
-    @admin_required
+    @author_required
     def admin_send_reminders():
         sent = 0
         for u in User.query.filter_by(role="employee", is_active_flag=True):
@@ -409,7 +622,7 @@ def register_routes(app):
                 notify_reminder(u, pending, app.config["APP_BASE_URL"])
                 sent += 1
         flash(f"Reminders sent to {sent} employee(s).", "success")
-        return redirect(url_for("admin_dashboard"))
+        return redirect(url_for("index"))
 
     # --- employee ---
     @app.route("/my/modules")
@@ -463,7 +676,7 @@ def register_routes(app):
     @login_required
     def my_result(attempt_id):
         a = db.session.get(Attempt, attempt_id) or abort(404)
-        if a.user_id != current_user.id and not current_user.is_admin:
+        if a.user_id != current_user.id and not current_user.can_author:
             abort(403)
         module = db.session.get(Module, a.module_id)
         threshold = app.config.get("PASS_THRESHOLD", 80)

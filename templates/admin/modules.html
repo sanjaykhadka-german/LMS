@@ -8,13 +8,14 @@
 
 <div class="card p-3">
   <table class="table align-middle">
-    <thead><tr><th>Title</th><th>Content</th><th>Questions</th><th>Status</th><th></th></tr></thead>
+    <thead><tr><th>Title</th><th>Content</th><th>Questions</th><th>Created by</th><th>Status</th><th></th></tr></thead>
     <tbody>
     {% for m in modules %}
       <tr>
         <td><a href="{{ url_for('admin_module_edit', module_id=m.id) }}">{{ m.title }}</a></td>
         <td>{{ m.content_items|length }}</td>
         <td>{{ m.questions|length }}</td>
+        <td>{{ m.created_by.name if m.created_by else '—' }}</td>
         <td>
           {% if m.is_published %}<span class="badge bg-success">Published</span>
           {% else %}<span class="badge bg-secondary">Draft</span>{% endif %}
@@ -27,7 +28,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="5" class="text-muted">No modules yet.</td></tr>
+      <tr><td colspan="6" class="text-muted">No modules yet.</td></tr>
     {% endfor %}
     </tbody>
   </table>

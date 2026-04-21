@@ -6,18 +6,42 @@ from werkzeug.security import generate_password_hash, check_password_hash
 db = SQLAlchemy()
 
 
+user_machines = db.Table(
+    "user_machines",
+    db.Column("user_id", db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
+    db.Column("machine_id", db.Integer, db.ForeignKey("machines.id", ondelete="CASCADE"), primary_key=True),
+)
+
+
+class Department(db.Model):
+    __tablename__ = "departments"
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+
+    users = db.relationship("User", backref="department")
+
+
+class Machine(db.Model):
+    __tablename__ = "machines"
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+
+
 class User(UserMixin, db.Model):
     __tablename__ = "users"
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(255), unique=True, nullable=False, index=True)
     name = db.Column(db.String(255), nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
-    role = db.Column(db.String(20), nullable=False, default="employee")  # admin | employee
+    role = db.Column(db.String(20), nullable=False, default="employee")  # admin | qaqc | employee
     is_active_flag = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    phone = db.Column(db.String(30), default="")
+    department_id = db.Column(db.Integer, db.ForeignKey("departments.id"), nullable=True)
 
     assignments = db.relationship("Assignment", backref="user", cascade="all, delete-orphan")
     attempts = db.relationship("Attempt", backref="user", cascade="all, delete-orphan")
+    machines = db.relationship("Machine", secondary=user_machines, backref="users")
 
     def set_password(self, raw):
         self.password_hash = generate_password_hash(raw)
@@ -29,6 +53,20 @@ class User(UserMixin, db.Model):
     def is_admin(self):
         return self.role == "admin"
 
+    @property
+    def is_qaqc(self):
+        return self.role == "qaqc"
+
+    @property
+    def can_author(self):
+        return self.role in ("admin", "qaqc")
+
+    @property
+    def role_label(self):
+        return {"admin": "Administrator",
+                "qaqc": "QA/QC",
+                "employee": "Employee"}.get(self.role, self.role)
+
 
 class Module(db.Model):
     __tablename__ = "modules"
@@ -37,7 +75,9 @@ class Module(db.Model):
     description = db.Column(db.Text, default="")
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_published = db.Column(db.Boolean, default=True)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
 
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
     content_items = db.relationship("ContentItem", backref="module",
                                     cascade="all, delete-orphan",
                                     order_by="ContentItem.position")

@@ -11,52 +11,75 @@
     <div class="col-md-2">
       <select name="role" class="form-select">
         <option value="employee">Employee</option>
+        <option value="qaqc">QA/QC</option>
         <option value="admin">Administrator</option>
       </select>
     </div>
     <div class="col-md-2"><button class="btn btn-primary w-100">Add</button></div>
   </form>
-  <div class="form-text mt-2">A temporary password is generated and emailed (if Resend is configured) — it is also shown here on the next page.</div>
+  <div class="form-text mt-2">A temporary password is generated and emailed (if Resend is configured) — it is also shown here on the next page. Phone, department, and machines can be set by clicking <em>Edit</em> on a row.</div>
+</div>
+
+<div class="card p-3 mb-4">
+  <h5>Bulk upload (CSV)</h5>
+  <form method="post" action="{{ url_for('admin_employees_upload') }}"
+        enctype="multipart/form-data" class="row g-2 align-items-center">
+    <div class="col-md-8">
+      <input type="file" name="csv" accept=".csv,text/csv" required class="form-control">
+    </div>
+    <div class="col-md-4">
+      <button class="btn btn-outline-primary w-100">Upload CSV</button>
+    </div>
+  </form>
+  <div class="form-text mt-2">
+    Header row required. Columns: <code>name, email, phone, department, role, machines</code>
+    — only <code>email</code> is mandatory. <code>machines</code> may be comma- or pipe-separated.
+    Missing departments and machines are created automatically. Existing emails are skipped.
+  </div>
 </div>
 
 <div class="card p-3">
   <table class="table align-middle">
-    <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th class="text-end">Actions</th></tr></thead>
+    <thead>
+      <tr>
+        <th>Name</th><th>Email</th><th>Phone</th><th>Department</th><th>Machines</th>
+        <th class="text-end">Actions</th>
+      </tr>
+    </thead>
     <tbody>
     {% for e in employees %}
       <tr>
-        <td>{{ e.name }}</td>
-        <td>{{ e.email }}</td>
         <td>
-          {% if e.role == 'admin' %}<span class="badge bg-primary">Administrator</span>
-          {% else %}<span class="badge bg-secondary">Employee</span>{% endif %}
+          {{ e.name }}
+          {% if e.role == 'admin' %}<span class="badge bg-primary ms-1">Admin</span>
+          {% elif e.role == 'qaqc' %}<span class="badge bg-info text-dark ms-1">QA/QC</span>
+          {% endif %}
+          {% if not e.is_active_flag %}<span class="badge bg-secondary ms-1">Disabled</span>{% endif %}
         </td>
+        <td>{{ e.email }}</td>
+        <td>{{ e.phone or '—' }}</td>
+        <td>{{ e.department.name if e.department else '—' }}</td>
         <td>
-          {% if e.is_active_flag %}<span class="badge bg-success">Active</span>
-          {% else %}<span class="badge bg-secondary">Disabled</span>{% endif %}
+          {% if e.machines %}
+            {{ e.machines|map(attribute='name')|join(', ') }}
+          {% else %}—{% endif %}
         </td>
         <td class="text-end">
+          <a href="{{ url_for('admin_employee_edit', uid=e.id) }}"
+             class="btn btn-sm btn-outline-primary">Edit</a>
           {% if e.id != current_user.id %}
-            <form method="post" action="{{ url_for('admin_employee_role', uid=e.id) }}" class="d-inline">
-              <input type="hidden" name="role"
-                     value="{{ 'employee' if e.role == 'admin' else 'admin' }}">
-              <button class="btn btn-sm btn-outline-primary"
-                      onclick="return confirm('Change role?');">
-                Make {{ 'employee' if e.role == 'admin' else 'admin' }}
-              </button>
-            </form>
             <form method="post" action="{{ url_for('admin_employee_toggle', uid=e.id) }}" class="d-inline">
               <button class="btn btn-sm btn-outline-secondary">
                 {{ 'Disable' if e.is_active_flag else 'Enable' }}
               </button>
             </form>
           {% else %}
-            <span class="text-muted small">you</span>
+            <span class="text-muted small ms-1">you</span>
           {% endif %}
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="5" class="text-muted">No users yet.</td></tr>
+      <tr><td colspan="6" class="text-muted">No users yet.</td></tr>
     {% endfor %}
     </tbody>
   </table>

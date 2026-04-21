@@ -16,6 +16,10 @@
       <embed src="{{ url_for('uploaded_file', name=ci.file_path) }}" type="application/pdf"
              style="width:100%;height:70vh">
       <a href="{{ url_for('uploaded_file', name=ci.file_path) }}" target="_blank" class="small">Open PDF</a>
+    {% elif ci.kind == 'doc' and ci.file_path %}
+      <a href="{{ url_for('uploaded_file', name=ci.file_path) }}" target="_blank"
+         class="btn btn-outline-primary">Open document</a>
+      <div class="form-text mt-1">Word documents open or download in your browser.</div>
     {% elif ci.kind == 'audio' and ci.file_path %}
       <audio controls class="w-100"><source src="{{ url_for('uploaded_file', name=ci.file_path) }}"></audio>
     {% elif ci.kind == 'video' and ci.file_path %}

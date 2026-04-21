@@ -17,6 +17,7 @@ class Config:
     MAX_CONTENT_LENGTH = 100 * 1024 * 1024
     ALLOWED_EXTENSIONS = {
         "pdf", "txt", "md",
+        "doc", "docx",
         "mp3", "wav", "m4a", "ogg",
         "mp4", "mov", "webm",
         "png", "jpg", "jpeg",

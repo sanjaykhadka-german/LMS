@@ -24,11 +24,20 @@
         {% if current_user.is_authenticated %}
           {% if current_user.is_admin %}
             <li class="nav-item"><a class="nav-link" href="{{ url_for('admin_dashboard') }}">Dashboard</a></li>
+          {% elif current_user.is_qaqc %}
+            <li class="nav-item"><a class="nav-link" href="{{ url_for('qaqc_dashboard') }}">Dashboard</a></li>
+          {% endif %}
+          {% if current_user.can_author %}
             <li class="nav-item"><a class="nav-link" href="{{ url_for('admin_modules') }}">Modules</a></li>
-            <li class="nav-item"><a class="nav-link" href="{{ url_for('admin_employees') }}">Employees</a></li>
             <li class="nav-item"><a class="nav-link" href="{{ url_for('admin_assignments') }}">Assignments</a></li>
             <li class="nav-item"><a class="nav-link" href="{{ url_for('admin_register') }}">Register</a></li>
-          {% else %}
+          {% endif %}
+          {% if current_user.is_admin %}
+            <li class="nav-item"><a class="nav-link" href="{{ url_for('admin_employees') }}">Users</a></li>
+            <li class="nav-item"><a class="nav-link" href="{{ url_for('admin_departments') }}">Departments</a></li>
+            <li class="nav-item"><a class="nav-link" href="{{ url_for('admin_machines') }}">Machines</a></li>
+          {% endif %}
+          {% if not current_user.can_author %}
             <li class="nav-item"><a class="nav-link" href="{{ url_for('my_modules') }}">My Training</a></li>
           {% endif %}
         {% endif %}

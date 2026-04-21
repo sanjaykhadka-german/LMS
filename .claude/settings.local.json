@@ -4,7 +4,11 @@
       "Bash(python -m py_compile app.py models.py config.py email_service.py)",
       "Bash(python -c ' *)",
       "Bash(python _check_jinja.py)",
-      "Bash(python _check_scoring.py)"
+      "Bash(python _check_scoring.py)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(python -m py_compile app.py)"
     ]
   }
 }
