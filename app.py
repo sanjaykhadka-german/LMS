@@ -16,7 +16,8 @@ from config import Config
 from models import (db, User, Module, ContentItem, Question, Choice,
                     Assignment, Attempt, Department, Machine)
 from email_service import (notify_invite, notify_assignment,
-                           notify_attempt, notify_reminder)
+                           notify_attempt, notify_reminder,
+                           notify_password_reset)
 
 
 def create_app():
@@ -417,6 +418,26 @@ def register_routes(app):
             db.session.commit()
             flash(f"{u.name} is now {u.role_label}.", "success")
         return redirect(url_for("admin_employees"))
+
+    @app.route("/admin/employees/<int:uid>/reset-password", methods=["POST"])
+    @admin_required
+    def admin_employee_reset_password(uid):
+        u = db.session.get(User, uid) or abort(404)
+        temp_pw = secrets.token_urlsafe(9)
+        u.set_password(temp_pw)
+        db.session.commit()
+        emailed = False
+        try:
+            emailed = bool(notify_password_reset(u, temp_pw, app.config["APP_BASE_URL"]))
+        except Exception:
+            emailed = False
+        msg = f"Password reset for {u.email}. Temporary password: {temp_pw}"
+        if emailed:
+            msg += " (emailed to the user)"
+        else:
+            msg += " (email not sent — share the password manually)"
+        flash(msg, "success")
+        return redirect(url_for("admin_employee_edit", uid=u.id))
 
     @app.route("/admin/employees/<int:uid>/edit", methods=["GET", "POST"])
     @admin_required

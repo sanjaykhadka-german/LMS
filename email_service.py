@@ -54,6 +54,18 @@ def notify_invite(user, temp_password, base_url):
     return send_email(user.email, "Your training portal account", html)
 
 
+def notify_password_reset(user, temp_password, base_url):
+    html = f"""
+    <p>Hi {user.name},</p>
+    <p>An administrator has reset your password for the German Butchery training portal.</p>
+    <p><b>Login:</b> <a href="{base_url}/login">{base_url}/login</a><br>
+       <b>Email:</b> {user.email}<br>
+       <b>New temporary password:</b> {temp_password}</p>
+    <p>Please change your password after logging in.</p>
+    """
+    return send_email(user.email, "Your training portal password was reset", html)
+
+
 def notify_assignment(user, module, base_url):
     html = f"""
     <p>Hi {user.name},</p>

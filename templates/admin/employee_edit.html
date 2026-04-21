@@ -71,4 +71,16 @@
     </div>
   </form>
 </div>
+
+<div class="card p-3 mt-4">
+  <h5>Password</h5>
+  <p class="text-muted small mb-2">
+    Generates a new temporary password and emails it to {{ employee.email }}.
+    The password is also shown to you once so you can share it manually if email delivery fails.
+  </p>
+  <form method="post" action="{{ url_for('admin_employee_reset_password', uid=employee.id) }}"
+        onsubmit="return confirm('Reset password for {{ employee.email }}?');">
+    <button class="btn btn-outline-warning">Reset password</button>
+  </form>
+</div>
 {% endblock %}
