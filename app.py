@@ -36,31 +36,46 @@ def create_app():
 
     with app.app_context():
         db.create_all()
-        ensure_user_columns()
+        ensure_schema_upgrades(app)
         bootstrap_admin(app)
 
     register_routes(app)
     return app
 
 
-def ensure_user_columns():
-    """Add new columns to the existing users table if missing.
-    db.create_all() does not alter existing tables — this handles phone/department_id
-    idempotently on both SQLite (dev) and Postgres (prod)."""
+def ensure_schema_upgrades(app):
+    """Add columns to existing tables that db.create_all() won't touch.
+
+    Each ALTER runs in its own transaction so a failure of one does not roll
+    back the others. Works on SQLite (dev) and Postgres (prod)."""
     from sqlalchemy import inspect, text
     insp = inspect(db.engine)
-    if "users" not in insp.get_table_names():
-        return
-    cols = {c["name"] for c in insp.get_columns("users")}
-    stmts = []
-    if "phone" not in cols:
-        stmts.append("ALTER TABLE users ADD COLUMN phone VARCHAR(30) DEFAULT ''")
-    if "department_id" not in cols:
-        stmts.append("ALTER TABLE users ADD COLUMN department_id INTEGER REFERENCES departments(id)")
-    if stmts:
-        with db.engine.begin() as conn:
-            for s in stmts:
-                conn.execute(text(s))
+    tables = set(insp.get_table_names())
+
+    def col_exists(table, col):
+        return table in tables and any(
+            c["name"] == col for c in insp.get_columns(table)
+        )
+
+    upgrades = []
+    if "users" in tables:
+        if not col_exists("users", "phone"):
+            upgrades.append(("users.phone",
+                "ALTER TABLE users ADD COLUMN phone VARCHAR(30) DEFAULT ''"))
+        if not col_exists("users", "department_id") and "departments" in tables:
+            upgrades.append(("users.department_id",
+                "ALTER TABLE users ADD COLUMN department_id INTEGER REFERENCES departments(id)"))
+    if "modules" in tables and not col_exists("modules", "created_by_id"):
+        upgrades.append(("modules.created_by_id",
+            "ALTER TABLE modules ADD COLUMN created_by_id INTEGER REFERENCES users(id)"))
+
+    for label, stmt in upgrades:
+        try:
+            with db.engine.begin() as conn:
+                conn.execute(text(stmt))
+            app.logger.warning("Schema upgrade applied: %s", label)
+        except Exception as exc:
+            app.logger.error("Schema upgrade FAILED for %s: %s", label, exc)
 
 
 def bootstrap_admin(app):
