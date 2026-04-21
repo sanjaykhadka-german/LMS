@@ -14,10 +14,16 @@
     </div>
     <div class="mb-3">
       <label class="form-label">Employees</label>
-      <select name="user_ids" multiple required size="8" class="form-select">
-        {% for e in employees %}<option value="{{ e.id }}">{{ e.name }} — {{ e.email }}</option>{% endfor %}
+      <select name="user_ids" multiple required size="10" class="form-select">
+        {% for e in employees %}
+          {% set dept = e.department.name if e.department else '' %}
+          {% set phone = e.phone or '' %}
+          <option value="{{ e.id }}">
+            {{ e.name }} — {{ e.email }}{% if dept %} — {{ dept }}{% endif %}{% if phone %} — {{ phone }}{% endif %}
+          </option>
+        {% endfor %}
       </select>
-      <div class="form-text">Hold Ctrl/⌘ to select multiple.</div>
+      <div class="form-text">Hold Ctrl/⌘ to select multiple. Shows name — email — department — phone.</div>
     </div>
     <button class="btn btn-primary">Assign</button>
   </form>

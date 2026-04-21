@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Import module{% endblock %}
+{% block content %}
+<a href="{{ url_for('admin_modules') }}" class="small text-decoration-none">&larr; All modules</a>
+<h2 class="mb-3">Import module from JSON</h2>
+
+<div class="card p-3 mb-3">
+  <p class="text-muted mb-2">
+    Paste one module object, or an array of module objects, in the format used by the training preview.
+    The importer creates the module, its story / scenario / takeaway / bullet sections, and a 10-question quiz in one go.
+  </p>
+  <details class="mb-2">
+    <summary class="small text-primary" style="cursor:pointer">Show the expected shape</summary>
+<pre class="small mt-2 mb-0" style="background:#f7f8fa;padding:10px;border-radius:6px">{
+  "title": "Knowing What's What: Labels & Tracking",
+  "subtitle": "Why every bottle, bag and box needs a label.",
+  "summary": "A quick, practical refresher ...",
+  "keyTakeaway": "No label? It doesn't exist.",
+  "sections": [
+    {"type": "story",    "heading": "Why we're here today", "body": "..."},
+    {"type": "scenario", "heading": "What would you do?",   "body": "...", "answerBody": "STOP. ISOLATE. REPORT. ..."},
+    {"type": "takeaway", "heading": "The big idea",         "body": "If it's not labelled, it does NOT exist."},
+    {"heading": "What every label needs", "body": "Five things.",
+     "bullets": ["Product name", "Batch/lot number", "Date", "Status", "Allergens"],
+     "groups":  [{"role": "Operators", "bullets": ["Make sure everything is labelled"]}]}
+  ],
+  "quiz": {
+    "questions": [
+      {"type": "multiple_choice", "question": "What does traceability mean?",
+       "options": ["A", "B", "C", "D"], "correctAnswer": 1},
+      {"type": "true_false", "question": "It's OK to leave something unlabelled if you know what it is.",
+       "correctAnswer": false}
+    ]
+  }
+}</pre>
+  </details>
+</div>
+
+<div class="card p-3">
+  <form method="post">
+    <div class="mb-3">
+      <label class="form-label">Module JSON</label>
+      <textarea name="payload" rows="20" required class="form-control font-monospace" style="font-size:13px">{{ payload or '' }}</textarea>
+    </div>
+    <button class="btn btn-primary">Import</button>
+    <a class="btn btn-outline-secondary" href="{{ url_for('admin_modules') }}">Cancel</a>
+  </form>
+</div>
+{% endblock %}

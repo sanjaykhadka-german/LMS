@@ -40,6 +40,15 @@ def create_app():
         ensure_schema_upgrades(app)
         bootstrap_admin(app)
 
+    @app.template_filter("fromjson")
+    def fromjson_filter(s):
+        if not s:
+            return {}
+        try:
+            return json.loads(s)
+        except (ValueError, TypeError):
+            return {}
+
     register_routes(app)
     return app
 
@@ -167,6 +176,106 @@ def score_attempt(module, answers):
     return correct, total, percent
 
 
+# Rich content block kinds that can live in ContentItem.kind.
+# story / takeaway hold plain prose in `body`; scenario / section hold JSON.
+RICH_KINDS = {"story", "scenario", "takeaway", "section"}
+
+
+def import_module_from_json(data, user_id):
+    """Create Module + ContentItems + Questions + Choices from preview-style JSON.
+
+    `data` may be a single module dict or a list of module dicts.
+    Caller is responsible for the outer commit/rollback.
+    Raises ValueError with a user-friendly message on bad input.
+    """
+    if isinstance(data, dict):
+        payload = [data]
+    elif isinstance(data, list):
+        payload = data
+    else:
+        raise ValueError("JSON must be an object, or an array of objects.")
+
+    created = []
+    for i, mod in enumerate(payload, start=1):
+        if not isinstance(mod, dict):
+            raise ValueError(f"Module #{i}: expected a JSON object.")
+        title = (mod.get("title") or "").strip()
+        if not title:
+            raise ValueError(f"Module #{i}: missing required 'title' field.")
+
+        desc_parts = []
+        if mod.get("subtitle"):
+            desc_parts.append(mod["subtitle"])
+        if mod.get("summary"):
+            desc_parts.append(mod["summary"])
+        if mod.get("keyTakeaway"):
+            desc_parts.append("Key takeaway: " + mod["keyTakeaway"])
+        description = "\n\n".join(desc_parts)
+
+        m = Module(title=title, description=description,
+                   is_published=True, created_by_id=user_id)
+        db.session.add(m)
+        db.session.flush()
+
+        for pos, s in enumerate(mod.get("sections") or []):
+            if not isinstance(s, dict):
+                continue
+            stype = (s.get("type") or "section").lower()
+            if stype not in RICH_KINDS:
+                stype = "section"
+            heading = (s.get("heading") or "").strip() or "Section"
+            if stype in ("story", "takeaway"):
+                body = s.get("body") or ""
+            elif stype == "scenario":
+                body = json.dumps({
+                    "body": s.get("body") or "",
+                    "answerBody": s.get("answerBody") or "",
+                })
+            else:  # section
+                body = json.dumps({
+                    "body": s.get("body") or "",
+                    "bullets": s.get("bullets") or [],
+                    "groups": s.get("groups") or [],
+                })
+            db.session.add(ContentItem(
+                module_id=m.id, kind=stype,
+                title=heading, body=body, position=pos,
+            ))
+
+        quiz = mod.get("quiz") or {}
+        for qpos, q in enumerate(quiz.get("questions") or []):
+            if not isinstance(q, dict):
+                continue
+            prompt = (q.get("question") or "").strip()
+            if not prompt:
+                continue
+            qobj = Question(module_id=m.id, prompt=prompt,
+                            kind="single", position=qpos)
+            db.session.add(qobj)
+            db.session.flush()
+
+            qtype = (q.get("type") or "multiple_choice").lower()
+            if qtype == "true_false":
+                correct_val = q.get("correctAnswer")
+                for cpos, (label, val) in enumerate([("True", True), ("False", False)]):
+                    db.session.add(Choice(
+                        question_id=qobj.id, text=label,
+                        is_correct=(val == correct_val), position=cpos,
+                    ))
+            else:
+                options = q.get("options") or []
+                correct_idx = q.get("correctAnswer")
+                for cpos, opt in enumerate(options):
+                    db.session.add(Choice(
+                        question_id=qobj.id, text=str(opt),
+                        is_correct=(cpos == correct_idx), position=cpos,
+                    ))
+
+        created.append(m)
+
+    return created
+
+
 def register_routes(app):
 
     @app.route("/")
@@ -250,6 +359,39 @@ def register_routes(app):
     def admin_modules():
         modules = Module.query.order_by(Module.created_at.desc()).all()
         return render_template("admin/modules.html", modules=modules)
+
+    @app.route("/admin/modules/import", methods=["GET", "POST"])
+    @author_required
+    def admin_module_import():
+        if request.method == "POST":
+            raw = request.form.get("payload", "").strip()
+            if not raw:
+                flash("Paste the module JSON into the box.", "danger")
+                return redirect(url_for("admin_module_import"))
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError as e:
+                flash(f"Invalid JSON: {e.msg} (line {e.lineno}, col {e.colno})", "danger")
+                return render_template("admin/module_import.html", payload=raw)
+            try:
+                created = import_module_from_json(data, current_user.id)
+                db.session.commit()
+            except ValueError as e:
+                db.session.rollback()
+                flash(str(e), "danger")
+                return render_template("admin/module_import.html", payload=raw)
+            except Exception as e:
+                db.session.rollback()
+                app.logger.exception("Module import failed")
+                flash(f"Import failed: {e}", "danger")
+                return render_template("admin/module_import.html", payload=raw)
+
+            if len(created) == 1:
+                flash(f"Imported '{created[0].title}'.", "success")
+                return redirect(url_for("admin_module_edit", module_id=created[0].id))
+            flash(f"Imported {len(created)} module(s).", "success")
+            return redirect(url_for("admin_modules"))
+        return render_template("admin/module_import.html", payload="")
 
     @app.route("/admin/modules/new", methods=["GET", "POST"])
     @author_required
@@ -608,8 +750,10 @@ def register_routes(app):
             return redirect(url_for("admin_assignments"))
 
         modules = Module.query.order_by(Module.title).all()
-        employees = User.query.filter_by(role="employee", is_active_flag=True)\
-                              .order_by(User.name).all()
+        employees = (User.query
+                     .options(db.joinedload(User.department))
+                     .filter_by(role="employee", is_active_flag=True)
+                     .order_by(User.name).all())
         assignments = Assignment.query.order_by(Assignment.assigned_at.desc()).all()
         return render_template("admin/assignments.html",
                                modules=modules, employees=employees,
@@ -624,10 +768,17 @@ def register_routes(app):
         return redirect(url_for("admin_assignments"))
 
     # register / completion log
+    def _register_query():
+        return (Attempt.query
+                .options(db.joinedload(Attempt.user).joinedload(User.department),
+                         db.joinedload(Attempt.user).selectinload(User.machines),
+                         db.joinedload(Attempt.module))
+                .order_by(Attempt.created_at.desc()))
+
     @app.route("/admin/register")
     @author_required
     def admin_register():
-        attempts = Attempt.query.order_by(Attempt.created_at.desc()).all()
+        attempts = _register_query().all()
         return render_template("admin/register.html", attempts=attempts)
 
     @app.route("/admin/register.csv")
@@ -636,12 +787,14 @@ def register_routes(app):
         import csv, io
         buf = io.StringIO()
         w = csv.writer(buf)
-        w.writerow(["date", "employee", "email", "module",
-                    "score", "correct", "total", "passed"])
-        for a in Attempt.query.order_by(Attempt.created_at.desc()).all():
+        w.writerow(["date", "employee", "email", "department", "machines",
+                    "module", "score", "correct", "total", "passed"])
+        for a in _register_query().all():
             w.writerow([a.created_at.strftime("%Y-%m-%d %H:%M"),
                         a.user.name, a.user.email,
-                        a.module_id and Module.query.get(a.module_id).title or "",
+                        a.user.department.name if a.user.department else "",
+                        ", ".join(sorted(m.name for m in a.user.machines)),
+                        a.module.title if a.module else "",
                         a.score, a.correct, a.total,
                         "yes" if a.passed else "no"])
         return Response(buf.getvalue(), mimetype="text/csv",

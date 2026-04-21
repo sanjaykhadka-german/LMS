@@ -144,3 +144,5 @@ class Attempt(db.Model):
     passed = db.Column(db.Boolean, default=False)
     answers_json = db.Column(db.Text, default="{}")
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    module = db.relationship("Module", foreign_keys=[module_id])
