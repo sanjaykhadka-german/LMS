@@ -1,7 +1,21 @@
 {% extends "base.html" %}
 {% block title %}{{ 'New module' if not module else module.title }}{% endblock %}
 {% block content %}
-<h2 class="mb-3">{{ 'New module' if not module else 'Edit module' }}</h2>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="mb-0">{{ 'New module' if not module else 'Edit module' }}</h2>
+  {% if module %}
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-secondary" target="_blank"
+       href="{{ url_for('admin_module_preview', module_id=module.id) }}">
+      Preview as employee
+    </a>
+    <form method="post"
+          action="{{ url_for('admin_module_self_assign', module_id=module.id) }}">
+      <button class="btn btn-outline-primary">Assign to myself</button>
+    </form>
+  </div>
+  {% endif %}
+</div>
 
 <div class="card p-3 mb-4">
   <form method="post">

@@ -26,10 +26,20 @@
   .role-group strong { color: #1733b8; font-size: 13px; }
 </style>
 
-<a href="{{ url_for('my_modules') }}" class="small text-decoration-none">&larr; Back</a>
+{% if preview %}
+  <a href="{{ url_for('admin_module_edit', module_id=module.id) }}" class="small text-decoration-none">&larr; Back to edit</a>
+{% else %}
+  <a href="{{ url_for('my_modules') }}" class="small text-decoration-none">&larr; Back</a>
+{% endif %}
 <h2 class="mb-2">{{ module.title }}</h2>
 {% if module.description %}
   <p class="text-muted" style="white-space:pre-line">{{ module.description }}</p>
+{% endif %}
+{% if preview %}
+  <div class="alert alert-warning py-2 small">
+    <b>Preview mode</b> &mdash; this is how employees will see the module.
+    Self-assign the module to take the quiz.
+  </div>
 {% endif %}
 
 <div class="card p-3 mb-3 module-body">
@@ -111,9 +121,14 @@
 </div>
 
 {% if module.questions %}
-  <a class="btn btn-primary btn-lg" href="{{ url_for('my_quiz', module_id=module.id) }}">
-    {{ 'Retake quiz' if assignment.completed_at else 'Start quiz' }}
-  </a>
+  {% if preview %}
+    <button class="btn btn-primary btn-lg" disabled>Start quiz</button>
+    <div class="form-text">Quiz is disabled in preview. Self-assign the module to attempt it.</div>
+  {% else %}
+    <a class="btn btn-primary btn-lg" href="{{ url_for('my_quiz', module_id=module.id) }}">
+      {{ 'Retake quiz' if assignment and assignment.completed_at else 'Start quiz' }}
+    </a>
+  {% endif %}
 {% else %}
   <div class="alert alert-info">No quiz attached to this module.</div>
 {% endif %}

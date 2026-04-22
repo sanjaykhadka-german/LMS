@@ -24,6 +24,8 @@
           {% else %}<span class="badge bg-secondary">Draft</span>{% endif %}
         </td>
         <td class="text-end">
+          <a class="btn btn-sm btn-outline-secondary" target="_blank"
+             href="{{ url_for('admin_module_preview', module_id=m.id) }}">Preview</a>
           <form method="post" action="{{ url_for('admin_module_delete', module_id=m.id) }}"
                 class="d-inline" onsubmit="return confirm('Delete this module?');">
             <button class="btn btn-sm btn-outline-danger">Delete</button>

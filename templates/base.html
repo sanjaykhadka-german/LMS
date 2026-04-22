@@ -37,7 +37,7 @@
             <li class="nav-item"><a class="nav-link" href="{{ url_for('admin_departments') }}">Departments</a></li>
             <li class="nav-item"><a class="nav-link" href="{{ url_for('admin_machines') }}">Machines</a></li>
           {% endif %}
-          {% if not current_user.can_author %}
+          {% if not current_user.can_author or current_user.assignments %}
             <li class="nav-item"><a class="nav-link" href="{{ url_for('my_modules') }}">My Training</a></li>
           {% endif %}
         {% endif %}

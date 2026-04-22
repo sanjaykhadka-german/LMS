@@ -418,6 +418,28 @@ def register_routes(app):
             flash("Module saved.", "success")
         return render_template("admin/module_form.html", module=m)
 
+    @app.route("/admin/modules/<int:module_id>/preview")
+    @author_required
+    def admin_module_preview(module_id):
+        m = db.session.get(Module, module_id) or abort(404)
+        return render_template("employee/module.html",
+                               module=m, assignment=None, preview=True)
+
+    @app.route("/admin/modules/<int:module_id>/self-assign", methods=["POST"])
+    @author_required
+    def admin_module_self_assign(module_id):
+        m = db.session.get(Module, module_id) or abort(404)
+        a = Assignment.query.filter_by(user_id=current_user.id,
+                                       module_id=module_id).first()
+        if not a:
+            a = Assignment(user_id=current_user.id, module_id=module_id)
+            db.session.add(a)
+            db.session.commit()
+            flash(f"'{m.title}' assigned to you.", "success")
+        else:
+            flash("You already have this module assigned.", "info")
+        return redirect(url_for("my_module", module_id=module_id))
+
     @app.route("/admin/modules/<int:module_id>/delete", methods=["POST"])
     @author_required
     def admin_module_delete(module_id):
