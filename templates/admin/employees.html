@@ -6,8 +6,16 @@
 <div class="card p-3 mb-4">
   <h5>Add user</h5>
   <form method="post" action="{{ url_for('admin_employee_new') }}" class="row g-2">
-    <div class="col-md-4"><input name="name" required class="form-control" placeholder="Full name"></div>
-    <div class="col-md-4"><input name="email" type="email" required class="form-control" placeholder="Email"></div>
+    <div class="col-md-3"><input name="name" required class="form-control" placeholder="Full name"></div>
+    <div class="col-md-3"><input name="email" type="email" required class="form-control" placeholder="Email"></div>
+    <div class="col-md-2">
+      <select name="department_id" class="form-select">
+        <option value="">Department (optional)</option>
+        {% for d in departments %}
+          <option value="{{ d.id }}">{{ d.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
     <div class="col-md-2">
       <select name="role" class="form-select">
         <option value="employee">Employee</option>
@@ -17,7 +25,7 @@
     </div>
     <div class="col-md-2"><button class="btn btn-primary w-100">Add</button></div>
   </form>
-  <div class="form-text mt-2">A temporary password is generated and emailed (if Resend is configured) — it is also shown here on the next page. Phone, department, and machines can be set by clicking <em>Edit</em> on a row.</div>
+  <div class="form-text mt-2">A temporary password is generated and emailed (if Resend is configured) — it is also shown here on the next page. Phone and machines can be set by clicking <em>Edit</em> on a row.</div>
 </div>
 
 <div class="card p-3 mb-4">

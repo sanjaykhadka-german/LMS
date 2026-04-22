@@ -514,7 +514,9 @@ def register_routes(app):
                               db.selectinload(User.machines))
                      .order_by(User.role.desc(), User.name)
                      .all())
-        return render_template("admin/employees.html", employees=employees)
+        departments = Department.query.order_by(Department.name).all()
+        return render_template("admin/employees.html",
+                               employees=employees, departments=departments)
 
     @app.route("/admin/employees/new", methods=["POST"])
     @admin_required
@@ -527,8 +529,10 @@ def register_routes(app):
         if User.query.filter_by(email=email).first():
             flash("A user with this email already exists.", "danger")
             return redirect(url_for("admin_employees"))
+        dept_raw = request.form.get("department_id", "").strip()
+        department_id = int(dept_raw) if dept_raw.isdigit() else None
         temp_pw = secrets.token_urlsafe(9)
-        u = User(name=name, email=email, role=role)
+        u = User(name=name, email=email, role=role, department_id=department_id)
         u.set_password(temp_pw)
         db.session.add(u)
         db.session.commit()
