@@ -1,8 +1,11 @@
 {% extends "base.html" %}
 {% block title %}{{ 'New module' if not module else module.title }}{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h2 class="mb-0">{{ 'New module' if not module else 'Edit module' }}</h2>
+<div class="d-flex justify-content-between align-items-end flex-wrap gap-3 mb-4">
+  <div class="gb-pageheader mb-0">
+    <span class="gb-eyebrow">Module editor</span>
+    <h1 class="mb-0">{{ 'New module' if not module else 'Edit module' }}</h1>
+  </div>
   {% if module %}
   <div class="d-flex gap-2">
     <a class="btn btn-outline-secondary" target="_blank"
@@ -17,7 +20,7 @@
   {% endif %}
 </div>
 
-<div class="card p-3 mb-4">
+<div class="card p-4 mb-4">
   <form method="post">
     <div class="mb-3">
       <label class="form-label">Title</label>
@@ -40,17 +43,17 @@
 </div>
 
 {% if module %}
-<div class="row">
+<div class="row g-4">
   <div class="col-md-6">
-    <div class="card p-3 mb-4">
+    <div class="card p-4 h-100">
       <h5>Content items</h5>
       <ul class="list-group mb-3">
         {% for ci in module.content_items %}
           <li class="list-group-item d-flex justify-content-between align-items-center">
             <span>
-              <span class="badge bg-info text-dark">{{ ci.kind }}</span>
+              <span class="badge bg-info me-1">{{ ci.kind }}</span>
               {{ ci.title }}
-              {% if ci.file_path %}<a class="small" href="{{ url_for('uploaded_file', name=ci.file_path) }}" target="_blank">(file)</a>{% endif %}
+              {% if ci.file_path %}<a class="small ms-1" href="{{ url_for('uploaded_file', name=ci.file_path) }}" target="_blank">(file)</a>{% endif %}
             </span>
             <form method="post" action="{{ url_for('admin_content_delete', item_id=ci.id) }}">
               <button class="btn btn-sm btn-outline-danger">Remove</button>
@@ -91,7 +94,7 @@
   </div>
 
   <div class="col-md-6">
-    <div class="card p-3 mb-4">
+    <div class="card p-4 h-100">
       <div class="d-flex justify-content-between align-items-center">
         <h5 class="mb-0">Quiz questions</h5>
         {% set qcount = module.questions|length %}
@@ -99,7 +102,7 @@
           {{ qcount }} / 10 recommended
         </span>
       </div>
-      <div class="form-text mb-2">Best practice: 10 questions per topic.</div>
+      <div class="form-text mb-3">Best practice: 10 questions per topic.</div>
       <ol class="mb-3">
         {% for q in module.questions %}
           <li class="mb-2">

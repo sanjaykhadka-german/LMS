@@ -1,56 +1,72 @@
 {% extends "base.html" %}
 {% block title %}QA/QC dashboard{% endblock %}
 {% block content %}
-<h2 class="mb-1">QA/QC Dashboard</h2>
-<p class="text-muted mb-4">Author modules, assign trainings, and monitor completions.</p>
+<div class="gb-pageheader">
+  <span class="gb-eyebrow">02 / QA &amp; QC</span>
+  <h1>Quality dashboard</h1>
+  <p class="lede">Author modules, assign trainings, and monitor completions.</p>
+</div>
 
-<div class="row g-3 mb-4">
+<div class="row g-3 mb-5">
   <div class="col-6 col-md-3">
-    <div class="card p-3"><div class="text-muted small">Modules</div>
-      <div class="fs-3 fw-bold">{{ stats.modules }}</div></div>
+    <div class="gb-stat">
+      <div class="gb-stat-label">Modules</div>
+      <div class="gb-stat-value">{{ stats.modules }}</div>
+    </div>
   </div>
   <div class="col-6 col-md-3">
-    <div class="card p-3"><div class="text-muted small">Published</div>
-      <div class="fs-3 fw-bold">{{ stats.published }}</div></div>
+    <div class="gb-stat">
+      <div class="gb-stat-label">Published</div>
+      <div class="gb-stat-value">{{ stats.published }}</div>
+    </div>
   </div>
   <div class="col-6 col-md-3">
-    <div class="card p-3"><div class="text-muted small">Assignments</div>
-      <div class="fs-3 fw-bold">{{ stats.assignments }}</div></div>
+    <div class="gb-stat">
+      <div class="gb-stat-label">Assignments</div>
+      <div class="gb-stat-value">{{ stats.assignments }}</div>
+    </div>
   </div>
   <div class="col-6 col-md-3">
-    <div class="card p-3"><div class="text-muted small">Quiz attempts</div>
-      <div class="fs-3 fw-bold">{{ stats.attempts }}</div></div>
+    <div class="gb-stat">
+      <div class="gb-stat-label">Quiz attempts</div>
+      <div class="gb-stat-value">{{ stats.attempts }}</div>
+    </div>
   </div>
 </div>
 
-<div class="d-flex gap-2 mb-4">
-  <a class="btn btn-primary btn-sm" href="{{ url_for('admin_module_new') }}">+ New module</a>
-  <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin_assignments') }}">Assign a module</a>
+<div class="d-flex flex-wrap gap-2 mb-4">
+  <a class="btn btn-primary gb-arrow" href="{{ url_for('admin_module_new') }}">New module</a>
+  <a class="btn btn-outline-secondary" href="{{ url_for('admin_assignments') }}">Assign a module</a>
   <form method="post" action="{{ url_for('admin_send_reminders') }}" class="d-inline">
-    <button class="btn btn-outline-secondary btn-sm">Send reminders</button>
+    <button class="btn btn-outline-secondary">Send reminders</button>
   </form>
 </div>
 
-<div class="card p-3">
-  <h5>Recent attempts</h5>
-  <table class="table table-sm align-middle">
-    <thead><tr><th>Date</th><th>Employee</th><th>Module</th><th>Score</th><th>Result</th></tr></thead>
-    <tbody>
-    {% for a in recent %}
-      <tr>
-        <td>{{ a.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
-        <td>{{ a.user.name }}</td>
-        <td>{{ a.module.title if a.module else a.module_id }}</td>
-        <td>{{ a.score }}%</td>
-        <td>
-          {% if a.passed %}<span class="badge bg-success">Passed</span>
-          {% else %}<span class="badge bg-danger">Failed</span>{% endif %}
-        </td>
-      </tr>
-    {% else %}
-      <tr><td colspan="5" class="text-muted">No attempts yet.</td></tr>
-    {% endfor %}
-    </tbody>
-  </table>
+<div class="card p-4">
+  <div class="d-flex justify-content-between align-items-baseline mb-3">
+    <h5 class="mb-0">Recent attempts</h5>
+    <span class="gb-eyebrow mb-0">Latest activity</span>
+  </div>
+  <div class="table-responsive">
+    <table class="table align-middle">
+      <thead><tr><th>Date</th><th>Employee</th><th>Module</th><th>Score</th><th>Result</th></tr></thead>
+      <tbody>
+      {% for a in recent %}
+        <tr>
+          <td>{{ a.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+          <td>{{ a.user.name }}</td>
+          <td>{{ a.module.title if a.module else a.module_id }}</td>
+          <td>{{ a.score }}%</td>
+          <td>
+            {% if a.passed %}<span class="badge bg-success">Passed</span>
+            {% else %}<span class="badge bg-danger">Failed</span>{% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="text-muted">No attempts yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
 {% endblock %}

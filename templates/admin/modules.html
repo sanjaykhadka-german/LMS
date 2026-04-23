@@ -1,41 +1,47 @@
 {% extends "base.html" %}
 {% block title %}Modules{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h2>Modules</h2>
-  <div>
+<div class="d-flex justify-content-between align-items-end flex-wrap gap-3 mb-4">
+  <div class="gb-pageheader mb-0">
+    <span class="gb-eyebrow">03 / Library</span>
+    <h1 class="mb-1">Modules</h1>
+    <p class="lede mb-0">Training content and quizzes available to the team.</p>
+  </div>
+  <div class="d-flex gap-2">
     <a class="btn btn-outline-primary" href="{{ url_for('admin_module_import') }}">Import from JSON</a>
-    <a class="btn btn-primary" href="{{ url_for('admin_module_new') }}">+ New module</a>
+    <a class="btn btn-primary gb-arrow" href="{{ url_for('admin_module_new') }}">New module</a>
   </div>
 </div>
 
-<div class="card p-3">
-  <table class="table align-middle">
-    <thead><tr><th>Title</th><th>Content</th><th>Questions</th><th>Created by</th><th>Status</th><th></th></tr></thead>
-    <tbody>
-    {% for m in modules %}
-      <tr>
-        <td><a href="{{ url_for('admin_module_edit', module_id=m.id) }}">{{ m.title }}</a></td>
-        <td>{{ m.content_items|length }}</td>
-        <td>{{ m.questions|length }}</td>
-        <td>{{ m.created_by.name if m.created_by else '—' }}</td>
-        <td>
-          {% if m.is_published %}<span class="badge bg-success">Published</span>
-          {% else %}<span class="badge bg-secondary">Draft</span>{% endif %}
-        </td>
-        <td class="text-end">
-          <a class="btn btn-sm btn-outline-secondary" target="_blank"
-             href="{{ url_for('admin_module_preview', module_id=m.id) }}">Preview</a>
-          <form method="post" action="{{ url_for('admin_module_delete', module_id=m.id) }}"
-                class="d-inline" onsubmit="return confirm('Delete this module?');">
-            <button class="btn btn-sm btn-outline-danger">Delete</button>
-          </form>
-        </td>
-      </tr>
-    {% else %}
-      <tr><td colspan="6" class="text-muted">No modules yet.</td></tr>
-    {% endfor %}
-    </tbody>
-  </table>
+<div class="card p-4">
+  <div class="table-responsive">
+    <table class="table align-middle">
+      <thead><tr><th>Title</th><th>Content</th><th>Questions</th><th>Created by</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+      {% for m in modules %}
+        <tr>
+          <td><a href="{{ url_for('admin_module_edit', module_id=m.id) }}">{{ m.title }}</a></td>
+          <td>{{ m.content_items|length }}</td>
+          <td>{{ m.questions|length }}</td>
+          <td>{{ m.created_by.name if m.created_by else '—' }}</td>
+          <td>
+            {% if m.is_published %}<span class="badge bg-success">Published</span>
+            {% else %}<span class="badge bg-secondary">Draft</span>{% endif %}
+          </td>
+          <td class="text-end">
+            <a class="btn btn-sm btn-outline-secondary" target="_blank"
+               href="{{ url_for('admin_module_preview', module_id=m.id) }}">Preview</a>
+            <form method="post" action="{{ url_for('admin_module_delete', module_id=m.id) }}"
+                  class="d-inline" onsubmit="return confirm('Delete this module?');">
+              <button class="btn btn-sm btn-outline-danger">Delete</button>
+            </form>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6" class="text-muted">No modules yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
 {% endblock %}

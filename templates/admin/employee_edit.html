@@ -1,12 +1,15 @@
 {% extends "base.html" %}
 {% block title %}Edit user{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h2 class="mb-0">Edit user</h2>
+<div class="d-flex justify-content-between align-items-end flex-wrap gap-3 mb-4">
+  <div class="gb-pageheader mb-0">
+    <span class="gb-eyebrow">User details</span>
+    <h1 class="mb-0">Edit user</h1>
+  </div>
   <a href="{{ url_for('admin_employees') }}" class="btn btn-sm btn-outline-secondary">&larr; Back to users</a>
 </div>
 
-<div class="card p-3">
+<div class="card p-4">
   <form method="post" class="row g-3">
     <div class="col-md-6">
       <label class="form-label">Name</label>
@@ -66,15 +69,15 @@
     </div>
 
     <div class="col-12 d-flex gap-2">
-      <button class="btn btn-primary">Save</button>
+      <button class="btn btn-primary gb-arrow">Save</button>
       <a href="{{ url_for('admin_employees') }}" class="btn btn-outline-secondary">Cancel</a>
     </div>
   </form>
 </div>
 
-<div class="card p-3 mt-4">
+<div class="card p-4 mt-4">
   <h5>Password</h5>
-  <p class="text-muted small mb-2">
+  <p class="text-muted small mb-3">
     Generates a new temporary password and emails it to {{ employee.email }}.
     The password is also shown to you once so you can share it manually if email delivery fails.
   </p>

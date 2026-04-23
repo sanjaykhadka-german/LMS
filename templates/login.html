@@ -1,16 +1,32 @@
 {% extends "base.html" %}
-{% block title %}Login{% endblock %}
+{% block title %}Sign in{% endblock %}
 {% block content %}
-<div class="row justify-content-center">
-  <div class="col-md-5">
-    <div class="card p-4">
-      <h3 class="mb-4">Sign in</h3>
+<div class="gb-login-wrap">
+  <div class="gb-login-brand d-none d-md-flex">
+    <div>
+      <span class="gb-brand">
+        <span class="gb-brand-mark">German Butchery</span>
+        <span class="gb-brand-sub">Training Portal</span>
+      </span>
+    </div>
+    <p class="gb-login-tagline">
+      Traditional craftsmanship, <em>learned</em> on the floor.
+    </p>
+    <div class="gb-login-meta">Est. 2012 &middot; Camellia, NSW</div>
+  </div>
+
+  <div class="gb-login-form">
+    <div class="gb-login-form-inner">
+      <span class="gb-eyebrow">01 / Access</span>
+      <h3>Sign in</h3>
+      <p class="lede">Welcome back. Use the credentials emailed to you.</p>
+
       <form method="post">
         <div class="mb-3">
           <label class="form-label">Email</label>
           <input type="email" name="email" required class="form-control" autofocus>
         </div>
-        <div class="mb-3">
+        <div class="mb-4">
           <label class="form-label">Password</label>
           <div class="input-group">
             <input type="password" name="password" id="password" required class="form-control">
@@ -18,11 +34,12 @@
                     aria-label="Show password" tabindex="-1">Show</button>
           </div>
         </div>
-        <button class="btn btn-primary w-100">Sign in</button>
+        <button class="btn btn-primary w-100 gb-arrow">Sign in</button>
       </form>
     </div>
   </div>
 </div>
+
 <script>
   (function () {
     var btn = document.getElementById('toggle-pw');

@@ -1,9 +1,13 @@
 {% extends "base.html" %}
 {% block title %}Departments{% endblock %}
 {% block content %}
-<h2 class="mb-3">Departments</h2>
+<div class="gb-pageheader">
+  <span class="gb-eyebrow">06 / Structure</span>
+  <h1>Departments</h1>
+  <p class="lede">Group staff by where they work on the floor.</p>
+</div>
 
-<div class="card p-3 mb-4">
+<div class="card p-4 mb-4">
   <h5>Add department</h5>
   <form method="post" class="row g-2">
     <div class="col-md-8"><input name="name" required class="form-control" placeholder="Department name"></div>
@@ -11,25 +15,27 @@
   </form>
 </div>
 
-<div class="card p-3">
-  <table class="table align-middle">
-    <thead><tr><th>Name</th><th class="text-end">Actions</th></tr></thead>
-    <tbody>
-    {% for d in departments %}
-      <tr>
-        <td>{{ d.name }}</td>
-        <td class="text-end">
-          <form method="post" action="{{ url_for('admin_department_delete', did=d.id) }}"
-                class="d-inline"
-                onsubmit="return confirm('Delete this department? Users in it will be unassigned.');">
-            <button class="btn btn-sm btn-outline-danger">Delete</button>
-          </form>
-        </td>
-      </tr>
-    {% else %}
-      <tr><td colspan="2" class="text-muted">No departments yet.</td></tr>
-    {% endfor %}
-    </tbody>
-  </table>
+<div class="card p-4">
+  <div class="table-responsive">
+    <table class="table align-middle">
+      <thead><tr><th>Name</th><th class="text-end">Actions</th></tr></thead>
+      <tbody>
+      {% for d in departments %}
+        <tr>
+          <td>{{ d.name }}</td>
+          <td class="text-end">
+            <form method="post" action="{{ url_for('admin_department_delete', did=d.id) }}"
+                  class="d-inline"
+                  onsubmit="return confirm('Delete this department? Users in it will be unassigned.');">
+              <button class="btn btn-sm btn-outline-danger">Delete</button>
+            </form>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="2" class="text-muted">No departments yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
 {% endblock %}

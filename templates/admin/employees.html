@@ -1,9 +1,13 @@
 {% extends "base.html" %}
 {% block title %}Users{% endblock %}
 {% block content %}
-<h2 class="mb-3">Users</h2>
+<div class="gb-pageheader">
+  <span class="gb-eyebrow">05 / People</span>
+  <h1>Users</h1>
+  <p class="lede">Staff accounts, departments and machine assignments.</p>
+</div>
 
-<div class="card p-3 mb-4">
+<div class="card p-4 mb-4">
   <h5>Add user</h5>
   <form method="post" action="{{ url_for('admin_employee_new') }}" class="row g-2">
     <div class="col-md-3"><input name="name" required class="form-control" placeholder="Full name"></div>
@@ -28,7 +32,7 @@
   <div class="form-text mt-2">A temporary password is generated and emailed (if Resend is configured) — it is also shown here on the next page. Phone and machines can be set by clicking <em>Edit</em> on a row.</div>
 </div>
 
-<div class="card p-3 mb-4">
+<div class="card p-4 mb-4">
   <h5>Bulk upload (CSV)</h5>
   <form method="post" action="{{ url_for('admin_employees_upload') }}"
         enctype="multipart/form-data" class="row g-2 align-items-center">
@@ -46,50 +50,52 @@
   </div>
 </div>
 
-<div class="card p-3">
-  <table class="table align-middle">
-    <thead>
-      <tr>
-        <th>Name</th><th>Email</th><th>Phone</th><th>Department</th><th>Machines</th>
-        <th class="text-end">Actions</th>
-      </tr>
-    </thead>
-    <tbody>
-    {% for e in employees %}
-      <tr>
-        <td>
-          {{ e.name }}
-          {% if e.role == 'admin' %}<span class="badge bg-primary ms-1">Admin</span>
-          {% elif e.role == 'qaqc' %}<span class="badge bg-info text-dark ms-1">QA/QC</span>
-          {% endif %}
-          {% if not e.is_active_flag %}<span class="badge bg-secondary ms-1">Disabled</span>{% endif %}
-        </td>
-        <td>{{ e.email }}</td>
-        <td>{{ e.phone or '—' }}</td>
-        <td>{{ e.department.name if e.department else '—' }}</td>
-        <td>
-          {% if e.machines %}
-            {{ e.machines|map(attribute='name')|join(', ') }}
-          {% else %}—{% endif %}
-        </td>
-        <td class="text-end">
-          <a href="{{ url_for('admin_employee_edit', uid=e.id) }}"
-             class="btn btn-sm btn-outline-primary">Edit</a>
-          {% if e.id != current_user.id %}
-            <form method="post" action="{{ url_for('admin_employee_toggle', uid=e.id) }}" class="d-inline">
-              <button class="btn btn-sm btn-outline-secondary">
-                {{ 'Disable' if e.is_active_flag else 'Enable' }}
-              </button>
-            </form>
-          {% else %}
-            <span class="text-muted small ms-1">you</span>
-          {% endif %}
-        </td>
-      </tr>
-    {% else %}
-      <tr><td colspan="6" class="text-muted">No users yet.</td></tr>
-    {% endfor %}
-    </tbody>
-  </table>
+<div class="card p-4">
+  <div class="table-responsive">
+    <table class="table align-middle">
+      <thead>
+        <tr>
+          <th>Name</th><th>Email</th><th>Phone</th><th>Department</th><th>Machines</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for e in employees %}
+        <tr>
+          <td>
+            {{ e.name }}
+            {% if e.role == 'admin' %}<span class="badge bg-primary ms-1">Admin</span>
+            {% elif e.role == 'qaqc' %}<span class="badge bg-info text-dark ms-1">QA/QC</span>
+            {% endif %}
+            {% if not e.is_active_flag %}<span class="badge bg-secondary ms-1">Disabled</span>{% endif %}
+          </td>
+          <td>{{ e.email }}</td>
+          <td>{{ e.phone or '—' }}</td>
+          <td>{{ e.department.name if e.department else '—' }}</td>
+          <td>
+            {% if e.machines %}
+              {{ e.machines|map(attribute='name')|join(', ') }}
+            {% else %}—{% endif %}
+          </td>
+          <td class="text-end">
+            <a href="{{ url_for('admin_employee_edit', uid=e.id) }}"
+               class="btn btn-sm btn-outline-primary">Edit</a>
+            {% if e.id != current_user.id %}
+              <form method="post" action="{{ url_for('admin_employee_toggle', uid=e.id) }}" class="d-inline">
+                <button class="btn btn-sm btn-outline-secondary">
+                  {{ 'Disable' if e.is_active_flag else 'Enable' }}
+                </button>
+              </form>
+            {% else %}
+              <span class="text-muted small ms-1">you</span>
+            {% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6" class="text-muted">No users yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
 {% endblock %}

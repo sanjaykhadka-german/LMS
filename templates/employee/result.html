@@ -1,18 +1,21 @@
 {% extends "base.html" %}
 {% block title %}Quiz result{% endblock %}
 {% block content %}
-<div class="card p-4 text-center">
+<div class="gb-result">
+  <span class="gb-eyebrow">Result</span>
   <h2>{{ module.title }}</h2>
-  <div class="display-3 my-3">{{ attempt.score }}%</div>
-  <div class="mb-3">{{ attempt.correct }} of {{ attempt.total }} correct — pass mark {{ threshold }}%</div>
+  <div class="gb-result-score">{{ attempt.score }}%</div>
+  <div class="gb-result-sub">{{ attempt.correct }} of {{ attempt.total }} correct &mdash; pass mark {{ threshold }}%</div>
+
   {% if attempt.passed %}
-    <div class="alert alert-success fs-4">Passed</div>
+    <div class="gb-result-chip is-pass">Passed</div>
   {% else %}
-    <div class="alert alert-danger fs-4">Not passed — please review and retake.</div>
+    <div class="gb-result-chip is-fail">Not passed &mdash; please review and retake</div>
   {% endif %}
-  <div>
+
+  <div class="d-flex gap-2 justify-content-center flex-wrap">
     <a class="btn btn-outline-secondary" href="{{ url_for('my_module', module_id=module.id) }}">Back to module</a>
-    <a class="btn btn-primary" href="{{ url_for('my_modules') }}">My training</a>
+    <a class="btn btn-primary gb-arrow" href="{{ url_for('my_modules') }}">My training</a>
   </div>
 </div>
 {% endblock %}

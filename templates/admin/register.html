@@ -5,22 +5,26 @@
   .register-table th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
   .register-table th.sortable .sort-arrow { opacity: 0.35; font-size: 11px; margin-left: 4px; }
   .register-table th.sortable.sort-asc .sort-arrow,
-  .register-table th.sortable.sort-desc .sort-arrow { opacity: 1; }
-  .register-table .filter-row th { padding-top: 4px; padding-bottom: 8px; }
+  .register-table th.sortable.sort-desc .sort-arrow { opacity: 1; color: var(--gb-burgundy); }
+  .register-table .filter-row th { padding-top: 4px; padding-bottom: 8px; background: var(--gb-cream); }
   .register-table .filter-row input,
   .register-table .filter-row select { min-width: 90px; }
-  #register-empty { display: none; text-align: center; color: #6c757d; padding: 20px; }
+  #register-empty { display: none; text-align: center; color: var(--gb-mute); padding: 20px; }
 </style>
 
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h2 class="mb-0">Completion register</h2>
-  <div>
+<div class="d-flex justify-content-between align-items-end flex-wrap gap-3 mb-4">
+  <div class="gb-pageheader mb-0">
+    <span class="gb-eyebrow">08 / Record</span>
+    <h1 class="mb-1">Completion register</h1>
+    <p class="lede mb-0">Every quiz attempt, sortable and filterable.</p>
+  </div>
+  <div class="d-flex gap-2">
     <button type="button" class="btn btn-outline-secondary" id="clear-filters">Clear filters</button>
-    <a class="btn btn-outline-secondary" href="{{ url_for('admin_register_csv') }}">Export CSV</a>
+    <a class="btn btn-outline-secondary gb-arrow" href="{{ url_for('admin_register_csv') }}">Export CSV</a>
   </div>
 </div>
 
-<div class="card p-3">
+<div class="card p-4">
   <div class="table-responsive">
     <table class="table align-middle register-table" id="register-table">
       <thead>

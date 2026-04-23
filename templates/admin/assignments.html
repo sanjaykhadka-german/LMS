@@ -1,9 +1,13 @@
 {% extends "base.html" %}
 {% block title %}Assignments{% endblock %}
 {% block content %}
-<h2 class="mb-3">Assignments</h2>
+<div class="gb-pageheader">
+  <span class="gb-eyebrow">04 / Assignments</span>
+  <h1>Assignments</h1>
+  <p class="lede">Assign modules to individuals or groups and track completion.</p>
+</div>
 
-<div class="card p-3 mb-4">
+<div class="card p-4 mb-4">
   <h5>Assign a module</h5>
   <form method="post">
     <div class="mb-3">
@@ -25,34 +29,36 @@
       </select>
       <div class="form-text">Hold Ctrl/⌘ to select multiple. Shows name — email — department — phone.</div>
     </div>
-    <button class="btn btn-primary">Assign</button>
+    <button class="btn btn-primary gb-arrow">Assign</button>
   </form>
 </div>
 
-<div class="card p-3">
+<div class="card p-4">
   <h5>All assignments</h5>
-  <table class="table align-middle">
-    <thead><tr><th>Employee</th><th>Module</th><th>Assigned</th><th>Completed</th><th></th></tr></thead>
-    <tbody>
-    {% for a in assignments %}
-      <tr>
-        <td>{{ a.user.name }}</td>
-        <td>{{ a.module.title }}</td>
-        <td>{{ a.assigned_at.strftime('%Y-%m-%d') }}</td>
-        <td>
-          {% if a.completed_at %}{{ a.completed_at.strftime('%Y-%m-%d') }}
-          {% else %}<span class="text-muted">—</span>{% endif %}
-        </td>
-        <td class="text-end">
-          <form method="post" action="{{ url_for('admin_assignment_delete', aid=a.id) }}">
-            <button class="btn btn-sm btn-outline-danger">Remove</button>
-          </form>
-        </td>
-      </tr>
-    {% else %}
-      <tr><td colspan="5" class="text-muted">No assignments yet.</td></tr>
-    {% endfor %}
-    </tbody>
-  </table>
+  <div class="table-responsive">
+    <table class="table align-middle">
+      <thead><tr><th>Employee</th><th>Module</th><th>Assigned</th><th>Completed</th><th></th></tr></thead>
+      <tbody>
+      {% for a in assignments %}
+        <tr>
+          <td>{{ a.user.name }}</td>
+          <td>{{ a.module.title }}</td>
+          <td>{{ a.assigned_at.strftime('%Y-%m-%d') }}</td>
+          <td>
+            {% if a.completed_at %}{{ a.completed_at.strftime('%Y-%m-%d') }}
+            {% else %}<span class="text-muted">—</span>{% endif %}
+          </td>
+          <td class="text-end">
+            <form method="post" action="{{ url_for('admin_assignment_delete', aid=a.id) }}">
+              <button class="btn btn-sm btn-outline-danger">Remove</button>
+            </form>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="text-muted">No assignments yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
 {% endblock %}
