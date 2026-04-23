@@ -18,6 +18,8 @@ from models import (db, User, Module, ContentItem, Question, Choice,
 from email_service import (notify_invite, notify_assignment,
                            notify_attempt, notify_reminder,
                            notify_password_reset)
+from claude_service import generate_module_json
+from file_extract import extract_text
 
 
 def create_app():
@@ -392,6 +394,44 @@ def register_routes(app):
             flash(f"Imported {len(created)} module(s).", "success")
             return redirect(url_for("admin_modules"))
         return render_template("admin/module_import.html", payload="")
+
+    @app.route("/admin/modules/ai-generate", methods=["GET", "POST"])
+    @author_required
+    def admin_module_ai_generate():
+        if request.method == "GET":
+            return render_template("admin/module_ai_generate.html")
+
+        fs = request.files.get("source")
+        if not fs or not fs.filename:
+            flash("Upload a .docx or .pdf file.", "warning")
+            return redirect(url_for("admin_module_ai_generate"))
+
+        try:
+            source_text = extract_text(fs)
+        except ValueError as e:
+            flash(str(e), "warning")
+            return redirect(url_for("admin_module_ai_generate"))
+        except Exception as e:
+            app.logger.exception("File extraction failed")
+            flash(f"Couldn't read the file: {e}", "danger")
+            return redirect(url_for("admin_module_ai_generate"))
+
+        module_id = (request.form.get("module_id") or "").strip()
+        sqf_clause = (request.form.get("sqf_clause") or "").strip()
+
+        try:
+            generated = generate_module_json(source_text, module_id, sqf_clause)
+        except (RuntimeError, ValueError) as e:
+            app.logger.warning("Claude generation failed: %s", e)
+            flash(f"AI generation failed: {e}", "danger")
+            return redirect(url_for("admin_module_ai_generate"))
+        except Exception as e:
+            app.logger.exception("Claude generation crashed")
+            flash(f"AI generation failed: {e}", "danger")
+            return redirect(url_for("admin_module_ai_generate"))
+
+        flash("Generated — review below, edit if needed, then click Import.", "success")
+        return render_template("admin/module_import.html", payload=generated)
 
     @app.route("/admin/modules/new", methods=["GET", "POST"])
     @author_required
