@@ -18,7 +18,7 @@ from models import (db, User, Module, ContentItem, Question, Choice,
 from email_service import (notify_invite, notify_assignment,
                            notify_attempt, notify_reminder,
                            notify_password_reset)
-from claude_service import generate_module_json
+from gemini_service import generate_module_json
 from file_extract import extract_text
 
 

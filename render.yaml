@@ -24,7 +24,7 @@ services:
         value: sanjay.khadka@germanbutchery.com.au
       - key: PASS_THRESHOLD
         value: "80"
-      - key: ANTHROPIC_API_KEY
+      - key: GEMINI_API_KEY
         sync: false
 
 databases:

@@ -67,8 +67,8 @@ console log for the temporary password, then log in at
 | `APP_BASE_URL` | Public URL — used in email links |
 | `ADMIN_EMAIL` | Bootstrap admin + notification recipient |
 | `PASS_THRESHOLD` | Integer percent, default 80 |
-| `ANTHROPIC_API_KEY` | Claude API key — enables `/admin/modules/ai-generate` (blank disables the feature) |
-| `CLAUDE_MODEL` | Claude model id, default `claude-sonnet-4-6` |
+| `GEMINI_API_KEY` | Google Gemini API key — enables `/admin/modules/ai-generate` (blank disables the feature). Get one free at <https://aistudio.google.com/apikey> |
+| `GEMINI_MODEL` | Gemini model id, default `gemini-2.5-flash` |
 
 ## Project layout
 
