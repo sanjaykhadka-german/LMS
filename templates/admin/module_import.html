@@ -38,7 +38,7 @@
 </div>
 
 <div class="card p-4">
-  <form method="post">
+  <form method="post" action="{{ url_for('admin_module_import') }}">
     <div class="mb-3">
       <label class="form-label">Module JSON</label>
       <textarea name="payload" rows="20" required class="form-control gb-mono" style="font-size:13px">{{ payload or '' }}</textarea>
