@@ -40,7 +40,7 @@ def can_handle(meta):
     return True, None
 
 
-def __build_parts_for_file(meta):
+def _build_parts_for_file(meta):
     """Convert file metadata → Gemini parts."""
     kind = meta.get("kind")
     if kind == "docx":
