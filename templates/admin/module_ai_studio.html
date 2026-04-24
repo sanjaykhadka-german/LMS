@@ -130,7 +130,7 @@
 
 <div class="d-flex justify-content-between align-items-end flex-wrap gap-3 mb-3">
   <div class="gb-pageheader mb-0">
-    <span class="gb-eyebrow">AI studio</span>
+    <span class="gb-eyebrow">AI studio · using {{ provider_label }}</span>
     <h1 class="mb-1">Build a module</h1>
     <p class="lede mb-0">Upload documents, images, audio or video. Chat to refine. Import when ready.</p>
   </div>
@@ -143,12 +143,12 @@
 <div class="studio-grid">
 
   <!-- Chat pane -->
-  <section class="studio-chat" aria-label="Chat with Gemini">
+  <section class="studio-chat" aria-label="Chat with {{ provider_label }}">
     <div id="studio-log" class="studio-chat-log"></div>
 
     <div id="studio-loading" class="studio-loading" style="display:none">
       <div class="spinner-border text-secondary" role="status" aria-hidden="true"></div>
-      <span>Gemini is thinking…</span>
+      <span id="studio-loading-text">{{ provider_label }} is thinking…</span>
     </div>
 
     <div id="studio-chips" class="studio-chips">
@@ -190,15 +190,14 @@
   const composeForm = document.getElementById('studio-compose');
   const sendBtn = document.getElementById('studio-send');
   const loading = document.getElementById('studio-loading');
+  const loadingText = document.getElementById('studio-loading-text');
   const resetBtn = document.getElementById('studio-reset');
   const jsonBox = document.getElementById('studio-json');
   const importBtn = document.getElementById('studio-import-btn');
   const importPayload = document.getElementById('studio-import-payload');
   const importForm = document.getElementById('studio-import-form');
 
-  // Pending (not yet uploaded) files chosen via the picker.
-  // Shape: [{localFile: File, placeholder: HTMLElement}]
-  let pending = [];
+  const PROVIDER_LABEL = {{ provider_label | tojson }};
   // Uploaded files returned by /upload; IDs to send with the next message.
   let pendingIds = [];
   // Pending file metadata for chip display before send
@@ -263,8 +262,10 @@
     });
   }
 
-  function setLoading(on) {
+  function setLoading(on, label) {
     loading.style.display = on ? 'flex' : 'none';
+    if (label) loadingText.textContent = label;
+    else loadingText.textContent = PROVIDER_LABEL + ' is thinking…';
     sendBtn.disabled = on;
     if (on) textArea.blur();
   }
@@ -302,7 +303,7 @@
     const fd = new FormData();
     fd.append('file', file);
     try {
-      setLoading(true);
+      setLoading(true, 'Uploading ' + file.name + '…');
       const resp = await fetch('{{ url_for("admin_module_ai_studio_upload") }}', {
         method: 'POST', body: fd, credentials: 'same-origin',
       });
@@ -347,7 +348,12 @@
         appendError(body.error || ('Request failed: HTTP ' + resp.status));
         return;
       }
-      appendMsg('model', body.reply || '(no reply)');
+      // If the reply is empty but we got a module JSON block, show a placeholder
+      // so the user sees that something happened.
+      let replyText = body.reply || '';
+      if (!replyText && body.module_json) replyText = '(module updated — see the JSON editor on the right)';
+      if (!replyText) replyText = '(no reply)';
+      appendMsg('model', replyText);
       if (body.module_json) {
         jsonBox.value = body.module_json;
         updateImportButton();

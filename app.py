@@ -408,11 +408,18 @@ def register_routes(app):
     def admin_module_ai_studio():
         reap_old_files(current_user.id)
         studio = session.get("ai_studio") or {}
+        try:
+            provider = current_provider()
+        except RuntimeError:
+            provider = None
+        provider_label = {"claude": "Claude", "gemini": "Gemini"}.get(provider, "AI")
         return render_template(
             "admin/module_ai_studio.html",
             history=studio.get("history") or [],
             files=studio.get("files") or {},
             current_json=studio.get("current_json", ""),
+            provider=provider,
+            provider_label=provider_label,
         )
 
     @app.route("/admin/modules/ai-studio/upload", methods=["POST"])
