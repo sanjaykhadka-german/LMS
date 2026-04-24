@@ -19,7 +19,7 @@ from email_service import (notify_invite, notify_assignment,
                            notify_attempt, notify_reminder,
                            notify_password_reset)
 from gemini_service import generate_module_json
-from file_extract import extract_text
+from file_extract import extract_source_parts
 
 
 def create_app():
@@ -407,7 +407,7 @@ def register_routes(app):
             return redirect(url_for("admin_module_ai_generate"))
 
         try:
-            source_text = extract_text(fs)
+            source_parts = extract_source_parts(fs)
         except ValueError as e:
             flash(str(e), "warning")
             return redirect(url_for("admin_module_ai_generate"))
@@ -420,7 +420,7 @@ def register_routes(app):
         sqf_clause = (request.form.get("sqf_clause") or "").strip()
 
         try:
-            generated = generate_module_json(source_text, module_id, sqf_clause)
+            generated = generate_module_json(source_parts, module_id, sqf_clause)
         except (RuntimeError, ValueError) as e:
             app.logger.warning("Claude generation failed: %s", e)
             flash(f"AI generation failed: {e}", "danger")

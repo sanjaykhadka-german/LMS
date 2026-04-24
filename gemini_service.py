@@ -48,24 +48,25 @@ def _strip_fence(text):
     return text.strip()
 
 
-def generate_module_json(source_text, module_id, sqf_clause):
+def generate_module_json(source_parts, module_id, sqf_clause):
     api_key = current_app.config.get("GEMINI_API_KEY", "")
     if not api_key:
         raise RuntimeError("Gemini API key not configured")
 
     model = current_app.config.get("GEMINI_MODEL", "gemini-2.5-flash")
 
-    user_msg = (
-        f"moduleId: {module_id or '(not supplied — infer or ask for it in the JSON)'}\n"
-        f"sqfClause: {sqf_clause or '(not supplied — infer from the document)'}\n\n"
-        "Source document:\n"
-        f"{source_text}\n\n"
-        "Return only the training module JSON — no prose, no code fences."
-    )
+    preamble = {
+        "text": (
+            f"moduleId: {module_id or '(not supplied — infer or ask for it in the JSON)'}\n"
+            f"sqfClause: {sqf_clause or '(not supplied — infer from the document)'}\n\n"
+        )
+    }
+    closing = {"text": "Return only the training module JSON — no prose, no code fences."}
+    user_parts = [preamble] + list(source_parts) + [closing]
 
     body = {
         "systemInstruction": {"parts": [{"text": SYSTEM_PROMPT}]},
-        "contents": [{"role": "user", "parts": [{"text": user_msg}]}],
+        "contents": [{"role": "user", "parts": user_parts}],
         "generationConfig": {
             "maxOutputTokens": DEFAULT_MAX_TOKENS,
             "temperature": 0.7,
