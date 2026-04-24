@@ -147,3 +147,20 @@ class Attempt(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     module = db.relationship("Module", foreign_keys=[module_id])
+
+
+class UploadedFile(db.Model):
+    """Binary storage for persistent uploads (module covers, per-section
+    images/video). Stored in the DB so files survive Render free-tier
+    redeploys, which wipe the local filesystem. The primary key is the
+    stored filename (e.g. "cover_abcdef12.jpg") so templates can keep
+    referencing files by name."""
+    __tablename__ = "uploaded_files"
+    filename = db.Column(db.String(500), primary_key=True)
+    mime_type = db.Column(db.String(120), nullable=False,
+                          default="application/octet-stream")
+    data = db.Column(db.LargeBinary, nullable=False)
+    size = db.Column(db.Integer, default=0)
+    uploaded_by_id = db.Column(db.Integer, db.ForeignKey("users.id"),
+                               nullable=True)
+    uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)

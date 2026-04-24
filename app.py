@@ -15,7 +15,7 @@ from werkzeug.utils import secure_filename
 
 from config import Config
 from models import (db, User, Module, ContentItem, Question, Choice,
-                    Assignment, Attempt, Department, Machine)
+                    Assignment, Attempt, Department, Machine, UploadedFile)
 from email_service import (notify_invite, notify_assignment,
                            notify_attempt, notify_reminder,
                            notify_password_reset)
@@ -231,16 +231,40 @@ def media_kind_for(path):
     return ""
 
 
+MAX_PERSISTED_FILE_BYTES = 10 * 1024 * 1024  # 10 MB per module/section upload
+
+
 def save_upload(fs, prefix=""):
-    """Save a werkzeug FileStorage to UPLOAD_FOLDER with a random-prefixed
-    filename. Returns the stored filename (relative to UPLOAD_FOLDER).
-    Raises ValueError if the extension is not in ALLOWED_EXTENSIONS."""
+    """Persist a werkzeug FileStorage into the uploaded_files table so it
+    survives Render's ephemeral filesystem. Returns the stored filename
+    (used as the PK and in URLs via /uploads/<name>).
+    Raises ValueError if the extension is not in ALLOWED_EXTENSIONS or
+    the file exceeds MAX_PERSISTED_FILE_BYTES."""
     name = secure_filename(fs.filename or "")
     if not name or not allowed_file(name):
         raise ValueError("Unsupported file type.")
     ext = name.rsplit(".", 1)[1].lower()
     stored = f"{prefix}{secrets.token_hex(8)}.{ext}"
-    fs.save(os.path.join(current_app.config["UPLOAD_FOLDER"], stored))
+
+    blob = fs.read()
+    if len(blob) > MAX_PERSISTED_FILE_BYTES:
+        mb = MAX_PERSISTED_FILE_BYTES // (1024 * 1024)
+        raise ValueError(f"File too large ({len(blob) // (1024*1024)} MB). Max {mb} MB.")
+
+    mime = fs.mimetype or "application/octet-stream"
+    uploader_id = None
+    try:
+        from flask_login import current_user as _cu
+        if _cu and _cu.is_authenticated:
+            uploader_id = int(_cu.get_id())
+    except Exception:
+        uploader_id = None
+
+    uf = UploadedFile(filename=stored, mime_type=mime,
+                      data=blob, size=len(blob),
+                      uploaded_by_id=uploader_id)
+    db.session.add(uf)
+    db.session.commit()
     return stored
 
 
@@ -1203,11 +1227,21 @@ def register_routes(app):
         return render_template("employee/result.html",
                                attempt=a, module=module, threshold=threshold)
 
-    # file serving (uploaded content)
+    # file serving (uploaded content) — DB-backed first, disk fallback for
+    # legacy pre-migration files. DB-backed survives Render redeploys.
     @app.route("/uploads/<path:name>")
     @login_required
     def uploaded_file(name):
-        return send_from_directory(app.config["UPLOAD_FOLDER"], name)
+        uf = db.session.get(UploadedFile, name)
+        if uf is not None:
+            resp = Response(uf.data, mimetype=uf.mime_type)
+            resp.headers["Cache-Control"] = "private, max-age=3600"
+            resp.headers["Content-Length"] = str(len(uf.data))
+            return resp
+        try:
+            return send_from_directory(app.config["UPLOAD_FOLDER"], name)
+        except Exception:
+            abort(404)
 
 
 app = create_app()
