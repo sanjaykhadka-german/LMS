@@ -12,6 +12,15 @@ class Config:
         db_url = db_url.replace("postgres://", "postgresql://", 1)
     SQLALCHEMY_DATABASE_URI = db_url
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    # Postgres on Render free tier drops idle SSL connections after a few
+    # minutes; without these options the first request after a redeploy or
+    # idle window can 500 with "SSL error: decryption failed or bad record
+    # mac" or "SSL SYSCALL error: EOF detected". pool_pre_ping swaps dead
+    # connections transparently; pool_recycle rotates them pre-emptively.
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        "pool_pre_ping": True,
+        "pool_recycle": 280,
+    }
 
     UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), "static", "uploads")
     MAX_CONTENT_LENGTH = 100 * 1024 * 1024
