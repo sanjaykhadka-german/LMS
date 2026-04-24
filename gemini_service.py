@@ -5,6 +5,7 @@ Two entry points:
 - generate_module_json(source_parts, module_id, sqf_clause) — thin adapter used
   by the legacy one-shot route; does a single turn and returns just the JSON.
 """
+import base64
 import json
 import logging
 import os
@@ -13,7 +14,8 @@ import re
 import requests
 from flask import current_app, session
 
-from file_extract import build_parts_for_file
+GEMINI_INLINE_LIMIT = 20 * 1024 * 1024
+GEMINI_HARD_LIMIT = 500 * 1024 * 1024
 
 log = logging.getLogger(__name__)
 
@@ -27,6 +29,34 @@ MAX_HISTORY_TURNS = 20
 _SKILL_DIR = os.path.join(os.path.dirname(__file__), "skills", "qa-quiz-creator")
 _JSON_BLOCK_RE = re.compile(r"```json\s*\n(.*?)\n```\s*$", re.DOTALL)
 _FENCE_RE = re.compile(r"^\s*```(?:json)?\s*\n?(.*?)\n?```\s*$", re.DOTALL)
+
+
+def can_handle(meta):
+    """Return (ok: bool, reason: str|None). Gemini accepts everything staged;
+    only hard-cap rejections happen here."""
+    size = meta.get("size", 0)
+    if size > GEMINI_HARD_LIMIT:
+        return False, f"File too large ({size // 1024 // 1024} MB). Max {GEMINI_HARD_LIMIT // 1024 // 1024} MB."
+    return True, None
+
+
+def __build_parts_for_file(meta):
+    """Convert file metadata → Gemini parts."""
+    kind = meta.get("kind")
+    if kind == "docx":
+        text = meta.get("extracted_text") or ""
+        return [{"text": f"[Attached .docx: {meta['filename']}]\n{text}"}]
+
+    if meta.get("gemini_uri"):
+        return [{"file_data": {"file_uri": meta["gemini_uri"],
+                               "mime_type": meta["mime_type"]}}]
+
+    with open(meta["local_path"], "rb") as f:
+        data = f.read()
+    return [{"inline_data": {
+        "mime_type": meta["mime_type"],
+        "data": base64.b64encode(data).decode("ascii"),
+    }}]
 
 
 def _load_system_prompt():
@@ -107,7 +137,7 @@ def chat_turn(user_text, file_ids):
         meta = files_map.get(fid)
         if not meta:
             continue
-        user_parts.extend(build_parts_for_file(meta))
+        user_parts.extend(_build_parts_for_file(meta))
     if user_text:
         user_parts.append({"text": user_text})
     if not user_parts:
@@ -127,7 +157,7 @@ def chat_turn(user_text, file_ids):
                 for fid in turn["file_ids"]:
                     meta = files_map.get(fid)
                     if meta:
-                        parts.extend(build_parts_for_file(meta))
+                        parts.extend(_build_parts_for_file(meta))
             if turn.get("text"):
                 parts.append({"text": turn["text"]})
         else:

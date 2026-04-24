@@ -19,8 +19,8 @@ from models import (db, User, Module, ContentItem, Question, Choice,
 from email_service import (notify_invite, notify_assignment,
                            notify_attempt, notify_reminder,
                            notify_password_reset)
-from gemini_service import chat_turn
-from file_extract import (prepare_file_for_gemini, cleanup_local_files,
+from ai_service import chat_turn, current_provider
+from file_extract import (prepare_file, cleanup_local_files,
                           reap_old_files)
 
 
@@ -422,8 +422,10 @@ def register_routes(app):
         if not fs or not fs.filename:
             return jsonify(error="No file uploaded."), 400
         try:
-            meta = prepare_file_for_gemini(fs, current_user.id)
+            meta = prepare_file(fs, current_user.id, current_provider())
         except ValueError as e:
+            return jsonify(error=str(e)), 400
+        except RuntimeError as e:
             return jsonify(error=str(e)), 400
         except Exception as e:
             app.logger.exception("File prep failed")

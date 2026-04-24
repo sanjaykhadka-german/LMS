@@ -67,8 +67,11 @@ console log for the temporary password, then log in at
 | `APP_BASE_URL` | Public URL — used in email links |
 | `ADMIN_EMAIL` | Bootstrap admin + notification recipient |
 | `PASS_THRESHOLD` | Integer percent, default 80 |
-| `GEMINI_API_KEY` | Google Gemini API key — enables `/admin/modules/ai-generate` (blank disables the feature). Get one free at <https://aistudio.google.com/apikey> |
+| `GEMINI_API_KEY` | Google Gemini API key — enables the AI studio via Gemini. Free tier at <https://aistudio.google.com/apikey> |
 | `GEMINI_MODEL` | Gemini model id, default `gemini-2.5-flash` |
+| `ANTHROPIC_API_KEY` | Anthropic Claude API key — enables the AI studio via Claude. Pay-as-you-go at <https://console.anthropic.com> |
+| `CLAUDE_MODEL` | Claude model id, default `claude-sonnet-4-6` |
+| `AI_PROVIDER` | Leave blank to auto-pick (Claude if its key is set, else Gemini), or force `claude` / `gemini`. Claude accepts PDFs/images/DOCX; Gemini also accepts audio/video |
 
 ## Project layout
 

@@ -26,6 +26,8 @@ services:
         value: "80"
       - key: GEMINI_API_KEY
         sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
 
 databases:
   - name: lms-db

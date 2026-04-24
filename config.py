@@ -32,3 +32,6 @@ class Config:
 
     GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
     GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+    ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+    CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-6")
+    AI_PROVIDER = os.environ.get("AI_PROVIDER", "")  # "", "claude", or "gemini"

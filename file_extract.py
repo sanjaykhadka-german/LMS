@@ -1,13 +1,13 @@
-"""Prepare uploaded files for Gemini.
+"""Stage uploaded files for whichever AI provider is active.
 
-- .docx: extracted to text locally (Gemini doesn't accept docx).
-- PDF / image / audio / video: stored on disk; if ≤20 MB referenced via
-  inline_data, else uploaded to Gemini's Files API and referenced via file_data.
-- Unsupported formats rejected with a friendly message.
+- .docx: extracted to text locally (no provider accepts docx natively).
+- PDF / image / audio / video: stored on disk. For Gemini, files >20 MB are
+  uploaded to the Files API and referenced via file_data; smaller go inline.
+  For Claude, everything is passed inline by the service module when needed.
+- Each provider module exposes `can_handle(meta)` which is consulted here so
+  unsupported kinds (e.g. audio with Claude) fail at upload time.
 """
-import base64
 import logging
-import mimetypes
 import os
 import time
 import uuid
@@ -53,9 +53,10 @@ def _ai_root():
     return os.path.join(current_app.config["UPLOAD_FOLDER"], "ai")
 
 
-def prepare_file_for_gemini(fs, user_id):
-    """Validate and stage an uploaded file. Returns a metadata dict suitable
-    for storing in session. Raises ValueError on user-correctable problems."""
+def prepare_file(fs, user_id, provider):
+    """Validate and stage an uploaded file. Consults the active provider's
+    can_handle() so unsupported kinds are rejected here. Raises ValueError
+    on user-correctable problems. `provider` is 'claude' or 'gemini'."""
     filename = (getattr(fs, "filename", "") or "").strip()
     if not filename:
         raise ValueError("No file uploaded.")
@@ -74,7 +75,6 @@ def prepare_file_for_gemini(fs, user_id):
     mime, kind = SUPPORTED[ext]
     file_id = uuid.uuid4().hex
 
-    # Save to disk first (needed for all paths)
     user_dir = os.path.join(_ai_root(), str(user_id))
     os.makedirs(user_dir, exist_ok=True)
     local_path = os.path.join(user_dir, f"{file_id}{ext}")
@@ -104,7 +104,6 @@ def prepare_file_for_gemini(fs, user_id):
     if kind == "docx":
         text = _extract_docx_text(local_path).strip()
         if len(text) < MIN_DOCX_CHARS:
-            # Tidy up — don't keep junk on disk
             try:
                 os.remove(local_path)
             except OSError:
@@ -114,35 +113,31 @@ def prepare_file_for_gemini(fs, user_id):
                 "Try a different file or export to PDF."
             )
         meta["extracted_text"] = text
-        return meta
 
-    if size > INLINE_LIMIT:
-        # Off to the Files API
+    # Consult the active provider for kind/size policy
+    ok, reason = _provider_can_handle(provider, meta)
+    if not ok:
+        try:
+            os.remove(local_path)
+        except OSError:
+            pass
+        raise ValueError(reason)
+
+    # Gemini-specific: big binaries go through the Files API
+    if provider == "gemini" and kind != "docx" and size > INLINE_LIMIT:
         gemini = _upload_to_files_api(local_path, mime, filename)
         meta["gemini_uri"] = gemini["uri"]
         meta["gemini_name"] = gemini["name"]
     return meta
 
 
-def build_parts_for_file(meta):
-    """Given session-stored file meta, return Gemini 'parts' referencing it."""
-    kind = meta.get("kind")
-    if kind == "docx":
-        text = meta.get("extracted_text") or ""
-        return [{"text": f"[Attached .docx: {meta['filename']}]\n{text}"}]
-
-    if "gemini_uri" in meta:
-        return [{"file_data": {"file_uri": meta["gemini_uri"],
-                               "mime_type": meta["mime_type"]}}]
-
-    # inline_data path — re-read from disk each turn (small files)
-    path = meta["local_path"]
-    with open(path, "rb") as f:
-        data = f.read()
-    return [{"inline_data": {
-        "mime_type": meta["mime_type"],
-        "data": base64.b64encode(data).decode("ascii"),
-    }}]
+def _provider_can_handle(provider, meta):
+    # Lazy import to avoid circular imports
+    if provider == "claude":
+        from claude_service import can_handle
+    else:
+        from gemini_service import can_handle
+    return can_handle(meta)
 
 
 def cleanup_local_files(session_data):
