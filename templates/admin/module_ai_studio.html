@@ -1,0 +1,396 @@
+{% extends "base.html" %}
+{% block title %}AI studio{% endblock %}
+{% block content %}
+
+<style>
+  .studio-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    gap: 16px;
+    height: calc(100vh - 220px);
+    min-height: 520px;
+  }
+  @media (max-width: 900px) {
+    .studio-grid { grid-template-columns: 1fr; height: auto; }
+    .studio-chat, .studio-json { height: 480px; }
+  }
+  .studio-chat, .studio-json {
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    border: 1px solid var(--gb-line, #ddd);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .studio-chat-log {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    background: var(--gb-cream-2, #faf8f4);
+  }
+  .studio-msg { margin-bottom: 12px; display: flex; }
+  .studio-msg-user { justify-content: flex-end; }
+  .studio-msg-model { justify-content: flex-start; }
+  .studio-bubble {
+    max-width: 85%;
+    padding: 10px 14px;
+    border-radius: 12px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .studio-msg-user .studio-bubble {
+    background: var(--gb-burgundy, #7a1e2b);
+    color: #fff;
+  }
+  .studio-msg-model .studio-bubble {
+    background: #fff;
+    border: 1px solid var(--gb-line, #ddd);
+  }
+  .studio-msg-meta {
+    font-size: 11px;
+    color: #888;
+    margin-top: 4px;
+  }
+  .studio-chips {
+    padding: 6px 12px;
+    border-top: 1px solid var(--gb-line, #ddd);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    background: #fafafa;
+    min-height: 40px;
+    align-items: center;
+  }
+  .studio-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #eee;
+    border-radius: 12px;
+    padding: 2px 8px;
+    font-size: 12px;
+  }
+  .studio-chip-x {
+    cursor: pointer;
+    font-weight: bold;
+    color: #a33;
+  }
+  .studio-compose {
+    display: flex;
+    gap: 6px;
+    padding: 10px;
+    border-top: 1px solid var(--gb-line, #ddd);
+    background: #fff;
+  }
+  .studio-compose textarea {
+    flex: 1;
+    resize: none;
+    border: 1px solid var(--gb-line, #ddd);
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 14px;
+    min-height: 48px;
+    max-height: 180px;
+  }
+  .studio-json-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--gb-line, #ddd);
+    background: #fafafa;
+  }
+  .studio-json textarea {
+    flex: 1;
+    border: 0;
+    resize: none;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    padding: 12px;
+    outline: none;
+  }
+  .studio-empty {
+    color: #888;
+    text-align: center;
+    margin: auto;
+    padding: 24px;
+  }
+  .studio-loading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #666;
+    font-size: 13px;
+    padding: 8px 16px;
+  }
+  .studio-loading .spinner-border { width: 14px; height: 14px; border-width: 2px; }
+</style>
+
+<div class="d-flex justify-content-between align-items-end flex-wrap gap-3 mb-3">
+  <div class="gb-pageheader mb-0">
+    <span class="gb-eyebrow">AI studio</span>
+    <h1 class="mb-1">Build a module</h1>
+    <p class="lede mb-0">Upload documents, images, audio or video. Chat to refine. Import when ready.</p>
+  </div>
+  <div class="d-flex gap-2">
+    <button id="studio-reset" class="btn btn-outline-secondary btn-sm">New chat</button>
+    <a href="{{ url_for('admin_modules') }}" class="btn btn-outline-secondary btn-sm">Back to modules</a>
+  </div>
+</div>
+
+<div class="studio-grid">
+
+  <!-- Chat pane -->
+  <section class="studio-chat" aria-label="Chat with Gemini">
+    <div id="studio-log" class="studio-chat-log"></div>
+
+    <div id="studio-loading" class="studio-loading" style="display:none">
+      <div class="spinner-border text-secondary" role="status" aria-hidden="true"></div>
+      <span>Gemini is thinking…</span>
+    </div>
+
+    <div id="studio-chips" class="studio-chips">
+      <span class="text-muted small" id="studio-chips-empty">No files attached.</span>
+    </div>
+
+    <form id="studio-compose" class="studio-compose" autocomplete="off">
+      <label class="btn btn-outline-secondary btn-sm mb-0" style="align-self:flex-end" title="Attach file">
+        <span aria-hidden="true">📎</span>
+        <input id="studio-file" type="file" hidden multiple
+               accept=".pdf,.docx,.png,.jpg,.jpeg,.webp,.heic,.heif,.mp3,.wav,.m4a,.ogg,.flac,.aac,.mp4,.mov,.webm,.mpeg,.mpg,.avi">
+      </label>
+      <textarea id="studio-text" placeholder="Describe the training you need, or ask for changes…" rows="2"></textarea>
+      <button id="studio-send" type="submit" class="btn btn-primary btn-sm" style="align-self:flex-end">Send</button>
+    </form>
+  </section>
+
+  <!-- JSON / import pane -->
+  <section class="studio-json" aria-label="Module JSON preview">
+    <div class="studio-json-head">
+      <strong class="small">Module JSON</strong>
+      <form method="post" action="{{ url_for('admin_module_import') }}" id="studio-import-form">
+        <input type="hidden" name="payload" id="studio-import-payload">
+        <button class="btn btn-primary btn-sm gb-arrow" id="studio-import-btn" disabled>Import this module</button>
+      </form>
+    </div>
+    <textarea id="studio-json" spellcheck="false"
+              placeholder="The generated module will appear here. You can edit it before importing.">{{ current_json or '' }}</textarea>
+  </section>
+</div>
+
+<script>
+(function() {
+  const log = document.getElementById('studio-log');
+  const chips = document.getElementById('studio-chips');
+  const chipsEmpty = document.getElementById('studio-chips-empty');
+  const fileInput = document.getElementById('studio-file');
+  const textArea = document.getElementById('studio-text');
+  const composeForm = document.getElementById('studio-compose');
+  const sendBtn = document.getElementById('studio-send');
+  const loading = document.getElementById('studio-loading');
+  const resetBtn = document.getElementById('studio-reset');
+  const jsonBox = document.getElementById('studio-json');
+  const importBtn = document.getElementById('studio-import-btn');
+  const importPayload = document.getElementById('studio-import-payload');
+  const importForm = document.getElementById('studio-import-form');
+
+  // Pending (not yet uploaded) files chosen via the picker.
+  // Shape: [{localFile: File, placeholder: HTMLElement}]
+  let pending = [];
+  // Uploaded files returned by /upload; IDs to send with the next message.
+  let pendingIds = [];
+  // Pending file metadata for chip display before send
+  let pendingMeta = []; // [{file_id, filename, kind}]
+
+  // -------- helpers --------
+  function esc(s) {
+    return (s || '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  }
+
+  function appendMsg(role, text, fileLabels) {
+    if (!text && (!fileLabels || !fileLabels.length)) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'studio-msg studio-msg-' + role;
+    const bubble = document.createElement('div');
+    bubble.className = 'studio-bubble';
+    bubble.textContent = text || '';
+    if (fileLabels && fileLabels.length) {
+      const meta = document.createElement('div');
+      meta.className = 'studio-msg-meta';
+      meta.textContent = '📎 ' + fileLabels.join(', ');
+      bubble.appendChild(meta);
+    }
+    wrap.appendChild(bubble);
+    log.appendChild(wrap);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function appendError(text) {
+    const wrap = document.createElement('div');
+    wrap.className = 'studio-msg studio-msg-model';
+    const bubble = document.createElement('div');
+    bubble.className = 'studio-bubble';
+    bubble.style.background = '#fff4f4';
+    bubble.style.borderColor = '#e0a7a7';
+    bubble.textContent = text;
+    wrap.appendChild(bubble);
+    log.appendChild(wrap);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function renderChips() {
+    chips.innerHTML = '';
+    if (!pendingMeta.length) {
+      chips.appendChild(chipsEmpty);
+      return;
+    }
+    pendingMeta.forEach((m, idx) => {
+      const c = document.createElement('span');
+      c.className = 'studio-chip';
+      c.innerHTML = '<span>' + esc(m.filename) + '</span>';
+      const x = document.createElement('span');
+      x.className = 'studio-chip-x';
+      x.textContent = '×';
+      x.onclick = () => {
+        pendingMeta.splice(idx, 1);
+        pendingIds.splice(idx, 1);
+        renderChips();
+      };
+      c.appendChild(x);
+      chips.appendChild(c);
+    });
+  }
+
+  function setLoading(on) {
+    loading.style.display = on ? 'flex' : 'none';
+    sendBtn.disabled = on;
+    if (on) textArea.blur();
+  }
+
+  function updateImportButton() {
+    const has = !!jsonBox.value.trim();
+    importBtn.disabled = !has;
+  }
+
+  jsonBox.addEventListener('input', updateImportButton);
+  updateImportButton();
+
+  importForm.addEventListener('submit', (e) => {
+    const val = jsonBox.value.trim();
+    if (!val) { e.preventDefault(); return; }
+    try { JSON.parse(val); }
+    catch (err) {
+      e.preventDefault();
+      appendError('The JSON in the editor has a syntax error: ' + err.message);
+      return;
+    }
+    importPayload.value = val;
+  });
+
+  // -------- file upload --------
+  fileInput.addEventListener('change', async (ev) => {
+    const files = Array.from(fileInput.files || []);
+    fileInput.value = '';
+    for (const f of files) {
+      await uploadOne(f);
+    }
+  });
+
+  async function uploadOne(file) {
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      setLoading(true);
+      const resp = await fetch('{{ url_for("admin_module_ai_studio_upload") }}', {
+        method: 'POST', body: fd, credentials: 'same-origin',
+      });
+      const body = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        appendError('Upload failed: ' + (body.error || resp.status));
+        return;
+      }
+      pendingIds.push(body.file_id);
+      pendingMeta.push({ file_id: body.file_id, filename: body.filename, kind: body.kind });
+      renderChips();
+    } catch (e) {
+      appendError('Upload error: ' + e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // -------- chat message --------
+  composeForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const text = textArea.value.trim();
+    if (!text && !pendingIds.length) return;
+    const fileLabels = pendingMeta.map(m => m.filename);
+    appendMsg('user', text, fileLabels);
+    textArea.value = '';
+    const sentIds = pendingIds.slice();
+    pendingIds = [];
+    pendingMeta = [];
+    renderChips();
+
+    try {
+      setLoading(true);
+      const resp = await fetch('{{ url_for("admin_module_ai_studio_message") }}', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text, file_ids: sentIds }),
+      });
+      const body = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        appendError(body.error || ('Request failed: HTTP ' + resp.status));
+        return;
+      }
+      appendMsg('model', body.reply || '(no reply)');
+      if (body.module_json) {
+        jsonBox.value = body.module_json;
+        updateImportButton();
+      }
+    } catch (e) {
+      appendError('Network error: ' + e.message);
+    } finally {
+      setLoading(false);
+    }
+  });
+
+  textArea.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      composeForm.dispatchEvent(new Event('submit', { cancelable: true }));
+    }
+  });
+
+  // -------- reset --------
+  resetBtn.addEventListener('click', async () => {
+    if (!confirm('Start a new chat? This clears the current conversation and JSON.')) return;
+    try {
+      await fetch('{{ url_for("admin_module_ai_studio_reset") }}', {
+        method: 'POST', credentials: 'same-origin',
+      });
+    } catch (e) { /* ignore */ }
+    log.innerHTML = '';
+    jsonBox.value = '';
+    pendingIds = [];
+    pendingMeta = [];
+    renderChips();
+    updateImportButton();
+  });
+
+  // -------- render existing history on page load --------
+  {% for turn in history %}
+    {% if turn.role == 'user' %}
+      appendMsg('user', {{ (turn.text or '') | tojson }},
+                [{% for fid in turn.file_ids or [] %}{{ (files.get(fid, {}).get('filename') or fid) | tojson }}{% if not loop.last %},{% endif %}{% endfor %}]);
+    {% else %}
+      appendMsg('model', {{ (turn.text or '') | tojson }});
+    {% endif %}
+  {% endfor %}
+})();
+</script>
+{% endblock %}

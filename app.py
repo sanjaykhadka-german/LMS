@@ -7,7 +7,8 @@ from datetime import datetime
 from functools import wraps
 
 from flask import (Flask, render_template, redirect, url_for, request,
-                   flash, abort, send_from_directory, Response)
+                   flash, abort, send_from_directory, Response, session,
+                   jsonify)
 from flask_login import (LoginManager, login_user, logout_user,
                          login_required, current_user)
 from werkzeug.utils import secure_filename
@@ -18,8 +19,9 @@ from models import (db, User, Module, ContentItem, Question, Choice,
 from email_service import (notify_invite, notify_assignment,
                            notify_attempt, notify_reminder,
                            notify_password_reset)
-from gemini_service import generate_module_json
-from file_extract import extract_source_parts
+from gemini_service import chat_turn
+from file_extract import (prepare_file_for_gemini, cleanup_local_files,
+                          reap_old_files)
 
 
 def create_app():
@@ -395,43 +397,77 @@ def register_routes(app):
             return redirect(url_for("admin_modules"))
         return render_template("admin/module_import.html", payload="")
 
-    @app.route("/admin/modules/ai-generate", methods=["GET", "POST"])
+    # Legacy route — any bookmark lands on the new studio
+    @app.route("/admin/modules/ai-generate")
     @author_required
     def admin_module_ai_generate():
-        if request.method == "GET":
-            return render_template("admin/module_ai_generate.html")
+        return redirect(url_for("admin_module_ai_studio"))
 
-        fs = request.files.get("source")
+    @app.route("/admin/modules/ai-studio", methods=["GET"])
+    @author_required
+    def admin_module_ai_studio():
+        reap_old_files(current_user.id)
+        studio = session.get("ai_studio") or {}
+        return render_template(
+            "admin/module_ai_studio.html",
+            history=studio.get("history") or [],
+            files=studio.get("files") or {},
+            current_json=studio.get("current_json", ""),
+        )
+
+    @app.route("/admin/modules/ai-studio/upload", methods=["POST"])
+    @author_required
+    def admin_module_ai_studio_upload():
+        fs = request.files.get("file")
         if not fs or not fs.filename:
-            flash("Upload a .docx or .pdf file.", "warning")
-            return redirect(url_for("admin_module_ai_generate"))
-
+            return jsonify(error="No file uploaded."), 400
         try:
-            source_parts = extract_source_parts(fs)
+            meta = prepare_file_for_gemini(fs, current_user.id)
         except ValueError as e:
-            flash(str(e), "warning")
-            return redirect(url_for("admin_module_ai_generate"))
+            return jsonify(error=str(e)), 400
         except Exception as e:
-            app.logger.exception("File extraction failed")
-            flash(f"Couldn't read the file: {e}", "danger")
-            return redirect(url_for("admin_module_ai_generate"))
+            app.logger.exception("File prep failed")
+            return jsonify(error=f"Couldn't stage the file: {e}"), 500
 
-        module_id = (request.form.get("module_id") or "").strip()
-        sqf_clause = (request.form.get("sqf_clause") or "").strip()
+        studio = session.get("ai_studio") or {"history": [], "files": {}, "current_json": ""}
+        studio.setdefault("files", {})[meta["id"]] = meta
+        session["ai_studio"] = studio
+        session.modified = True
 
+        return jsonify(
+            file_id=meta["id"],
+            filename=meta["filename"],
+            mime_type=meta["mime_type"],
+            kind=meta["kind"],
+            size=meta["size"],
+        )
+
+    @app.route("/admin/modules/ai-studio/message", methods=["POST"])
+    @author_required
+    def admin_module_ai_studio_message():
+        payload = request.get_json(silent=True) or {}
+        text = (payload.get("message") or "").strip()
+        file_ids = payload.get("file_ids") or []
+        if not text and not file_ids:
+            return jsonify(error="Type a message or attach a file."), 400
         try:
-            generated = generate_module_json(source_parts, module_id, sqf_clause)
-        except (RuntimeError, ValueError) as e:
-            app.logger.warning("Claude generation failed: %s", e)
-            flash(f"AI generation failed: {e}", "danger")
-            return redirect(url_for("admin_module_ai_generate"))
+            reply, module_json = chat_turn(text, file_ids)
+        except ValueError as e:
+            return jsonify(error=str(e)), 400
+        except RuntimeError as e:
+            app.logger.warning("Gemini chat failed: %s", e)
+            return jsonify(error=str(e)), 502
         except Exception as e:
-            app.logger.exception("Claude generation crashed")
-            flash(f"AI generation failed: {e}", "danger")
-            return redirect(url_for("admin_module_ai_generate"))
+            app.logger.exception("Gemini chat crashed")
+            return jsonify(error=f"Unexpected error: {e}"), 500
+        return jsonify(reply=reply or "", module_json=module_json or "")
 
-        flash("Generated — review below, edit if needed, then click Import.", "success")
-        return render_template("admin/module_import.html", payload=generated)
+    @app.route("/admin/modules/ai-studio/reset", methods=["POST"])
+    @author_required
+    def admin_module_ai_studio_reset():
+        cleanup_local_files(session.get("ai_studio"))
+        session.pop("ai_studio", None)
+        return jsonify(ok=True)
 
     @app.route("/admin/modules/new", methods=["GET", "POST"])
     @author_required
