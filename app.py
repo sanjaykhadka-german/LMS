@@ -3,12 +3,12 @@ import io
 import json
 import os
 import secrets
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import wraps
 
 from flask import (Flask, render_template, redirect, url_for, request,
                    flash, abort, send_from_directory, Response, session,
-                   jsonify)
+                   jsonify, current_app)
 from flask_login import (LoginManager, login_user, logout_user,
                          login_required, current_user)
 from werkzeug.utils import secure_filename
@@ -42,6 +42,7 @@ def create_app():
     with app.app_context():
         db.create_all()
         ensure_schema_upgrades(app)
+        backfill_missing_due_at()
         bootstrap_admin(app)
 
     @app.template_filter("fromjson")
@@ -90,6 +91,49 @@ def ensure_schema_upgrades(app):
             app.logger.warning("Schema upgrade applied: %s", label)
         except Exception as exc:
             app.logger.error("Schema upgrade FAILED for %s: %s", label, exc)
+
+
+def assignment_due_from(dt):
+    """Due date for an assignment assigned at `dt` (+ ASSIGNMENT_VALIDITY_DAYS)."""
+    days = current_app.config.get("ASSIGNMENT_VALIDITY_DAYS", 180)
+    return dt + timedelta(days=days)
+
+
+def backfill_missing_due_at():
+    """Populate due_at on legacy Assignment rows where it is NULL."""
+    rows = Assignment.query.filter(Assignment.due_at.is_(None)).all()
+    if not rows:
+        return
+    days = current_app.config.get("ASSIGNMENT_VALIDITY_DAYS", 180)
+    for a in rows:
+        base = a.assigned_at or datetime.utcnow()
+        a.due_at = base + timedelta(days=days)
+    db.session.commit()
+
+
+def process_expired_completions(base_url):
+    """Reset assignments whose completion is older than the validity window.
+    Called lazily from admin_assignments GET. Returns count of rows reset."""
+    days = current_app.config.get("ASSIGNMENT_VALIDITY_DAYS", 180)
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    expired = (Assignment.query
+               .filter(Assignment.completed_at.isnot(None))
+               .filter(Assignment.completed_at < cutoff).all())
+    now = datetime.utcnow()
+    reset = 0
+    for a in expired:
+        a.completed_at = None
+        a.assigned_at = now
+        a.due_at = assignment_due_from(now)
+        try:
+            notify_assignment(a.user, a.module, base_url)
+        except Exception:
+            current_app.logger.exception(
+                "expiry refresher email failed for assignment %s", a.id)
+        reset += 1
+    if reset:
+        db.session.commit()
+    return reset
 
 
 def bootstrap_admin(app):
@@ -845,14 +889,16 @@ def register_routes(app):
             uids = [int(u) for u in request.form.getlist("user_ids")]
             m = db.session.get(Module, mid) or abort(404)
             created = 0
+            now = datetime.utcnow()
             for uid in uids:
                 u = db.session.get(User, uid)
                 if not u:
                     continue
-                exists = Assignment.query.filter_by(user_id=uid, module_id=mid).first()
-                if exists:
+                if Assignment.query.filter_by(user_id=uid, module_id=mid).first():
                     continue
-                a = Assignment(user_id=uid, module_id=mid)
+                a = Assignment(user_id=uid, module_id=mid,
+                               assigned_at=now,
+                               due_at=assignment_due_from(now))
                 db.session.add(a)
                 notify_assignment(u, m, app.config["APP_BASE_URL"])
                 created += 1
@@ -860,15 +906,34 @@ def register_routes(app):
             flash(f"Assigned to {created} employee(s).", "success")
             return redirect(url_for("admin_assignments"))
 
+        reset = process_expired_completions(app.config["APP_BASE_URL"])
+        if reset:
+            flash(f"{reset} completion(s) expired and were re-assigned.", "info")
+
         modules = Module.query.order_by(Module.title).all()
         employees = (User.query
                      .options(db.joinedload(User.department))
                      .filter_by(role="employee", is_active_flag=True)
                      .order_by(User.name).all())
-        assignments = Assignment.query.order_by(Assignment.assigned_at.desc()).all()
+        assignments = (Assignment.query
+                       .options(db.joinedload(Assignment.user),
+                                db.joinedload(Assignment.module))
+                       .order_by(Assignment.assigned_at.desc()).all())
+
+        status_map = {}
+        for a in assignments:
+            bucket = status_map.setdefault(a.module_id, {})
+            bucket[a.user_id] = {
+                "completed_at": a.completed_at.isoformat() if a.completed_at else None,
+                "due_at": a.due_at.isoformat() if a.due_at else None,
+                "assigned_at": a.assigned_at.isoformat() if a.assigned_at else None,
+            }
+
         return render_template("admin/assignments.html",
                                modules=modules, employees=employees,
-                               assignments=assignments)
+                               assignments=assignments,
+                               status_map=status_map,
+                               now=datetime.utcnow())
 
     @app.route("/admin/assignments/<int:aid>/delete", methods=["POST"])
     @author_required

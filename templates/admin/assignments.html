@@ -1,53 +1,124 @@
 {% extends "base.html" %}
 {% block title %}Assignments{% endblock %}
 {% block content %}
+<style>
+  #empTable thead th { background: var(--gb-cream, #faf5ec); }
+  #empTable .emp-status { white-space: nowrap; }
+</style>
+
 <div class="gb-pageheader">
   <span class="gb-eyebrow">04 / Assignments</span>
   <h1>Assignments</h1>
-  <p class="lede">Assign modules to individuals or groups and track completion.</p>
+  <p class="lede">Assign modules to individuals or groups and track completion. Each assignment is valid for 6 months.</p>
 </div>
 
 <div class="card p-4 mb-4">
   <h5>Assign a module</h5>
-  <form method="post">
+  <form method="post" id="assignForm">
     <div class="mb-3">
       <label class="form-label">Module</label>
-      <select name="module_id" required class="form-select">
+      <select name="module_id" id="moduleSelect" required class="form-select">
         {% for m in modules %}<option value="{{ m.id }}">{{ m.title }}</option>{% endfor %}
       </select>
     </div>
-    <div class="mb-3">
-      <label class="form-label">Employees</label>
-      <select name="user_ids" multiple required size="10" class="form-select">
-        {% for e in employees %}
-          {% set dept = e.department.name if e.department else '' %}
-          {% set phone = e.phone or '' %}
-          <option value="{{ e.id }}">
-            {{ e.name }} — {{ e.email }}{% if dept %} — {{ dept }}{% endif %}{% if phone %} — {{ phone }}{% endif %}
-          </option>
-        {% endfor %}
-      </select>
-      <div class="form-text">Hold Ctrl/⌘ to select multiple. Shows name — email — department — phone.</div>
+
+    <label class="form-label d-block mb-1">Employees</label>
+    <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+      <input type="text" id="empFilter" class="form-control form-control-sm"
+             placeholder="Filter name / email / department / phone…" style="max-width: 340px">
+      <div class="form-text ms-auto mb-0"><span id="pickedCount">0</span> selected</div>
     </div>
-    <button class="btn btn-primary gb-arrow">Assign</button>
+
+    <div class="table-responsive" style="max-height: 440px; overflow: auto;">
+      <table class="table table-sm align-middle" id="empTable">
+        <thead class="sticky-top">
+          <tr>
+            <th style="width: 36px;"><input type="checkbox" id="empCheckAll" aria-label="Select all"></th>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Department</th>
+            <th>Phone</th>
+            <th>Status for selected module</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for e in employees %}
+            {% set dept = e.department.name if e.department else '' %}
+            {% set phone = e.phone or '' %}
+            <tr data-uid="{{ e.id }}"
+                data-name="{{ e.name }}"
+                data-search="{{ (e.name ~ ' ' ~ e.email ~ ' ' ~ dept ~ ' ' ~ phone) | lower }}">
+              <td><input type="checkbox" class="emp-check" name="user_ids" value="{{ e.id }}"></td>
+              <td>{{ e.name }}</td>
+              <td>{{ e.email }}</td>
+              <td>{{ dept }}</td>
+              <td>{{ phone }}</td>
+              <td class="emp-status"><span class="badge bg-secondary">—</span></td>
+            </tr>
+          {% else %}
+            <tr><td colspan="6" class="text-muted">No active employees.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="form-text mt-1">Tick employees to assign the selected module. Employees who have already completed it are flagged — you can still re-assign to force a retake.</div>
+
+    <button class="btn btn-primary gb-arrow mt-3" type="submit">Assign</button>
   </form>
 </div>
 
+<script id="statusData" type="application/json">{{ status_map | tojson }}</script>
+
 <div class="card p-4">
-  <h5>All assignments</h5>
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <h5 class="mb-0">All assignments</h5>
+    <div class="d-flex align-items-center gap-2">
+      <label class="form-label mb-0 small text-muted">Status</label>
+      <select class="form-select form-select-sm" id="statusFilter" style="min-width: 170px;">
+        <option value="">All</option>
+        <option value="Overdue">Overdue</option>
+        <option value="In progress">In progress</option>
+        <option value="Completed">Completed</option>
+      </select>
+    </div>
+  </div>
+
   <div class="table-responsive">
-    <table class="table align-middle">
-      <thead><tr><th>Employee</th><th>Module</th><th>Assigned</th><th>Completed</th><th></th></tr></thead>
-      <tbody>
-      {% for a in assignments %}
+    <table class="table align-middle" id="assignTable">
+      <thead>
         <tr>
+          <th>Employee</th>
+          <th>Module</th>
+          <th>Assigned</th>
+          <th>Due</th>
+          <th>Completed</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="assignRows">
+      {% for a in assignments %}
+        {% if a.completed_at %}
+          {% set status_label = 'Completed' %}
+          {% set status_class = 'bg-success' %}
+        {% elif a.due_at and a.due_at < now %}
+          {% set status_label = 'Overdue' %}
+          {% set status_class = 'bg-danger' %}
+        {% else %}
+          {% set status_label = 'In progress' %}
+          {% set status_class = 'bg-warning text-dark' %}
+        {% endif %}
+        <tr data-status="{{ status_label }}">
           <td>{{ a.user.name }}</td>
           <td>{{ a.module.title }}</td>
           <td>{{ a.assigned_at.strftime('%Y-%m-%d') }}</td>
+          <td>{% if a.due_at %}{{ a.due_at.strftime('%Y-%m-%d') }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
           <td>
             {% if a.completed_at %}{{ a.completed_at.strftime('%Y-%m-%d') }}
             {% else %}<span class="text-muted">—</span>{% endif %}
           </td>
+          <td><span class="badge {{ status_class }}">{{ status_label }}</span></td>
           <td class="text-end">
             <form method="post" action="{{ url_for('admin_assignment_delete', aid=a.id) }}">
               <button class="btn btn-sm btn-outline-danger">Remove</button>
@@ -55,10 +126,145 @@
           </td>
         </tr>
       {% else %}
-        <tr><td colspan="5" class="text-muted">No assignments yet.</td></tr>
+        <tr><td colspan="7" class="text-muted">No assignments yet.</td></tr>
       {% endfor %}
       </tbody>
     </table>
   </div>
 </div>
+
+<div class="modal fade" id="alreadyCompletedModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Already completed</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p id="completedModalBody" class="mb-2"></p>
+        <p class="text-muted small mb-0">You can still assign again if you want them to retake now.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" id="modalCancelBtn">Cancel (un-tick)</button>
+        <button type="button" class="btn btn-primary" id="modalProceedBtn">Assign anyway</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var statusMap = {};
+  try {
+    statusMap = JSON.parse(document.getElementById('statusData').textContent || '{}');
+  } catch (e) { statusMap = {}; }
+
+  var moduleSel = document.getElementById('moduleSelect');
+  var empTable  = document.getElementById('empTable');
+  var empFilter = document.getElementById('empFilter');
+  var checkAll  = document.getElementById('empCheckAll');
+  var pickedEl  = document.getElementById('pickedCount');
+  var statusFilter = document.getElementById('statusFilter');
+  var assignRows = document.getElementById('assignRows');
+  var modalEl   = document.getElementById('alreadyCompletedModal');
+  var modalBody = document.getElementById('completedModalBody');
+  var cancelBtn = document.getElementById('modalCancelBtn');
+  var proceedBtn = document.getElementById('modalProceedBtn');
+  var modal     = new bootstrap.Modal(modalEl);
+  var pendingCb = null;
+
+  function fmtDate(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    return d.toLocaleDateString();
+  }
+
+  function repaintStatuses() {
+    var mid = moduleSel.value;
+    var bucket = statusMap[mid] || {};
+    var now = new Date();
+    empTable.querySelectorAll('tbody tr[data-uid]').forEach(function (tr) {
+      var uid = tr.dataset.uid;
+      var s = bucket[uid];
+      var cell = tr.querySelector('.emp-status');
+      tr.dataset.completedAt = '';
+      if (!s) {
+        cell.innerHTML = '<span class="badge bg-secondary">Not assigned</span>';
+      } else if (s.completed_at) {
+        tr.dataset.completedAt = s.completed_at;
+        cell.innerHTML = '<span class="badge bg-success">Completed ' + fmtDate(s.completed_at) + '</span>';
+      } else if (s.due_at && new Date(s.due_at) < now) {
+        cell.innerHTML = '<span class="badge bg-danger">Overdue</span>';
+      } else {
+        cell.innerHTML = '<span class="badge bg-warning text-dark">In progress</span>';
+      }
+    });
+  }
+
+  function updateCount() {
+    pickedEl.textContent = empTable.querySelectorAll('.emp-check:checked').length;
+  }
+
+  empFilter.addEventListener('input', function () {
+    var q = (empFilter.value || '').trim().toLowerCase();
+    empTable.querySelectorAll('tbody tr[data-uid]').forEach(function (tr) {
+      tr.style.display = (!q || (tr.dataset.search || '').indexOf(q) !== -1) ? '' : 'none';
+    });
+  });
+
+  checkAll.addEventListener('change', function () {
+    empTable.querySelectorAll('tbody tr[data-uid]').forEach(function (tr) {
+      if (tr.style.display === 'none') return;
+      var cb = tr.querySelector('.emp-check');
+      if (cb) cb.checked = checkAll.checked;
+    });
+    updateCount();
+  });
+
+  empTable.addEventListener('change', function (ev) {
+    var cb = ev.target.closest('.emp-check');
+    if (!cb) return;
+    updateCount();
+    if (cb.checked) {
+      var tr = cb.closest('tr');
+      var completedAt = tr.dataset.completedAt;
+      if (completedAt) {
+        pendingCb = cb;
+        var name = tr.dataset.name || 'This employee';
+        var moduleTitle = moduleSel.options[moduleSel.selectedIndex].text;
+        modalBody.textContent = name + ' has already completed "' + moduleTitle + '" on ' + fmtDate(completedAt) + '.';
+        modal.show();
+      }
+    }
+  });
+
+  cancelBtn.addEventListener('click', function () {
+    if (pendingCb) pendingCb.checked = false;
+    pendingCb = null;
+    updateCount();
+    modal.hide();
+  });
+  proceedBtn.addEventListener('click', function () {
+    pendingCb = null;
+    modal.hide();
+  });
+  modalEl.addEventListener('hidden.bs.modal', function () {
+    pendingCb = null;
+  });
+
+  moduleSel.addEventListener('change', repaintStatuses);
+  repaintStatuses();
+  updateCount();
+
+  if (statusFilter && assignRows) {
+    statusFilter.addEventListener('change', function () {
+      var v = statusFilter.value;
+      assignRows.querySelectorAll('tr[data-status]').forEach(function (tr) {
+        tr.style.display = (!v || tr.dataset.status === v) ? '' : 'none';
+      });
+    });
+  }
+})();
+</script>
 {% endblock %}

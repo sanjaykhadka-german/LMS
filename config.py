@@ -29,6 +29,7 @@ class Config:
     APP_BASE_URL = os.environ.get("APP_BASE_URL", "http://localhost:5000")
     ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "")
     PASS_THRESHOLD = int(os.environ.get("PASS_THRESHOLD", "80"))
+    ASSIGNMENT_VALIDITY_DAYS = int(os.environ.get("ASSIGNMENT_VALIDITY_DAYS", "180"))
 
     GEMINI_API_KEY = (os.environ.get("GEMINI_API_KEY")
                       or os.environ.get("GOOGLE_API_KEY") or "")
