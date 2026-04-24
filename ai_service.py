@@ -2,7 +2,7 @@
 
 Resolution order:
 1. AI_PROVIDER env var, if set to 'claude' or 'gemini'.
-2. Otherwise: use Claude if ANTHROPIC_API_KEY is set, else Gemini if
+2. Otherwise: use Claude if CLAUDE_API_KEY is set, else Gemini if
    GEMINI_API_KEY is set.
 3. If neither is set, raise on first use.
 """
@@ -13,12 +13,12 @@ def current_provider():
     override = (current_app.config.get("AI_PROVIDER") or "").strip().lower()
     if override in ("claude", "gemini"):
         return override
-    if current_app.config.get("ANTHROPIC_API_KEY"):
+    if current_app.config.get("CLAUDE_API_KEY"):
         return "claude"
     if current_app.config.get("GEMINI_API_KEY"):
         return "gemini"
     raise RuntimeError(
-        "No AI provider configured — set ANTHROPIC_API_KEY or GEMINI_API_KEY."
+        "No AI provider configured — set CLAUDE_API_KEY or GEMINI_API_KEY."
     )
 
 

@@ -70,9 +70,9 @@ SYSTEM_PROMPT = _load_system_prompt()
 
 
 def _config():
-    api_key = current_app.config.get("ANTHROPIC_API_KEY", "")
+    api_key = current_app.config.get("CLAUDE_API_KEY", "")
     if not api_key:
-        raise RuntimeError("Claude API key not configured (set ANTHROPIC_API_KEY)")
+        raise RuntimeError("Claude API key not configured (set CLAUDE_API_KEY)")
     model = current_app.config.get("CLAUDE_MODEL", "claude-sonnet-4-6")
     return api_key, model
 
@@ -301,7 +301,7 @@ def _friendly_http_error(resp):
             return f"Claude rate limit hit — retry in ~{retry_after}s."
         return "Claude rate limit hit — wait a minute and try again."
     if resp.status_code in (401, 403):
-        return "Claude auth failed — check ANTHROPIC_API_KEY"
+        return "Claude auth failed — check CLAUDE_API_KEY"
     if resp.status_code == 400:
         return f"Claude rejected the request: {msg or 'bad input'}"
     if resp.status_code == 413:

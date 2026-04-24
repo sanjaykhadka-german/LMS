@@ -33,8 +33,9 @@ class Config:
     GEMINI_API_KEY = (os.environ.get("GEMINI_API_KEY")
                       or os.environ.get("GOOGLE_API_KEY") or "")
     GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
-    # Accept CLAUDE_API_KEY as a friendly alias for ANTHROPIC_API_KEY
-    ANTHROPIC_API_KEY = (os.environ.get("ANTHROPIC_API_KEY")
-                         or os.environ.get("CLAUDE_API_KEY") or "")
+    # CLAUDE_API_KEY is the canonical name; ANTHROPIC_API_KEY is accepted
+    # as a fallback (Anthropic's own convention) in case someone used that.
+    CLAUDE_API_KEY = (os.environ.get("CLAUDE_API_KEY")
+                      or os.environ.get("ANTHROPIC_API_KEY") or "")
     CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-6")
     AI_PROVIDER = os.environ.get("AI_PROVIDER", "")  # "", "claude", or "gemini"
