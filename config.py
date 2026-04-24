@@ -30,8 +30,11 @@ class Config:
     ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "")
     PASS_THRESHOLD = int(os.environ.get("PASS_THRESHOLD", "80"))
 
-    GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+    GEMINI_API_KEY = (os.environ.get("GEMINI_API_KEY")
+                      or os.environ.get("GOOGLE_API_KEY") or "")
     GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
-    ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+    # Accept CLAUDE_API_KEY as a friendly alias for ANTHROPIC_API_KEY
+    ANTHROPIC_API_KEY = (os.environ.get("ANTHROPIC_API_KEY")
+                         or os.environ.get("CLAUDE_API_KEY") or "")
     CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-6")
     AI_PROVIDER = os.environ.get("AI_PROVIDER", "")  # "", "claude", or "gemini"
