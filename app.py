@@ -54,6 +54,10 @@ def create_app():
         except (ValueError, TypeError):
             return {}
 
+    @app.template_filter("media_kind")
+    def media_kind_filter(p):
+        return media_kind_for(p)
+
     register_routes(app)
     return app
 
@@ -83,6 +87,9 @@ def ensure_schema_upgrades(app):
     if "modules" in tables and not col_exists("modules", "created_by_id"):
         upgrades.append(("modules.created_by_id",
             "ALTER TABLE modules ADD COLUMN created_by_id INTEGER REFERENCES users(id)"))
+    if "modules" in tables and not col_exists("modules", "cover_path"):
+        upgrades.append(("modules.cover_path",
+            "ALTER TABLE modules ADD COLUMN cover_path VARCHAR(500) DEFAULT ''"))
 
     for label, stmt in upgrades:
         try:
@@ -137,24 +144,15 @@ def process_expired_completions(base_url):
 
 
 def bootstrap_admin(app):
-    """Create an admin if none exists, or reset the admin password
-    to the value of the ADMIN_RESET_PASSWORD env var if it is set."""
-    admin_email = app.config.get("ADMIN_EMAIL") or "admin@example.com"
-    reset_pw = os.environ.get("ADMIN_RESET_PASSWORD", "").strip()
-    admin = User.query.filter_by(role="admin").first()
-
-    if admin:
-        if reset_pw:
-            admin.set_password(reset_pw)
-            db.session.commit()
-            app.logger.warning("=" * 60)
-            app.logger.warning("ADMIN PASSWORD RESET via ADMIN_RESET_PASSWORD env var")
-            app.logger.warning("Email: %s", admin.email)
-            app.logger.warning("Now UNSET the env var to avoid resets on every boot.")
-            app.logger.warning("=" * 60)
+    """Create a bootstrap admin user the first time the app boots against
+    an empty database. Never modifies an existing admin — passwords are
+    changed only via the UI (self-service change-password or admin-initiated
+    reset for other users)."""
+    if User.query.filter_by(role="admin").first():
         return
 
-    temp_pw = reset_pw or secrets.token_urlsafe(9)
+    admin_email = app.config.get("ADMIN_EMAIL") or "admin@example.com"
+    temp_pw = secrets.token_urlsafe(9)
     admin = User(email=admin_email, name="Administrator", role="admin")
     admin.set_password(temp_pw)
     db.session.add(admin)
@@ -207,6 +205,43 @@ VALID_ROLES = ("admin", "qaqc", "employee")
 def allowed_file(filename):
     return ("." in filename
             and filename.rsplit(".", 1)[1].lower() in Config.ALLOWED_EXTENSIONS)
+
+
+IMAGE_EXTS = {"png", "jpg", "jpeg", "gif", "webp"}
+VIDEO_EXTS = {"mp4", "mov", "webm"}
+AUDIO_EXTS = {"mp3", "wav", "m4a", "ogg"}
+PDF_EXTS = {"pdf"}
+DOC_EXTS = {"doc", "docx", "txt", "md"}
+
+
+def media_kind_for(path):
+    if not path:
+        return ""
+    ext = path.rsplit(".", 1)[-1].lower() if "." in path else ""
+    if ext in IMAGE_EXTS:
+        return "image"
+    if ext in VIDEO_EXTS:
+        return "video"
+    if ext in AUDIO_EXTS:
+        return "audio"
+    if ext in PDF_EXTS:
+        return "pdf"
+    if ext in DOC_EXTS:
+        return "doc"
+    return ""
+
+
+def save_upload(fs, prefix=""):
+    """Save a werkzeug FileStorage to UPLOAD_FOLDER with a random-prefixed
+    filename. Returns the stored filename (relative to UPLOAD_FOLDER).
+    Raises ValueError if the extension is not in ALLOWED_EXTENSIONS."""
+    name = secure_filename(fs.filename or "")
+    if not name or not allowed_file(name):
+        raise ValueError("Unsupported file type.")
+    ext = name.rsplit(".", 1)[1].lower()
+    stored = f"{prefix}{secrets.token_hex(8)}.{ext}"
+    fs.save(os.path.join(current_app.config["UPLOAD_FOLDER"], stored))
+    return stored
 
 
 def score_attempt(module, answers):
@@ -436,7 +471,8 @@ def register_routes(app):
 
             if len(created) == 1:
                 flash(f"Imported '{created[0].title}'.", "success")
-                return redirect(url_for("admin_module_edit", module_id=created[0].id))
+                return redirect(url_for("admin_module_ai_studio",
+                                        module_id=created[0].id))
             flash(f"Imported {len(created)} module(s).", "success")
             return redirect(url_for("admin_modules"))
         return render_template("admin/module_import.html", payload="")
@@ -457,6 +493,12 @@ def register_routes(app):
         except RuntimeError:
             provider = None
         provider_label = {"claude": "Claude", "gemini": "Gemini"}.get(provider, "AI")
+
+        module_id = request.args.get("module_id", type=int)
+        edit_module = db.session.get(Module, module_id) if module_id else None
+        if edit_module and not current_user.can_author:
+            edit_module = None
+
         return render_template(
             "admin/module_ai_studio.html",
             history=studio.get("history") or [],
@@ -464,6 +506,8 @@ def register_routes(app):
             current_json=studio.get("current_json", ""),
             provider=provider,
             provider_label=provider_label,
+            edit_module=edit_module,
+            rich_kinds=list(RICH_KINDS),
         )
 
     @app.route("/admin/modules/ai-studio/upload", methods=["POST"])
@@ -520,6 +564,117 @@ def register_routes(app):
     def admin_module_ai_studio_reset():
         cleanup_local_files(session.get("ai_studio"))
         session.pop("ai_studio", None)
+        return jsonify(ok=True)
+
+    # -------- inline module / content-item editing (used by AI studio edit pane) --------
+
+    MODULE_EDITABLE_FIELDS = {"title", "description"}
+    CONTENT_EDITABLE_FIELDS = {"title", "body"}
+
+    @app.route("/admin/modules/<int:mid>/update", methods=["POST"])
+    @author_required
+    def admin_module_inline_update(mid):
+        m = db.session.get(Module, mid) or abort(404)
+        data = request.get_json(silent=True) or {}
+        field = (data.get("field") or "").strip()
+        value = data.get("value", "")
+        if field not in MODULE_EDITABLE_FIELDS:
+            return jsonify(error="Unsupported field."), 400
+        if field == "title":
+            v = (value or "").strip()
+            if not v:
+                return jsonify(error="Title cannot be empty."), 400
+            m.title = v
+        else:
+            m.description = value or ""
+        db.session.commit()
+        return jsonify(ok=True)
+
+    @app.route("/admin/modules/<int:mid>/cover", methods=["POST"])
+    @author_required
+    def admin_module_cover_upload(mid):
+        m = db.session.get(Module, mid) or abort(404)
+        fs = request.files.get("file")
+        if not fs or not fs.filename:
+            return jsonify(error="No file uploaded."), 400
+        try:
+            stored = save_upload(fs, prefix="cover_")
+        except ValueError as e:
+            return jsonify(error=str(e)), 400
+        m.cover_path = stored
+        db.session.commit()
+        return jsonify(ok=True,
+                       path=stored,
+                       url=url_for("uploaded_file", name=stored),
+                       kind=media_kind_for(stored))
+
+    @app.route("/admin/modules/<int:mid>/cover/clear", methods=["POST"])
+    @author_required
+    def admin_module_cover_clear(mid):
+        m = db.session.get(Module, mid) or abort(404)
+        m.cover_path = ""
+        db.session.commit()
+        return jsonify(ok=True)
+
+    @app.route("/admin/modules/<int:mid>/content/<int:cid>/update",
+               methods=["POST"])
+    @author_required
+    def admin_content_inline_update(mid, cid):
+        ci = db.session.get(ContentItem, cid) or abort(404)
+        if ci.module_id != mid:
+            abort(404)
+        data = request.get_json(silent=True) or {}
+        field = (data.get("field") or "").strip()
+        value = data.get("value", "")
+        if field not in CONTENT_EDITABLE_FIELDS:
+            return jsonify(error="Unsupported field."), 400
+        if field == "title":
+            v = (value or "").strip()
+            if not v:
+                return jsonify(error="Title cannot be empty."), 400
+            ci.title = v
+        else:
+            ci.body = value or ""
+        db.session.commit()
+        return jsonify(ok=True)
+
+    @app.route("/admin/modules/<int:mid>/content/<int:cid>/media",
+               methods=["POST"])
+    @author_required
+    def admin_content_media_upload(mid, cid):
+        ci = db.session.get(ContentItem, cid) or abort(404)
+        if ci.module_id != mid:
+            abort(404)
+        if ci.kind not in RICH_KINDS:
+            return jsonify(error="Media can only be attached to AI-generated sections."), 400
+        fs = request.files.get("file")
+        if not fs or not fs.filename:
+            return jsonify(error="No file uploaded."), 400
+        try:
+            stored = save_upload(fs, prefix="sec_")
+        except ValueError as e:
+            return jsonify(error=str(e)), 400
+        kind = media_kind_for(stored)
+        if kind not in ("image", "video"):
+            return jsonify(error="Only image or video files are allowed on sections."), 400
+        ci.file_path = stored
+        db.session.commit()
+        return jsonify(ok=True,
+                       path=stored,
+                       url=url_for("uploaded_file", name=stored),
+                       kind=kind)
+
+    @app.route("/admin/modules/<int:mid>/content/<int:cid>/media/clear",
+               methods=["POST"])
+    @author_required
+    def admin_content_media_clear(mid, cid):
+        ci = db.session.get(ContentItem, cid) or abort(404)
+        if ci.module_id != mid:
+            abort(404)
+        if ci.kind not in RICH_KINDS:
+            return jsonify(error="Not allowed."), 400
+        ci.file_path = ""
+        db.session.commit()
         return jsonify(ok=True)
 
     @app.route("/admin/modules/new", methods=["GET", "POST"])

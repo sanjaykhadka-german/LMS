@@ -126,6 +126,45 @@
     padding: 8px 16px;
   }
   .studio-loading .spinner-border { width: 14px; height: 14px; border-width: 2px; }
+
+  /* Edit-module pane */
+  .edit-body { flex: 1; overflow-y: auto; padding: 16px; background: #fff; }
+  .edit-save-indicator {
+    font-size: 11px; color: #888; margin-left: 6px;
+  }
+  .edit-save-indicator.saving { color: #999; }
+  .edit-save-indicator.saved { color: #2a7a2a; }
+  .edit-save-indicator.error { color: #a33; }
+  .edit-cover {
+    width: 160px; min-height: 110px;
+    border: 1px dashed var(--gb-line, #ccc);
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    background: #fafafa;
+    position: relative; overflow: hidden;
+    flex-shrink: 0;
+  }
+  .edit-cover img,
+  .edit-cover video { max-width: 100%; max-height: 160px; display: block; }
+  .edit-media-placeholder {
+    text-align: center; color: #888; font-size: 12px; padding: 12px;
+  }
+  .edit-media-actions {
+    display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap;
+  }
+  .edit-section {
+    background: #fff;
+  }
+  .edit-section-media {
+    margin-top: 8px;
+    padding: 10px;
+    background: #fafafa;
+    border-radius: 4px;
+  }
+  .edit-section-media img,
+  .edit-section-media video {
+    max-width: 100%; max-height: 240px; border-radius: 4px; display: block;
+  }
 </style>
 
 <div class="d-flex justify-content-between align-items-end flex-wrap gap-3 mb-3">
@@ -166,6 +205,102 @@
     </form>
   </section>
 
+  <!-- Right pane: JSON import OR Edit module -->
+  {% if edit_module %}
+  <section class="studio-json" aria-label="Edit module"
+           id="editModulePane"
+           data-mid="{{ edit_module.id }}">
+    <div class="studio-json-head">
+      <strong class="small">Edit module</strong>
+      <span class="edit-save-indicator" id="editStatus"></span>
+      <div class="ms-auto d-flex gap-2">
+        <a href="{{ url_for('admin_module_edit', module_id=edit_module.id) }}"
+           class="btn btn-outline-secondary btn-sm">Advanced edit</a>
+        <a href="{{ url_for('admin_modules') }}"
+           class="btn btn-outline-secondary btn-sm">Done</a>
+      </div>
+    </div>
+
+    <div class="edit-body">
+      <!-- Cover + title row -->
+      <div class="d-flex gap-3 align-items-start mb-3">
+        {% set cover_kind = edit_module.cover_path|media_kind %}
+        <div class="edit-cover" id="coverSlot"
+             data-path="{{ edit_module.cover_path or '' }}"
+             data-kind="{{ cover_kind }}"
+             data-url="{% if edit_module.cover_path %}{{ url_for('uploaded_file', name=edit_module.cover_path) }}{% endif %}">
+          <!-- preview/placeholder rendered by JS -->
+        </div>
+        <div class="flex-grow-1">
+          <label class="form-label small text-muted mb-1">Module title</label>
+          <input class="form-control form-control-lg fw-bold mb-2 edit-field"
+                 id="modTitle"
+                 value="{{ edit_module.title }}"
+                 data-target="module" data-field="title">
+
+          <label class="form-label small text-muted mb-1">Description</label>
+          <textarea class="form-control edit-field" rows="10"
+                    id="modDescription"
+                    style="min-height: 220px; resize: vertical;"
+                    data-target="module" data-field="description">{{ edit_module.description }}</textarea>
+
+          <div class="edit-media-actions">
+            <label class="btn btn-outline-secondary btn-sm mb-0">
+              <span>📎 Add cover (image / video / audio / PDF)</span>
+              <input type="file" hidden id="coverFile"
+                     accept=".png,.jpg,.jpeg,.gif,.webp,.mp4,.mov,.webm,.mp3,.wav,.m4a,.ogg,.pdf">
+            </label>
+            <button type="button" class="btn btn-outline-danger btn-sm"
+                    id="coverClearBtn" style="display:none">Remove cover</button>
+          </div>
+        </div>
+      </div>
+
+      <hr>
+
+      <h6 class="mb-3">Sections</h6>
+      {% for ci in edit_module.content_items %}
+        <div class="edit-section mb-3 p-3 border rounded" data-cid="{{ ci.id }}">
+          <div class="d-flex gap-2 align-items-center mb-2">
+            <span class="badge bg-secondary">{{ ci.kind }}</span>
+            <input class="form-control form-control-sm fw-bold edit-field"
+                   value="{{ ci.title }}"
+                   data-target="content" data-cid="{{ ci.id }}" data-field="title">
+          </div>
+          <textarea class="form-control mb-2 edit-field" rows="5"
+                    data-target="content" data-cid="{{ ci.id }}" data-field="body">{{ ci.body }}</textarea>
+
+          {% if ci.kind in rich_kinds %}
+            {% set media_kind = ci.file_path|media_kind %}
+            <div class="edit-section-media"
+                 data-cid="{{ ci.id }}"
+                 data-path="{{ ci.file_path or '' }}"
+                 data-kind="{{ media_kind }}"
+                 data-url="{% if ci.file_path %}{{ url_for('uploaded_file', name=ci.file_path) }}{% endif %}">
+              <div class="section-media-preview">
+                <!-- preview/placeholder rendered by JS -->
+              </div>
+              <div class="edit-media-actions">
+                <label class="btn btn-outline-secondary btn-sm mb-0">
+                  <span>📎 Add image / video</span>
+                  <input type="file" hidden class="section-media-file"
+                         data-cid="{{ ci.id }}"
+                         accept=".png,.jpg,.jpeg,.gif,.webp,.mp4,.mov,.webm">
+                </label>
+                <button type="button"
+                        class="btn btn-outline-danger btn-sm section-media-clear"
+                        data-cid="{{ ci.id }}"
+                        style="display:none">Remove</button>
+              </div>
+            </div>
+          {% endif %}
+        </div>
+      {% else %}
+        <p class="text-muted">This module has no sections yet. Ask the AI on the left to add some.</p>
+      {% endfor %}
+    </div>
+  </section>
+  {% else %}
   <!-- JSON / import pane -->
   <section class="studio-json" aria-label="Module JSON preview">
     <div class="studio-json-head">
@@ -176,8 +311,9 @@
       </form>
     </div>
     <textarea id="studio-json" spellcheck="false"
-              placeholder="The generated module will appear here. You can edit it before importing.">{{ current_json or '' }}</textarea>
+              placeholder="The generated module will appear here. It will become an editable preview after you click Import.">{{ current_json or '' }}</textarea>
   </section>
+  {% endif %}
 </div>
 
 <script>
@@ -192,18 +328,16 @@
   const loading = document.getElementById('studio-loading');
   const loadingText = document.getElementById('studio-loading-text');
   const resetBtn = document.getElementById('studio-reset');
+
   const jsonBox = document.getElementById('studio-json');
   const importBtn = document.getElementById('studio-import-btn');
   const importPayload = document.getElementById('studio-import-payload');
   const importForm = document.getElementById('studio-import-form');
 
   const PROVIDER_LABEL = {{ provider_label | tojson }};
-  // Uploaded files returned by /upload; IDs to send with the next message.
   let pendingIds = [];
-  // Pending file metadata for chip display before send
-  let pendingMeta = []; // [{file_id, filename, kind}]
+  let pendingMeta = [];
 
-  // -------- helpers --------
   function esc(s) {
     return (s || '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
   }
@@ -270,33 +404,32 @@
     if (on) textArea.blur();
   }
 
-  function updateImportButton() {
-    const has = !!jsonBox.value.trim();
-    importBtn.disabled = !has;
+  // -------- JSON-pane wiring (only if the JSON textarea is present) --------
+  if (jsonBox && importBtn) {
+    function updateImportButton() {
+      importBtn.disabled = !jsonBox.value.trim();
+    }
+    jsonBox.addEventListener('input', updateImportButton);
+    updateImportButton();
+
+    importForm.addEventListener('submit', (e) => {
+      const val = jsonBox.value.trim();
+      if (!val) { e.preventDefault(); return; }
+      try { JSON.parse(val); }
+      catch (err) {
+        e.preventDefault();
+        appendError('The JSON in the editor has a syntax error: ' + err.message);
+        return;
+      }
+      importPayload.value = val;
+    });
   }
 
-  jsonBox.addEventListener('input', updateImportButton);
-  updateImportButton();
-
-  importForm.addEventListener('submit', (e) => {
-    const val = jsonBox.value.trim();
-    if (!val) { e.preventDefault(); return; }
-    try { JSON.parse(val); }
-    catch (err) {
-      e.preventDefault();
-      appendError('The JSON in the editor has a syntax error: ' + err.message);
-      return;
-    }
-    importPayload.value = val;
-  });
-
   // -------- file upload --------
-  fileInput.addEventListener('change', async (ev) => {
+  fileInput.addEventListener('change', async () => {
     const files = Array.from(fileInput.files || []);
     fileInput.value = '';
-    for (const f of files) {
-      await uploadOne(f);
-    }
+    for (const f of files) { await uploadOne(f); }
   });
 
   async function uploadOne(file) {
@@ -348,15 +481,13 @@
         appendError(body.error || ('Request failed: HTTP ' + resp.status));
         return;
       }
-      // If the reply is empty but we got a module JSON block, show a placeholder
-      // so the user sees that something happened.
       let replyText = body.reply || '';
       if (!replyText && body.module_json) replyText = '(module updated — see the JSON editor on the right)';
       if (!replyText) replyText = '(no reply)';
       appendMsg('model', replyText);
-      if (body.module_json) {
+      if (body.module_json && jsonBox) {
         jsonBox.value = body.module_json;
-        updateImportButton();
+        jsonBox.dispatchEvent(new Event('input'));
       }
     } catch (e) {
       appendError('Network error: ' + e.message);
@@ -381,11 +512,11 @@
       });
     } catch (e) { /* ignore */ }
     log.innerHTML = '';
-    jsonBox.value = '';
+    if (jsonBox) jsonBox.value = '';
     pendingIds = [];
     pendingMeta = [];
     renderChips();
-    updateImportButton();
+    if (jsonBox) jsonBox.dispatchEvent(new Event('input'));
   });
 
   // -------- render existing history on page load --------
@@ -397,6 +528,220 @@
       appendMsg('model', {{ (turn.text or '') | tojson }});
     {% endif %}
   {% endfor %}
+
+  // -------- Edit-module pane (only present when edit_module is set) --------
+  const editPane = document.getElementById('editModulePane');
+  if (editPane) {
+    const mid = editPane.dataset.mid;
+    const statusEl = document.getElementById('editStatus');
+    let saveTimer = null;
+    let saveTokens = 0;
+
+    function setStatus(kind, text) {
+      statusEl.className = 'edit-save-indicator ' + (kind || '');
+      statusEl.textContent = text || '';
+    }
+
+    function renderMediaPreview(container, extraAttrs) {
+      const kind = container.dataset.kind;
+      const url  = container.dataset.url;
+      const isSection = container.classList.contains('edit-section-media');
+      const target = isSection ? container.querySelector('.section-media-preview') : container;
+      if (!url || !kind) {
+        target.innerHTML = '<div class="edit-media-placeholder">'
+          + (isSection ? 'No image or video.' : 'No cover attached.')
+          + '</div>';
+        return;
+      }
+      let html = '';
+      if (kind === 'image') {
+        html = '<img src="' + url + '" alt="">';
+      } else if (kind === 'video') {
+        html = '<video controls><source src="' + url + '"></video>';
+      } else if (kind === 'audio') {
+        html = '<audio controls src="' + url + '" style="width:100%"></audio>';
+      } else if (kind === 'pdf') {
+        html = '<div class="edit-media-placeholder">📄 PDF attached<br>'
+             + '<a href="' + url + '" target="_blank">Open</a></div>';
+      } else {
+        html = '<div class="edit-media-placeholder">📎 File attached<br>'
+             + '<a href="' + url + '" target="_blank">Open</a></div>';
+      }
+      target.innerHTML = html;
+    }
+
+    function toggleClearBtn(btn, hasMedia) {
+      if (btn) btn.style.display = hasMedia ? '' : 'none';
+    }
+
+    // Cover preview on load
+    const coverSlot = document.getElementById('coverSlot');
+    const coverClearBtn = document.getElementById('coverClearBtn');
+    if (coverSlot) {
+      renderMediaPreview(coverSlot);
+      toggleClearBtn(coverClearBtn, !!coverSlot.dataset.url);
+    }
+
+    // Section media previews on load
+    editPane.querySelectorAll('.edit-section-media').forEach(el => {
+      renderMediaPreview(el);
+      const clearBtn = el.querySelector('.section-media-clear');
+      toggleClearBtn(clearBtn, !!el.dataset.url);
+    });
+
+    // Inline text edits (debounced save per field)
+    const debouncedSaves = new WeakMap();
+
+    function saveField(el) {
+      const target = el.dataset.target;
+      const field  = el.dataset.field;
+      const value  = el.value;
+      let url;
+      if (target === 'module') {
+        url = '/admin/modules/' + mid + '/update';
+      } else {
+        const cid = el.dataset.cid;
+        url = '/admin/modules/' + mid + '/content/' + cid + '/update';
+      }
+      const myToken = ++saveTokens;
+      setStatus('saving', 'Saving…');
+      fetch(url, {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ field: field, value: value }),
+      })
+      .then(r => r.json().then(b => ({ ok: r.ok, body: b })))
+      .then(({ ok, body }) => {
+        if (myToken !== saveTokens) return;
+        if (!ok) {
+          setStatus('error', body.error || 'Save failed');
+        } else {
+          setStatus('saved', 'Saved');
+          setTimeout(() => {
+            if (myToken === saveTokens) setStatus('', '');
+          }, 1200);
+        }
+      })
+      .catch(() => {
+        if (myToken === saveTokens) setStatus('error', 'Network error');
+      });
+    }
+
+    editPane.querySelectorAll('.edit-field').forEach(el => {
+      el.addEventListener('input', () => {
+        clearTimeout(debouncedSaves.get(el));
+        const t = setTimeout(() => saveField(el), 500);
+        debouncedSaves.set(el, t);
+      });
+      el.addEventListener('blur', () => {
+        clearTimeout(debouncedSaves.get(el));
+        saveField(el);
+      });
+    });
+
+    // Cover upload / clear
+    const coverFile = document.getElementById('coverFile');
+    if (coverFile) {
+      coverFile.addEventListener('change', async () => {
+        const f = coverFile.files[0]; coverFile.value = '';
+        if (!f) return;
+        setStatus('saving', 'Uploading cover…');
+        const fd = new FormData(); fd.append('file', f);
+        try {
+          const r = await fetch('/admin/modules/' + mid + '/cover', {
+            method: 'POST', credentials: 'same-origin', body: fd,
+          });
+          const b = await r.json().catch(() => ({}));
+          if (!r.ok) { setStatus('error', b.error || 'Upload failed'); return; }
+          coverSlot.dataset.path = b.path;
+          coverSlot.dataset.kind = b.kind;
+          coverSlot.dataset.url  = b.url;
+          renderMediaPreview(coverSlot);
+          toggleClearBtn(coverClearBtn, true);
+          setStatus('saved', 'Saved');
+          setTimeout(() => setStatus('', ''), 1200);
+        } catch (e) {
+          setStatus('error', 'Network error');
+        }
+      });
+    }
+    if (coverClearBtn) {
+      coverClearBtn.addEventListener('click', async () => {
+        if (!confirm('Remove the cover?')) return;
+        setStatus('saving', 'Removing…');
+        try {
+          const r = await fetch('/admin/modules/' + mid + '/cover/clear', {
+            method: 'POST', credentials: 'same-origin',
+          });
+          const b = await r.json().catch(() => ({}));
+          if (!r.ok) { setStatus('error', b.error || 'Failed'); return; }
+          coverSlot.dataset.path = '';
+          coverSlot.dataset.kind = '';
+          coverSlot.dataset.url  = '';
+          renderMediaPreview(coverSlot);
+          toggleClearBtn(coverClearBtn, false);
+          setStatus('saved', 'Removed');
+          setTimeout(() => setStatus('', ''), 1200);
+        } catch (e) {
+          setStatus('error', 'Network error');
+        }
+      });
+    }
+
+    // Per-section media upload / clear
+    editPane.querySelectorAll('.section-media-file').forEach(inp => {
+      inp.addEventListener('change', async () => {
+        const f = inp.files[0]; inp.value = '';
+        if (!f) return;
+        const cid = inp.dataset.cid;
+        const container = editPane.querySelector('.edit-section-media[data-cid="' + cid + '"]');
+        const clearBtn = container.querySelector('.section-media-clear');
+        setStatus('saving', 'Uploading…');
+        const fd = new FormData(); fd.append('file', f);
+        try {
+          const r = await fetch('/admin/modules/' + mid + '/content/' + cid + '/media', {
+            method: 'POST', credentials: 'same-origin', body: fd,
+          });
+          const b = await r.json().catch(() => ({}));
+          if (!r.ok) { setStatus('error', b.error || 'Upload failed'); return; }
+          container.dataset.path = b.path;
+          container.dataset.kind = b.kind;
+          container.dataset.url  = b.url;
+          renderMediaPreview(container);
+          toggleClearBtn(clearBtn, true);
+          setStatus('saved', 'Saved');
+          setTimeout(() => setStatus('', ''), 1200);
+        } catch (e) {
+          setStatus('error', 'Network error');
+        }
+      });
+    });
+
+    editPane.querySelectorAll('.section-media-clear').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Remove this media?')) return;
+        const cid = btn.dataset.cid;
+        const container = editPane.querySelector('.edit-section-media[data-cid="' + cid + '"]');
+        setStatus('saving', 'Removing…');
+        try {
+          const r = await fetch('/admin/modules/' + mid + '/content/' + cid + '/media/clear', {
+            method: 'POST', credentials: 'same-origin',
+          });
+          const b = await r.json().catch(() => ({}));
+          if (!r.ok) { setStatus('error', b.error || 'Failed'); return; }
+          container.dataset.path = '';
+          container.dataset.kind = '';
+          container.dataset.url  = '';
+          renderMediaPreview(container);
+          toggleClearBtn(btn, false);
+          setStatus('saved', 'Removed');
+          setTimeout(() => setStatus('', ''), 1200);
+        } catch (e) {
+          setStatus('error', 'Network error');
+        }
+      });
+    });
+  }
 })();
 </script>
 {% endblock %}

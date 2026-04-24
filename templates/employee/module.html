@@ -1,5 +1,20 @@
 {% extends "base.html" %}
 {% block title %}{{ module.title }}{% endblock %}
+
+{% macro render_section_media(ci) %}
+  {% if ci.file_path %}
+    {% set mk = ci.file_path|media_kind %}
+    {% if mk == 'image' %}
+      <img src="{{ url_for('uploaded_file', name=ci.file_path) }}"
+           class="img-fluid mt-2" style="border-radius:4px">
+    {% elif mk == 'video' %}
+      <video controls class="w-100 mt-2" style="border-radius:4px">
+        <source src="{{ url_for('uploaded_file', name=ci.file_path) }}">
+      </video>
+    {% endif %}
+  {% endif %}
+{% endmacro %}
+
 {% block content %}
 {% if preview %}
   <a href="{{ url_for('admin_module_edit', module_id=module.id) }}" class="small text-decoration-none">&larr; Back to edit</a>
@@ -15,6 +30,28 @@
   {% endif %}
 </div>
 
+{% if module.cover_path %}
+  {% set ck = module.cover_path|media_kind %}
+  <div class="module-cover mb-4">
+    {% if ck == 'image' %}
+      <img src="{{ url_for('uploaded_file', name=module.cover_path) }}"
+           class="img-fluid" style="border-radius:4px">
+    {% elif ck == 'video' %}
+      <video controls class="w-100" style="border-radius:4px">
+        <source src="{{ url_for('uploaded_file', name=module.cover_path) }}">
+      </video>
+    {% elif ck == 'audio' %}
+      <audio controls class="w-100">
+        <source src="{{ url_for('uploaded_file', name=module.cover_path) }}">
+      </audio>
+    {% elif ck == 'pdf' %}
+      <a class="btn btn-outline-primary gb-arrow"
+         href="{{ url_for('uploaded_file', name=module.cover_path) }}"
+         target="_blank">Open reference PDF</a>
+    {% endif %}
+  </div>
+{% endif %}
+
 {% if preview %}
   <div class="alert alert-warning py-2 small">
     <b>Preview mode</b> &mdash; this is how employees will see the module.
@@ -29,6 +66,7 @@
       <div class="story-label">Story from the floor</div>
       <h5>{{ ci.title }}</h5>
       <p style="margin:0;white-space:pre-line">{{ ci.body }}</p>
+      {{ render_section_media(ci) }}
     </div>
 
   {% elif ci.kind == 'scenario' %}
@@ -43,12 +81,14 @@
           <div class="scenario-reveal"><strong>The right move:</strong> {{ sc.answerBody }}</div>
         </details>
       {% endif %}
+      {{ render_section_media(ci) }}
     </div>
 
   {% elif ci.kind == 'takeaway' %}
     <div class="takeaway-big">
       {% if ci.title %}<div class="tag">{{ ci.title }}</div>{% endif %}
       {{ ci.body }}
+      {{ render_section_media(ci) }}
     </div>
 
   {% elif ci.kind == 'section' %}
@@ -70,6 +110,7 @@
         </div>
       {% endfor %}
     {% endif %}
+    {{ render_section_media(ci) }}
 
   {% elif ci.kind == 'text' %}
     <h5>{{ ci.title }}</h5>

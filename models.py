@@ -76,6 +76,7 @@ class Module(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_published = db.Column(db.Boolean, default=True)
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    cover_path = db.Column(db.String(500), default="")
 
     created_by = db.relationship("User", foreign_keys=[created_by_id])
     content_items = db.relationship("ContentItem", backref="module",
