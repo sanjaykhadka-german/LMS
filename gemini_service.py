@@ -211,7 +211,7 @@ def _call_gemini(api_key, model, body):
 
     if r.status_code >= 300:
         log.error("Gemini error %s: %s", r.status_code, r.text[:500])
-        raise RuntimeError(f"Gemini returned HTTP {r.status_code}")
+        raise RuntimeError(_friendly_http_error(r))
 
     data = r.json()
     usage = data.get("usageMetadata") or {}
@@ -262,6 +262,52 @@ def _split_reply_and_json(raw):
     except json.JSONDecodeError:
         # Leave the fence in so the user sees what went wrong
         return raw.strip(), None
+
+
+def _friendly_http_error(resp):
+    """Turn a Gemini error response into a message the user can act on."""
+    try:
+        body = resp.json()
+    except ValueError:
+        body = {}
+    err = (body.get("error") or {}) if isinstance(body, dict) else {}
+    msg = err.get("message") or ""
+
+    if resp.status_code == 429:
+        retry_delay = ""
+        quota_metric = ""
+        for d in err.get("details") or []:
+            t = (d or {}).get("@type", "")
+            if t.endswith("RetryInfo"):
+                retry_delay = d.get("retryDelay", "") or ""
+            elif t.endswith("QuotaFailure"):
+                for v in d.get("violations") or []:
+                    qid = (v.get("quotaId") or "").lower()
+                    if "perminute" in qid:
+                        quota_metric = "per-minute"
+                    elif "perday" in qid or "daily" in qid:
+                        quota_metric = "daily"
+                    elif "token" in qid:
+                        quota_metric = "token"
+        parts = ["Gemini rate limit hit"]
+        if quota_metric:
+            parts.append(f"({quota_metric})")
+        if retry_delay:
+            parts.append(f"— retry in ~{retry_delay.rstrip('s')}s")
+        else:
+            parts.append("— wait a minute and try again")
+        tail = " Free tier is 10 requests/min, 250/day."
+        return " ".join(parts) + "." + tail
+
+    if resp.status_code == 400:
+        return f"Gemini rejected the request: {msg or 'bad input'}"
+    if resp.status_code == 401 or resp.status_code == 403:
+        return "Gemini auth failed — check GEMINI_API_KEY"
+    if resp.status_code == 413:
+        return "File too large for Gemini to process in one request."
+    if resp.status_code >= 500:
+        return f"Gemini is having a problem (HTTP {resp.status_code}). Try again in a moment."
+    return f"Gemini returned HTTP {resp.status_code}: {msg}".strip()
 
 
 def _trim(history, max_turns=MAX_HISTORY_TURNS):
