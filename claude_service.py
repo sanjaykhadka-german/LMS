@@ -41,17 +41,30 @@ def _load_system_prompt():
         + "\n\n---\n\n# Reference: module-schema.md\n\n"
         + schema
         + "\n\n---\n\n"
-        + "# Chat protocol\n\n"
+        + "# Chat protocol — JSON output is mandatory\n\n"
         + "You are in a live chat with a QA/QC author. Keep conversational replies "
-        + "short (2–4 sentences). When you produce or update a training module — "
-        + "which is most turns — append the **complete** module JSON at the very end "
-        + "of your reply inside a fenced ```json code block. Always output the full "
-        + "module every single time, never a diff or partial update. The JSON must "
-        + "satisfy the importer: required top-level `title`; `sections` array with "
-        + "types story / scenario / takeaway / default; `quiz.questions[]` of type "
-        + "`multiple_choice` (with 0-indexed `correctAnswer`) or `true_false` (with "
-        + "boolean `correctAnswer`). If the user is just chatting — asking a question, "
-        + "discussing options — reply without a JSON block.\n\n"
+        + "short (1–3 sentences). Then append the **complete** module JSON at the "
+        + "very end of your reply inside a fenced ```json code block.\n\n"
+        + "**You MUST include the full module JSON in every reply once a module "
+        + "exists in this conversation, no matter how brief or vague the user's "
+        + "message.** Examples that REQUIRE a JSON block in your response:\n"
+        + "- 'make it funny' → rewrite tone in the JSON, output the full updated module\n"
+        + "- 'shorter' → trim sections in the JSON, output the full updated module\n"
+        + "- 'use bratwurst' → swap product references in the JSON, output the full updated module\n"
+        + "- 'thanks' → acknowledge briefly, then re-emit the current module unchanged\n"
+        + "- 'change question 3' → update that question, output the full updated module\n\n"
+        + "Never, ever respond with just text once a module exists — the user's "
+        + "JSON editor depends on you re-emitting the complete module every turn. "
+        + "Always output the full module every single time, never a diff or partial "
+        + "update. The JSON must satisfy the importer: required top-level `title`; "
+        + "`sections` array with types story / scenario / takeaway / default; "
+        + "`quiz.questions[]` of type `multiple_choice` (with 0-indexed `correctAnswer`) "
+        + "or `true_false` (with boolean `correctAnswer`).\n\n"
+        + "The only times it is OK to reply WITHOUT a JSON block:\n"
+        + "1. The very first turn of a new chat with no source material yet — you "
+        + "can ask one clarifying question.\n"
+        + "2. The user asks a meta question that doesn't require module changes "
+        + "('what's a good NC number for a labelling issue?') AND no module exists yet.\n\n"
         + "# Accepted inputs\n\n"
         + "Inputs can be any mix of: documents (NC reports, audit findings, SQF "
         + "procedures, SOPs), photos of products / labels / equipment / non-conformance "
@@ -198,6 +211,33 @@ def chat_turn(user_text, file_ids):
 
     reply_text_raw = _call_claude(api_key, body)
     reply_text, module_json = _split_reply_and_json(reply_text_raw)
+
+    # Safety net: if a module already existed in this chat but the model
+    # replied with text only (e.g. responding "make it funny" with prose
+    # instead of an updated JSON), force a follow-up turn that asks
+    # specifically for the JSON. This stops the "I sent a message and
+    # nothing happened in the editor" failure mode.
+    had_prior_module = bool(studio.get("current_json"))
+    if had_prior_module and not module_json:
+        log.info("Claude reply had no JSON despite prior module — retrying for JSON")
+        retry_messages = list(messages)
+        retry_messages.append({"role": "assistant",
+                               "content": [{"type": "text", "text": reply_text_raw}]})
+        retry_messages.append({"role": "user", "content": [{"type": "text",
+            "text": (
+                "Now apply the change you just described and output the COMPLETE "
+                "updated module JSON in a fenced ```json code block. No other text — "
+                "just the JSON."
+            )}]})
+        retry_body = dict(body)
+        retry_body["messages"] = retry_messages
+        try:
+            retry_raw = _call_claude(api_key, retry_body)
+            _, retried_json = _split_reply_and_json(retry_raw)
+            if retried_json:
+                module_json = retried_json
+        except Exception as e:
+            log.warning("JSON-retry call failed: %s", e)
 
     history = studio.get("history") or []
     history.append({"role": "user", "text": user_text, "file_ids": list(file_ids or [])})
