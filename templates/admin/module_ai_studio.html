@@ -342,6 +342,22 @@
     return (s || '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
   }
 
+  // Defensive: if the reply still contains a ```json block, the server
+  // parser missed it. Strip it out client-side and route to the editor.
+  function maybeSalvageJson(replyText) {
+    const re = /```\s*(?:json)?\s*\n?([\s\S]*?)\n?```/i;
+    const m = replyText && replyText.match(re);
+    if (!m) return { reply: replyText, salvaged: null };
+    try {
+      const parsed = JSON.parse(m[1].trim());
+      const cleaned = (replyText.slice(0, m.index) +
+                       replyText.slice(m.index + m[0].length)).trim();
+      return { reply: cleaned, salvaged: JSON.stringify(parsed, null, 2) };
+    } catch (e) {
+      return { reply: replyText, salvaged: null };
+    }
+  }
+
   function appendMsg(role, text, fileLabels) {
     if (!text && (!fileLabels || !fileLabels.length)) return;
     const wrap = document.createElement('div');
@@ -481,12 +497,23 @@
         appendError(body.error || ('Request failed: HTTP ' + resp.status));
         return;
       }
+      // Defensive client-side salvage: if the server didn't extract a
+      // module_json but the prose contains a ```json``` block, pull it
+      // out so it lands in the editor instead of the chat bubble.
       let replyText = body.reply || '';
-      if (!replyText && body.module_json) replyText = '(module updated — see the JSON editor on the right)';
+      let moduleJson = body.module_json || '';
+      if (!moduleJson) {
+        const salvage = maybeSalvageJson(replyText);
+        if (salvage.salvaged) {
+          moduleJson = salvage.salvaged;
+          replyText = salvage.reply;
+        }
+      }
+      if (!replyText && moduleJson) replyText = '(module updated — see the JSON editor on the right)';
       if (!replyText) replyText = '(no reply)';
       appendMsg('model', replyText);
-      if (body.module_json && jsonBox) {
-        jsonBox.value = body.module_json;
+      if (moduleJson && jsonBox) {
+        jsonBox.value = moduleJson;
         jsonBox.dispatchEvent(new Event('input'));
       }
     } catch (e) {
