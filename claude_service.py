@@ -25,8 +25,12 @@ MAX_PDF_BYTES = 32 * 1024 * 1024
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
 _SKILL_DIR = os.path.join(os.path.dirname(__file__), "skills", "qa-quiz-creator")
-_JSON_BLOCK_RE = re.compile(r"```json\s*\n(.*?)\n```\s*$", re.DOTALL)
-_FENCE_RE = re.compile(r"^\s*```(?:json)?\s*\n?(.*?)\n?```\s*$", re.DOTALL)
+# Match a fenced code block anywhere in the reply. The `json` language tag
+# is optional and case-insensitive; the body can be any JSON value.
+_JSON_BLOCK_RE = re.compile(
+    r"```\s*(?:json)?\s*\n?(\{.*?\}|\[.*?\])\s*\n?```",
+    re.DOTALL | re.IGNORECASE,
+)
 
 
 def _load_system_prompt():
@@ -219,7 +223,12 @@ def chat_turn(user_text, file_ids):
     # nothing happened in the editor" failure mode.
     had_prior_module = bool(studio.get("current_json"))
     if had_prior_module and not module_json:
-        log.info("Claude reply had no JSON despite prior module — retrying for JSON")
+        head = (reply_text_raw or "")[:200].replace("\n", "\\n")
+        tail = (reply_text_raw or "")[-200:].replace("\n", "\\n")
+        log.info(
+            "Claude reply had no JSON despite prior module — head=%r tail=%r",
+            head, tail,
+        )
         retry_messages = list(messages)
         retry_messages.append({"role": "assistant",
                                "content": [{"type": "text", "text": reply_text_raw}]})
@@ -352,27 +361,76 @@ def _friendly_http_error(resp):
 
 
 def _split_reply_and_json(raw):
+    """Pull a module JSON object out of a model reply, return (prose, pretty_json|None).
+
+    Handles four common LLM output styles:
+    1. Conversation followed by ```json ... ``` block (with or without trailing prose).
+    2. Conversation followed by ``` ... ``` block (no language tag).
+    3. The whole reply is a fenced block.
+    4. Unfenced JSON embedded in prose.
+    """
     if not raw:
         return "", None
-    m = _JSON_BLOCK_RE.search(raw)
-    if not m:
-        fence = _FENCE_RE.match(raw.strip())
-        if fence:
-            candidate = fence.group(1).strip()
-            try:
-                parsed = json.loads(candidate)
-                return "", json.dumps(parsed, indent=2, ensure_ascii=False)
-            except json.JSONDecodeError:
-                pass
-        return raw.strip(), None
-    json_str = m.group(1).strip()
-    reply = raw[:m.start()].rstrip()
-    try:
-        parsed = json.loads(json_str)
+
+    # 1. Try every fenced block, prefer the LAST that parses.
+    matches = list(_JSON_BLOCK_RE.finditer(raw))
+    for m in reversed(matches):
+        candidate = m.group(1).strip()
+        try:
+            parsed = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
         pretty = json.dumps(parsed, indent=2, ensure_ascii=False)
+        reply = (raw[:m.start()] + raw[m.end():]).strip()
         return reply, pretty
-    except json.JSONDecodeError:
-        return raw.strip(), None
+
+    # 2. No fenced match — try unfenced balanced-brace extraction.
+    found = _extract_unfenced_json(raw)
+    if found is not None:
+        json_str, (start, end) = found
+        reply = (raw[:start] + raw[end:]).strip()
+        return reply, json_str
+
+    return raw.strip(), None
+
+
+def _extract_unfenced_json(text):
+    """Scan `text` for the first balanced {...} or [...] that parses as JSON.
+    Returns (pretty_json, (start, end)) or None."""
+    for i, ch in enumerate(text):
+        if ch not in "{[":
+            continue
+        close = "}" if ch == "{" else "]"
+        depth = 0
+        in_str = False
+        esc = False
+        for j in range(i, len(text)):
+            c = text[j]
+            if esc:
+                esc = False
+                continue
+            if in_str:
+                if c == "\\":
+                    esc = True
+                elif c == '"':
+                    in_str = False
+                continue
+            if c == '"':
+                in_str = True
+                continue
+            if c == ch:
+                depth += 1
+            elif c == close:
+                depth -= 1
+                if depth == 0:
+                    candidate = text[i:j + 1]
+                    try:
+                        parsed = json.loads(candidate)
+                    except json.JSONDecodeError:
+                        break
+                    pretty = json.dumps(parsed, indent=2, ensure_ascii=False)
+                    return pretty, (i, j + 1)
+    return None
 
 
 def _trim(history, max_turns=MAX_HISTORY_TURNS):
