@@ -937,6 +937,70 @@ def register_routes(app):
         return render_template("admin/employee_edit.html",
                                employee=u, departments=departments, machines=machines)
 
+    @app.route("/admin/employees/<int:uid>")
+    @admin_required
+    def admin_employee_detail(uid):
+        u = db.session.get(User, uid) or abort(404)
+
+        assignments = (Assignment.query
+                       .filter_by(user_id=u.id)
+                       .options(db.joinedload(Assignment.module))
+                       .all())
+        attempts = (Attempt.query
+                    .filter_by(user_id=u.id)
+                    .options(db.joinedload(Attempt.module))
+                    .order_by(Attempt.created_at.desc())
+                    .all())
+
+        attempts_by_mod = {}
+        for a in attempts:
+            attempts_by_mod.setdefault(a.module_id, []).append(a)
+
+        rows_by_mod = {}
+        for asn in assignments:
+            rows_by_mod[asn.module_id] = {
+                "module": asn.module,
+                "assigned": True,
+                "assigned_at": asn.assigned_at,
+                "due_at": asn.due_at,
+                "completed_at": asn.completed_at,
+                "attempts": attempts_by_mod.get(asn.module_id, []),
+            }
+        for mod_id, atts in attempts_by_mod.items():
+            if mod_id not in rows_by_mod:
+                rows_by_mod[mod_id] = {
+                    "module": atts[0].module,
+                    "assigned": False,
+                    "assigned_at": None,
+                    "due_at": None,
+                    "completed_at": None,
+                    "attempts": atts,
+                }
+
+        rows = []
+        counts = {"passed": 0, "failed": 0, "not_attempted": 0,
+                  "unassigned_attempt": 0}
+        for r in rows_by_mod.values():
+            atts = r["attempts"]
+            if atts:
+                r["best_score"] = max(a.score for a in atts)
+                r["latest"] = atts[0]
+                r["status"] = "passed" if any(a.passed for a in atts) else "failed"
+            else:
+                r["best_score"] = None
+                r["latest"] = None
+                r["status"] = "not_attempted" if r["assigned"] else "unassigned_attempt"
+            counts[r["status"]] += 1
+            rows.append(r)
+
+        rows.sort(key=lambda r: (r["module"].title or "").lower())
+        recent_attempts = attempts[:20]
+        pass_threshold = app.config.get("PASS_THRESHOLD", 80)
+        return render_template("admin/employee_detail.html",
+                               employee=u, rows=rows, counts=counts,
+                               recent_attempts=recent_attempts,
+                               pass_threshold=pass_threshold)
+
     @app.route("/admin/employees/upload", methods=["POST"])
     @admin_required
     def admin_employees_upload():

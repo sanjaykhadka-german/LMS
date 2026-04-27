@@ -63,7 +63,8 @@
       {% for e in employees %}
         <tr>
           <td>
-            {{ e.name }}
+            <a href="{{ url_for('admin_employee_detail', uid=e.id) }}"
+               class="text-decoration-none">{{ e.name }}</a>
             {% if e.role == 'admin' %}<span class="badge bg-primary ms-1">Admin</span>
             {% elif e.role == 'qaqc' %}<span class="badge bg-info text-dark ms-1">QA/QC</span>
             {% endif %}

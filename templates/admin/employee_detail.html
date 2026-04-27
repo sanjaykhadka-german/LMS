@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block title %}{{ employee.name }} — progress{% endblock %}
+{% block content %}
+
+{% set status_meta = {
+  'passed':             {'label': 'Passed',                'class': 'bg-success'},
+  'failed':             {'label': 'Failed',                'class': 'bg-danger'},
+  'not_attempted':      {'label': 'Not attempted',         'class': 'bg-secondary'},
+  'unassigned_attempt': {'label': 'Attempted (unassigned)', 'class': 'bg-warning text-dark'}
+} %}
+
+<div class="d-flex justify-content-between align-items-end flex-wrap gap-3 mb-4">
+  <div class="gb-pageheader mb-0">
+    <span class="gb-eyebrow">User progress</span>
+    <h1 class="mb-0">{{ employee.name }}</h1>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('admin_employee_edit', uid=employee.id) }}"
+       class="btn btn-sm btn-outline-primary">Edit user</a>
+    <a href="{{ url_for('admin_employees') }}"
+       class="btn btn-sm btn-outline-secondary">&larr; Back to users</a>
+  </div>
+</div>
+
+<div class="card p-4 mb-4">
+  <div class="row g-3">
+    <div class="col-md-6">
+      <div class="text-muted small">Email</div>
+      <div>{{ employee.email }}</div>
+    </div>
+    <div class="col-md-3">
+      <div class="text-muted small">Role</div>
+      <div>
+        {% if employee.role == 'admin' %}<span class="badge bg-primary">Administrator</span>
+        {% elif employee.role == 'qaqc' %}<span class="badge bg-info text-dark">QA/QC</span>
+        {% else %}<span class="badge bg-light text-dark">Employee</span>
+        {% endif %}
+        {% if not employee.is_active_flag %}<span class="badge bg-secondary ms-1">Disabled</span>{% endif %}
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="text-muted small">Department</div>
+      <div>{{ employee.department.name if employee.department else '—' }}</div>
+    </div>
+    <div class="col-md-6">
+      <div class="text-muted small">Phone</div>
+      <div>{{ employee.phone or '—' }}</div>
+    </div>
+    <div class="col-md-6">
+      <div class="text-muted small">Machines</div>
+      <div>
+        {% if employee.machines %}
+          {{ employee.machines|map(attribute='name')|join(', ') }}
+        {% else %}—{% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card p-4 mb-4">
+  <div class="d-flex flex-wrap gap-3 align-items-center">
+    <div><span class="badge bg-success">{{ counts.passed }}</span> passed</div>
+    <div><span class="badge bg-danger">{{ counts.failed }}</span> failed</div>
+    <div><span class="badge bg-secondary">{{ counts.not_attempted }}</span> not attempted</div>
+    {% if counts.unassigned_attempt %}
+      <div><span class="badge bg-warning text-dark">{{ counts.unassigned_attempt }}</span> attempted but unassigned</div>
+    {% endif %}
+    <div class="ms-auto text-muted small">Pass mark: {{ pass_threshold }}%</div>
+  </div>
+</div>
+
+<div class="card p-4 mb-4">
+  <h5>Modules</h5>
+  {% if rows %}
+  <div class="table-responsive">
+    <table class="table align-middle">
+      <thead>
+        <tr>
+          <th>Module</th>
+          <th>Status</th>
+          <th class="text-end">Best score</th>
+          <th class="text-end">Attempts</th>
+          <th>Last attempt</th>
+          <th>Assigned</th>
+          <th>Due</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for r in rows %}
+        <tr>
+          <td>{{ r.module.title }}</td>
+          <td>
+            {% set m = status_meta[r.status] %}
+            <span class="badge {{ m.class }}">{{ m.label }}</span>
+          </td>
+          <td class="text-end">
+            {% if r.best_score is not none %}{{ r.best_score }}%{% else %}—{% endif %}
+          </td>
+          <td class="text-end">{{ r.attempts|length }}</td>
+          <td>
+            {% if r.latest %}{{ r.latest.created_at.strftime('%Y-%m-%d %H:%M') }}{% else %}—{% endif %}
+          </td>
+          <td>
+            {% if r.assigned_at %}{{ r.assigned_at.strftime('%Y-%m-%d') }}{% else %}—{% endif %}
+          </td>
+          <td>
+            {% if r.due_at %}{{ r.due_at.strftime('%Y-%m-%d') }}{% else %}—{% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    <div class="text-muted">This user has no assigned modules and no attempts yet.</div>
+  {% endif %}
+</div>
+
+{% if recent_attempts %}
+<div class="card p-4">
+  <h5>Recent attempts</h5>
+  <div class="table-responsive">
+    <table class="table table-sm align-middle">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Module</th>
+          <th class="text-end">Score</th>
+          <th class="text-end">Correct</th>
+          <th>Result</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for a in recent_attempts %}
+        <tr>
+          <td>{{ a.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+          <td>{{ a.module.title if a.module else '—' }}</td>
+          <td class="text-end">{{ a.score }}%</td>
+          <td class="text-end">{{ a.correct }} / {{ a.total }}</td>
+          <td>
+            {% if a.passed %}
+              <span class="badge bg-success">Passed</span>
+            {% else %}
+              <span class="badge bg-danger">Failed</span>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
