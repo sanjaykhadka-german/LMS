@@ -438,14 +438,225 @@ def register_routes(app):
     @app.route("/admin")
     @admin_required
     def admin_dashboard():
+        from collections import defaultdict
+
+        today = datetime.utcnow().date()
+        default_from = today - timedelta(days=29)
+
+        def _parse_date(s, default):
+            if not s:
+                return default
+            try:
+                return datetime.strptime(s, "%Y-%m-%d").date()
+            except ValueError:
+                return default
+
+        from_date = _parse_date(request.args.get("from"), default_from)
+        to_date = _parse_date(request.args.get("to"), today)
+        if to_date < from_date:
+            from_date, to_date = to_date, from_date
+
+        dept_id = request.args.get("dept", type=int)
+        module_id = request.args.get("module", type=int)
+
+        start_ts = datetime.combine(from_date, datetime.min.time())
+        end_ts = datetime.combine(to_date, datetime.min.time()) + timedelta(days=1)
+
+        attempts_q = Attempt.query.filter(
+            Attempt.created_at >= start_ts,
+            Attempt.created_at < end_ts,
+        )
+        if module_id:
+            attempts_q = attempts_q.filter(Attempt.module_id == module_id)
+        if dept_id:
+            attempts_q = (attempts_q
+                          .join(User, User.id == Attempt.user_id)
+                          .filter(User.department_id == dept_id))
+        attempts = attempts_q.all()
+
+        assignments_q = Assignment.query
+        if module_id:
+            assignments_q = assignments_q.filter(Assignment.module_id == module_id)
+        if dept_id:
+            assignments_q = (assignments_q
+                             .join(User, User.id == Assignment.user_id)
+                             .filter(User.department_id == dept_id))
+        assignments_in_scope = assignments_q.all()
+
+        # --- KPIs ---------------------------------------------------------
+        total_attempts = len(attempts)
+        pass_count = sum(1 for a in attempts if a.passed)
+        pass_rate = (100.0 * pass_count / total_attempts) if total_attempts else 0.0
+        avg_score = (sum(a.score or 0 for a in attempts) / total_attempts) if total_attempts else 0.0
+        active_learners = len({a.user_id for a in attempts})
+
+        now = datetime.utcnow()
+        soon_threshold = now + timedelta(days=7)
+        statuses = {"completed": 0, "overdue": 0, "due_soon": 0, "not_started": 0}
+        for assn in assignments_in_scope:
+            if assn.completed_at:
+                statuses["completed"] += 1
+            elif assn.due_at and assn.due_at < now:
+                statuses["overdue"] += 1
+            elif assn.due_at and assn.due_at < soon_threshold:
+                statuses["due_soon"] += 1
+            else:
+                statuses["not_started"] += 1
+        total_assignments_scoped = len(assignments_in_scope)
+        completion_rate = (100.0 * statuses["completed"] / total_assignments_scoped
+                           ) if total_assignments_scoped else 0.0
+
+        # --- Daily time series -------------------------------------------
+        per_day = defaultdict(lambda: {"passed": 0, "failed": 0})
+        for a in attempts:
+            d = a.created_at.date()
+            per_day[d]["passed" if a.passed else "failed"] += 1
+        days_labels, days_passed, days_failed = [], [], []
+        cur = from_date
+        while cur <= to_date:
+            days_labels.append(cur.isoformat())
+            days_passed.append(per_day[cur]["passed"])
+            days_failed.append(per_day[cur]["failed"])
+            cur += timedelta(days=1)
+
+        # --- By module ---------------------------------------------------
+        per_module = defaultdict(lambda: {"attempts": 0, "passed": 0})
+        for a in attempts:
+            per_module[a.module_id]["attempts"] += 1
+            if a.passed:
+                per_module[a.module_id]["passed"] += 1
+        mod_ids = list(per_module.keys())
+        mod_titles = {}
+        if mod_ids:
+            for m in Module.query.filter(Module.id.in_(mod_ids)).all():
+                mod_titles[m.id] = m.title
+        by_module = []
+        for mid, s in per_module.items():
+            rate = (100.0 * s["passed"] / s["attempts"]) if s["attempts"] else 0.0
+            title = mod_titles.get(mid, f"Module {mid}")
+            by_module.append({
+                "id": mid,
+                "title": title,
+                "attempts": s["attempts"],
+                "passed": s["passed"],
+                "rate": round(rate, 1),
+            })
+        by_module.sort(key=lambda x: x["rate"])
+
+        # --- By department ----------------------------------------------
+        user_ids = list({a.user_id for a in attempts})
+        user_dept = {}
+        learner_names = {}
+        if user_ids:
+            for u in User.query.filter(User.id.in_(user_ids)).all():
+                user_dept[u.id] = u.department_id
+                learner_names[u.id] = u.name
+        dept_names = {None: "(no department)"}
+        for d in Department.query.all():
+            dept_names[d.id] = d.name
+        per_dept = defaultdict(lambda: {"attempts": 0, "passed": 0})
+        for a in attempts:
+            did = user_dept.get(a.user_id)
+            per_dept[did]["attempts"] += 1
+            if a.passed:
+                per_dept[did]["passed"] += 1
+        by_dept = []
+        for did, s in per_dept.items():
+            rate = (100.0 * s["passed"] / s["attempts"]) if s["attempts"] else 0.0
+            by_dept.append({
+                "name": dept_names.get(did, "(unknown)"),
+                "attempts": s["attempts"],
+                "rate": round(rate, 1),
+            })
+        by_dept.sort(key=lambda x: -x["rate"])
+
+        # --- Top learners & worst modules -------------------------------
+        per_learner = defaultdict(lambda: {"attempts": 0, "score_sum": 0, "passed": 0})
+        for a in attempts:
+            row = per_learner[a.user_id]
+            row["attempts"] += 1
+            row["score_sum"] += a.score or 0
+            if a.passed:
+                row["passed"] += 1
+        top_learners = []
+        for uid, row in per_learner.items():
+            avg = row["score_sum"] / row["attempts"] if row["attempts"] else 0
+            top_learners.append({
+                "id": uid,
+                "name": learner_names.get(uid, f"User {uid}"),
+                "attempts": row["attempts"],
+                "avg_score": round(avg, 1),
+                "passed": row["passed"],
+            })
+        top_learners.sort(key=lambda x: (-x["avg_score"], -x["attempts"]))
+        top_learners = top_learners[:5]
+
+        worst_modules = sorted(
+            [m for m in by_module if m["attempts"] > 0],
+            key=lambda x: (x["rate"], -x["attempts"]),
+        )[:5]
+
+        # --- Recent activity feed (unfiltered, like before) -------------
+        recent = (Attempt.query.order_by(Attempt.created_at.desc())
+                  .limit(10).all())
+
         stats = {
             "modules": Module.query.count(),
             "employees": User.query.filter_by(role="employee").count(),
             "assignments": Assignment.query.count(),
             "attempts": Attempt.query.count(),
+            "window_attempts": total_attempts,
+            "pass_rate": round(pass_rate, 1),
+            "avg_score": round(avg_score, 1),
+            "active_learners": active_learners,
+            "overdue": statuses["overdue"],
+            "completion_rate": round(completion_rate, 1),
         }
-        recent = Attempt.query.order_by(Attempt.created_at.desc()).limit(10).all()
-        return render_template("admin/dashboard.html", stats=stats, recent=recent)
+
+        chart_data = {
+            "timeseries": {
+                "labels": days_labels,
+                "passed": days_passed,
+                "failed": days_failed,
+            },
+            "status": {
+                "labels": ["Completed", "Overdue", "Due soon (≤7d)", "Not started"],
+                "values": [statuses["completed"], statuses["overdue"],
+                           statuses["due_soon"], statuses["not_started"]],
+            },
+            "by_module": {
+                "labels": [(m["title"][:40] + "…") if len(m["title"]) > 40
+                           else m["title"] for m in by_module],
+                "full_titles": [m["title"] for m in by_module],
+                "rates": [m["rate"] for m in by_module],
+                "attempts": [m["attempts"] for m in by_module],
+            },
+            "by_dept": {
+                "labels": [d["name"] for d in by_dept],
+                "rates": [d["rate"] for d in by_dept],
+                "attempts": [d["attempts"] for d in by_dept],
+            },
+        }
+
+        departments = Department.query.order_by(Department.name).all()
+        modules_list = Module.query.order_by(Module.title).all()
+
+        return render_template(
+            "admin/dashboard.html",
+            stats=stats,
+            recent=recent,
+            chart_data=chart_data,
+            top_learners=top_learners,
+            worst_modules=worst_modules,
+            filters={
+                "from": from_date.isoformat(),
+                "to": to_date.isoformat(),
+                "dept": dept_id,
+                "module": module_id,
+            },
+            departments=departments,
+            all_modules=modules_list,
+        )
 
     # --- qa/qc ---
     @app.route("/qaqc")
