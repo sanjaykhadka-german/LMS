@@ -1,14 +1,25 @@
 {% extends "base.html" %}
 {% block title %}{{ module.title }} — Quiz{% endblock %}
+
+{% block navbar_action %}
+  {% if preview %}
+    <a href="{{ url_for('admin_module_preview', module_id=module.id, back=preview_back or 'edit') }}" class="btn btn-sm btn-outline-light me-3">&larr; Back to preview</a>
+  {% endif %}
+{% endblock %}
+
 {% block content %}
 <div class="gb-quiz">
   <div class="gb-pageheader">
     <span class="gb-eyebrow">Knowledge check</span>
     <h1>{{ module.title }}</h1>
-    <p class="lede">Answer every question. You can retake the quiz later if needed.</p>
+    {% if preview %}
+      <p class="lede">Preview run &mdash; this attempt will not be saved.</p>
+    {% else %}
+      <p class="lede">Answer every question. You can retake the quiz later if needed.</p>
+    {% endif %}
   </div>
 
-  <form method="post">
+  <form method="post" action="{% if preview %}{{ url_for('admin_module_preview_quiz', module_id=module.id, back=preview_back or 'edit') }}{% endif %}">
     {% for q in module.questions %}
       <div class="card p-4">
         <span class="gb-qnum">Question {{ '%02d' % loop.index }}</span>

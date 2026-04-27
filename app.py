@@ -14,8 +14,9 @@ from flask_login import (LoginManager, login_user, logout_user,
 from werkzeug.utils import secure_filename
 
 from config import Config
-from models import (db, User, Module, ContentItem, Question, Choice,
-                    Assignment, Attempt, Department, Machine, UploadedFile)
+from models import (db, User, Module, ContentItem, ContentItemMedia,
+                    Question, Choice, Assignment, Attempt, Department,
+                    Machine, UploadedFile)
 from email_service import (notify_invite, notify_assignment,
                            notify_attempt, notify_reminder,
                            notify_password_reset)
@@ -288,6 +289,71 @@ def score_attempt(module, answers):
 RICH_KINDS = {"story", "scenario", "takeaway", "section"}
 
 
+def _module_description_from(mod):
+    """Build Module.description from subtitle/summary/keyTakeaway."""
+    parts = []
+    if mod.get("subtitle"):
+        parts.append(mod["subtitle"])
+    if mod.get("summary"):
+        parts.append(mod["summary"])
+    if mod.get("keyTakeaway"):
+        parts.append("Key takeaway: " + mod["keyTakeaway"])
+    return "\n\n".join(parts)
+
+
+def _section_kind_and_body(s):
+    """Map an AI-spec section dict to (kind, title, body) for ContentItem."""
+    stype = (s.get("type") or "section").lower()
+    if stype not in RICH_KINDS:
+        stype = "section"
+    heading = (s.get("heading") or "").strip() or "Section"
+    if stype in ("story", "takeaway"):
+        body = s.get("body") or ""
+    elif stype == "scenario":
+        body = json.dumps({
+            "body": s.get("body") or "",
+            "answerBody": s.get("answerBody") or "",
+        })
+    else:  # section
+        body = json.dumps({
+            "body": s.get("body") or "",
+            "bullets": s.get("bullets") or [],
+            "groups": s.get("groups") or [],
+        })
+    return stype, heading, body
+
+
+def _add_question_with_choices(module_id, qpos, q):
+    """Insert one Question + its Choices from an AI-spec question dict.
+    No-ops on empty prompts. Caller flushes/commits."""
+    if not isinstance(q, dict):
+        return
+    prompt = (q.get("question") or "").strip()
+    if not prompt:
+        return
+    qobj = Question(module_id=module_id, prompt=prompt,
+                    kind="single", position=qpos)
+    db.session.add(qobj)
+    db.session.flush()
+
+    qtype = (q.get("type") or "multiple_choice").lower()
+    if qtype == "true_false":
+        correct_val = q.get("correctAnswer")
+        for cpos, (label, val) in enumerate([("True", True), ("False", False)]):
+            db.session.add(Choice(
+                question_id=qobj.id, text=label,
+                is_correct=(val == correct_val), position=cpos,
+            ))
+    else:
+        options = q.get("options") or []
+        correct_idx = q.get("correctAnswer")
+        for cpos, opt in enumerate(options):
+            db.session.add(Choice(
+                question_id=qobj.id, text=str(opt),
+                is_correct=(cpos == correct_idx), position=cpos,
+            ))
+
+
 def import_module_from_json(data, user_id):
     """Create Module + ContentItems + Questions + Choices from preview-style JSON.
 
@@ -310,16 +376,8 @@ def import_module_from_json(data, user_id):
         if not title:
             raise ValueError(f"Module #{i}: missing required 'title' field.")
 
-        desc_parts = []
-        if mod.get("subtitle"):
-            desc_parts.append(mod["subtitle"])
-        if mod.get("summary"):
-            desc_parts.append(mod["summary"])
-        if mod.get("keyTakeaway"):
-            desc_parts.append("Key takeaway: " + mod["keyTakeaway"])
-        description = "\n\n".join(desc_parts)
-
-        m = Module(title=title, description=description,
+        m = Module(title=title,
+                   description=_module_description_from(mod),
                    is_published=True, created_by_id=user_id)
         db.session.add(m)
         db.session.flush()
@@ -327,60 +385,67 @@ def import_module_from_json(data, user_id):
         for pos, s in enumerate(mod.get("sections") or []):
             if not isinstance(s, dict):
                 continue
-            stype = (s.get("type") or "section").lower()
-            if stype not in RICH_KINDS:
-                stype = "section"
-            heading = (s.get("heading") or "").strip() or "Section"
-            if stype in ("story", "takeaway"):
-                body = s.get("body") or ""
-            elif stype == "scenario":
-                body = json.dumps({
-                    "body": s.get("body") or "",
-                    "answerBody": s.get("answerBody") or "",
-                })
-            else:  # section
-                body = json.dumps({
-                    "body": s.get("body") or "",
-                    "bullets": s.get("bullets") or [],
-                    "groups": s.get("groups") or [],
-                })
+            kind, heading, body = _section_kind_and_body(s)
             db.session.add(ContentItem(
-                module_id=m.id, kind=stype,
+                module_id=m.id, kind=kind,
                 title=heading, body=body, position=pos,
             ))
 
         quiz = mod.get("quiz") or {}
         for qpos, q in enumerate(quiz.get("questions") or []):
-            if not isinstance(q, dict):
-                continue
-            prompt = (q.get("question") or "").strip()
-            if not prompt:
-                continue
-            qobj = Question(module_id=m.id, prompt=prompt,
-                            kind="single", position=qpos)
-            db.session.add(qobj)
-            db.session.flush()
-
-            qtype = (q.get("type") or "multiple_choice").lower()
-            if qtype == "true_false":
-                correct_val = q.get("correctAnswer")
-                for cpos, (label, val) in enumerate([("True", True), ("False", False)]):
-                    db.session.add(Choice(
-                        question_id=qobj.id, text=label,
-                        is_correct=(val == correct_val), position=cpos,
-                    ))
-            else:
-                options = q.get("options") or []
-                correct_idx = q.get("correctAnswer")
-                for cpos, opt in enumerate(options):
-                    db.session.add(Choice(
-                        question_id=qobj.id, text=str(opt),
-                        is_correct=(cpos == correct_idx), position=cpos,
-                    ))
+            _add_question_with_choices(m.id, qpos, q)
 
         created.append(m)
 
     return created
+
+
+def apply_module_json_to_existing(module, data):
+    """Merge AI-generated module spec into an existing Module.
+
+    Module title/description: overwritten.
+    Sections: positional merge — update existing ContentItem's kind/title/body
+      in place (preserves file_path + media_items); append new ones for excess;
+      leave extras alone if AI returned fewer sections.
+    Questions: wipe-and-replace (cascade kills Choices). Attempts FK Module
+      only, so historical attempts survive.
+
+    Raises ValueError on bad input. Caller commits/rolls back.
+    """
+    if not isinstance(data, dict):
+        raise ValueError("Expected a single module object.")
+    title = (data.get("title") or "").strip()
+    if not title:
+        raise ValueError("Module is missing a 'title' field.")
+
+    module.title = title
+    module.description = _module_description_from(data)
+
+    new_sections = [s for s in (data.get("sections") or []) if isinstance(s, dict)]
+    existing = list(module.content_items)  # ordered by position via relationship
+    for i, s in enumerate(new_sections):
+        kind, heading, body = _section_kind_and_body(s)
+        if i < len(existing):
+            ci = existing[i]
+            ci.kind = kind
+            ci.title = heading
+            ci.body = body
+            ci.position = i
+            # file_path and media_items left untouched on purpose.
+        else:
+            db.session.add(ContentItem(
+                module_id=module.id, kind=kind,
+                title=heading, body=body, position=i,
+            ))
+    # Trailing existing sections (beyond what AI returned) are left alone.
+
+    # Questions — replace wholesale. Cascade delete-orphan handles Choices.
+    for q in list(module.questions):
+        db.session.delete(q)
+    db.session.flush()
+    quiz = data.get("quiz") or {}
+    for qpos, q in enumerate(quiz.get("questions") or []):
+        _add_question_with_choices(module.id, qpos, q)
 
 
 def register_routes(app):
@@ -801,6 +866,35 @@ def register_routes(app):
         session.pop("ai_studio", None)
         return jsonify(ok=True)
 
+    @app.route("/admin/modules/<int:mid>/apply-ai-update", methods=["POST"])
+    @author_required
+    def admin_module_apply_ai_update(mid):
+        """Apply the latest AI-generated module spec (from chat session) to an
+        existing module: positional-merge sections (preserving media), rebuild
+        the quiz."""
+        module = db.session.get(Module, mid) or abort(404)
+        studio = session.get("ai_studio") or {}
+        raw = (studio.get("current_json") or "").strip()
+        if not raw:
+            return jsonify(error="No AI module update available. Ask the AI to refine the module first."), 400
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError as e:
+            return jsonify(error=f"AI output could not be parsed: {e.msg}"), 400
+        if isinstance(data, list):
+            data = data[0] if data else None
+        try:
+            apply_module_json_to_existing(module, data)
+            db.session.commit()
+        except ValueError as e:
+            db.session.rollback()
+            return jsonify(error=str(e)), 400
+        except Exception as e:
+            db.session.rollback()
+            app.logger.exception("Apply AI update failed")
+            return jsonify(error=f"Apply failed: {e}"), 500
+        return jsonify(ok=True)
+
     # -------- inline module / content-item editing (used by AI studio edit pane) --------
 
     MODULE_EDITABLE_FIELDS = {"title", "description"}
@@ -912,6 +1006,53 @@ def register_routes(app):
         db.session.commit()
         return jsonify(ok=True)
 
+    @app.route("/admin/modules/<int:mid>/content/<int:cid>/media/add",
+               methods=["POST"])
+    @author_required
+    def admin_content_media_add(mid, cid):
+        """Append one image/video to a section's media_items list."""
+        ci = db.session.get(ContentItem, cid) or abort(404)
+        if ci.module_id != mid:
+            abort(404)
+        if ci.kind not in RICH_KINDS:
+            return jsonify(error="Media can only be attached to AI-generated sections."), 400
+        fs = request.files.get("file")
+        if not fs or not fs.filename:
+            return jsonify(error="No file uploaded."), 400
+        try:
+            stored = save_upload(fs, prefix="sec_")
+        except ValueError as e:
+            return jsonify(error=str(e)), 400
+        kind = media_kind_for(stored)
+        if kind not in ("image", "video"):
+            return jsonify(error="Only image or video files are allowed on sections."), 400
+        next_pos = (db.session.query(db.func.coalesce(db.func.max(ContentItemMedia.position), -1))
+                    .filter(ContentItemMedia.content_item_id == ci.id).scalar()) + 1
+        m = ContentItemMedia(content_item_id=ci.id, file_path=stored,
+                             kind=kind, position=next_pos)
+        db.session.add(m)
+        db.session.commit()
+        return jsonify(ok=True,
+                       id=m.id,
+                       path=stored,
+                       url=url_for("uploaded_file", name=stored),
+                       kind=kind,
+                       position=m.position)
+
+    @app.route("/admin/modules/<int:mid>/content/<int:cid>/media/<int:media_id>/remove",
+               methods=["POST"])
+    @author_required
+    def admin_content_media_remove(mid, cid, media_id):
+        ci = db.session.get(ContentItem, cid) or abort(404)
+        if ci.module_id != mid:
+            abort(404)
+        m = db.session.get(ContentItemMedia, media_id) or abort(404)
+        if m.content_item_id != ci.id:
+            abort(404)
+        db.session.delete(m)
+        db.session.commit()
+        return jsonify(ok=True)
+
     @app.route("/admin/modules/new", methods=["GET", "POST"])
     @author_required
     def admin_module_new():
@@ -941,8 +1082,39 @@ def register_routes(app):
     @author_required
     def admin_module_preview(module_id):
         m = db.session.get(Module, module_id) or abort(404)
+        back = request.args.get("back") or "edit"  # "edit" | "ai_studio"
         return render_template("employee/module.html",
-                               module=m, assignment=None, preview=True)
+                               module=m, assignment=None,
+                               preview=True, preview_back=back)
+
+    @app.route("/admin/modules/<int:module_id>/preview/quiz",
+               methods=["GET", "POST"])
+    @author_required
+    def admin_module_preview_quiz(module_id):
+        """Take the quiz in preview mode. Attempts are NOT persisted."""
+        m = db.session.get(Module, module_id) or abort(404)
+        back = request.args.get("back") or "edit"
+        if not m.questions:
+            flash("This module has no quiz yet.", "info")
+            return redirect(url_for("admin_module_preview",
+                                    module_id=module_id, back=back))
+        if request.method == "POST":
+            answers = {}
+            for q in m.questions:
+                answers[str(q.id)] = request.form.getlist(f"q_{q.id}")
+            correct, total, percent = score_attempt(m, answers)
+            threshold = app.config.get("PASS_THRESHOLD", 80)
+            from types import SimpleNamespace
+            attempt = SimpleNamespace(
+                score=percent, correct=correct, total=total,
+                passed=percent >= threshold,
+            )
+            return render_template("employee/result.html",
+                                   attempt=attempt, module=m,
+                                   threshold=threshold,
+                                   preview=True, preview_back=back)
+        return render_template("employee/quiz.html",
+                               module=m, preview=True, preview_back=back)
 
     @app.route("/admin/modules/<int:module_id>/self-assign", methods=["POST"])
     @author_required
@@ -1365,10 +1537,17 @@ def register_routes(app):
             flash(f"{reset} completion(s) expired and were re-assigned.", "info")
 
         modules = Module.query.order_by(Module.title).all()
+        role_order = db.case(
+            (User.role == "employee", 0),
+            (User.role == "qaqc", 1),
+            (User.role == "admin", 2),
+            else_=3,
+        )
         employees = (User.query
                      .options(db.joinedload(User.department))
-                     .filter_by(role="employee", is_active_flag=True)
-                     .order_by(User.name).all())
+                     .filter(User.is_active_flag == True,
+                             User.role.in_(("employee", "qaqc", "admin")))
+                     .order_by(role_order, User.name).all())
         assignments = (Assignment.query
                        .options(db.joinedload(Assignment.user),
                                 db.joinedload(Assignment.module))

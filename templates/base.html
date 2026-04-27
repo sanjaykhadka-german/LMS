@@ -11,14 +11,31 @@
 <link href="{{ url_for('static', filename='css/theme.css') }}" rel="stylesheet">
 </head>
 <body>
-<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+{% set ep = request.endpoint or '' %}
+{% set is_modules    = ep == 'admin_modules' or ep.startswith('admin_module_') or ep.startswith('admin_content') or ep.startswith('admin_question') %}
+{% set is_assigns    = ep.startswith('admin_assignment') %}
+{% set is_register   = ep.startswith('admin_register') or ep == 'admin_send_reminders' %}
+{% set is_users      = ep.startswith('admin_employee') %}
+{% set is_depts      = ep.startswith('admin_department') %}
+{% set is_machines   = ep.startswith('admin_machine') %}
+{% set is_my         = ep.startswith('my_') %}
+{% set is_pass       = ep == 'change_password' %}
+{% set in_user_menu  = is_depts or is_machines or is_my or is_pass %}
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top gb-navbar">
   <div class="container">
+    {% if current_user.is_authenticated %}
+      <button type="button" id="navBackBtn"
+              class="btn btn-danger me-2"
+              style="display:none; font-size: 20px; line-height: 1; padding: 6px 14px; font-weight: 700;"
+              title="Back" aria-label="Back">&larr;</button>
+    {% endif %}
     <a class="navbar-brand p-0" href="{{ url_for('index') }}">
       <span class="gb-brand">
         <span class="gb-brand-mark">German Butchery</span>
         <span class="gb-brand-sub">Training Portal</span>
       </span>
     </a>
+    {% block navbar_action %}{% endblock %}
     <button class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#nav" aria-label="Toggle navigation">
       <span class="navbar-toggler-icon"></span>
     </button>
@@ -26,30 +43,40 @@
       <ul class="navbar-nav mx-lg-auto">
         {% if current_user.is_authenticated %}
           {% if current_user.is_admin %}
-            <li class="nav-item"><a class="nav-link" href="{{ url_for('admin_dashboard') }}">Dashboard</a></li>
+            <li class="nav-item"><a class="nav-link {% if ep == 'admin_dashboard' %}active{% endif %}" href="{{ url_for('admin_dashboard') }}">Dashboard</a></li>
           {% elif current_user.is_qaqc %}
-            <li class="nav-item"><a class="nav-link" href="{{ url_for('qaqc_dashboard') }}">Dashboard</a></li>
+            <li class="nav-item"><a class="nav-link {% if ep == 'qaqc_dashboard' %}active{% endif %}" href="{{ url_for('qaqc_dashboard') }}">Dashboard</a></li>
           {% endif %}
           {% if current_user.can_author %}
-            <li class="nav-item"><a class="nav-link" href="{{ url_for('admin_modules') }}">Modules</a></li>
-            <li class="nav-item"><a class="nav-link" href="{{ url_for('admin_assignments') }}">Assignments</a></li>
-            <li class="nav-item"><a class="nav-link" href="{{ url_for('admin_register') }}">Register</a></li>
+            <li class="nav-item"><a class="nav-link {% if is_modules %}active{% endif %}" href="{{ url_for('admin_modules') }}">Modules</a></li>
+            <li class="nav-item"><a class="nav-link {% if is_assigns %}active{% endif %}" href="{{ url_for('admin_assignments') }}">Assignments</a></li>
+            <li class="nav-item"><a class="nav-link {% if is_register %}active{% endif %}" href="{{ url_for('admin_register') }}">Register</a></li>
           {% endif %}
           {% if current_user.is_admin %}
-            <li class="nav-item"><a class="nav-link" href="{{ url_for('admin_employees') }}">Users</a></li>
-            <li class="nav-item"><a class="nav-link" href="{{ url_for('admin_departments') }}">Departments</a></li>
-            <li class="nav-item"><a class="nav-link" href="{{ url_for('admin_machines') }}">Machines</a></li>
-          {% endif %}
-          {% if not current_user.can_author or current_user.assignments %}
-            <li class="nav-item"><a class="nav-link" href="{{ url_for('my_modules') }}">My Training</a></li>
+            <li class="nav-item"><a class="nav-link {% if is_users %}active{% endif %}" href="{{ url_for('admin_employees') }}">Users</a></li>
           {% endif %}
         {% endif %}
       </ul>
       <ul class="navbar-nav align-items-lg-center">
         {% if current_user.is_authenticated %}
-          <li class="nav-item"><span class="nav-link text-muted">{{ current_user.name }}</span></li>
-          <li class="nav-item"><a class="nav-link" href="{{ url_for('change_password') }}">Password</a></li>
-          <li class="nav-item"><a class="nav-link gb-arrow" href="{{ url_for('logout') }}">Logout</a></li>
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle {% if in_user_menu %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+              {{ current_user.name }}
+            </a>
+            <ul class="dropdown-menu dropdown-menu-end gb-user-menu">
+              {% if current_user.is_admin %}
+                <li><a class="dropdown-item {% if is_depts %}active{% endif %}" href="{{ url_for('admin_departments') }}">Departments</a></li>
+                <li><a class="dropdown-item {% if is_machines %}active{% endif %}" href="{{ url_for('admin_machines') }}">Machines</a></li>
+                <li><hr class="dropdown-divider"></li>
+              {% endif %}
+              {% if not current_user.can_author or current_user.assignments %}
+                <li><a class="dropdown-item {% if is_my %}active{% endif %}" href="{{ url_for('my_modules') }}">My Training</a></li>
+              {% endif %}
+              <li><a class="dropdown-item {% if is_pass %}active{% endif %}" href="{{ url_for('change_password') }}">Password</a></li>
+              <li><hr class="dropdown-divider"></li>
+              <li><a class="dropdown-item" href="{{ url_for('logout') }}">Logout</a></li>
+            </ul>
+          </li>
         {% else %}
           <li class="nav-item"><a class="nav-link gb-arrow" href="{{ url_for('login') }}">Sign in</a></li>
         {% endif %}
@@ -85,6 +112,31 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+  (function () {
+    var nav = document.querySelector('.gb-navbar');
+    if (!nav) return;
+    var onScroll = function () {
+      nav.classList.toggle('is-scrolled', window.scrollY > 4);
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+  })();
+  (function () {
+    var btn = document.getElementById('navBackBtn');
+    if (!btn) return;
+    // Show only when there's a same-origin previous page to go back to.
+    var ref = document.referrer;
+    var sameOrigin = false;
+    if (ref) {
+      try { sameOrigin = new URL(ref).origin === location.origin; } catch (e) {}
+    }
+    if (sameOrigin) {
+      btn.style.display = '';
+      btn.addEventListener('click', function () { history.back(); });
+    }
+  })();
+</script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

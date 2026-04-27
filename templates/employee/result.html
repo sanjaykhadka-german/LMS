@@ -1,8 +1,19 @@
 {% extends "base.html" %}
 {% block title %}Quiz result{% endblock %}
+
+{% block navbar_action %}
+  {% if preview %}
+    {% if preview_back == 'ai_studio' %}
+      <a href="{{ url_for('admin_module_ai_studio', module_id=module.id) }}" class="btn btn-sm btn-outline-light me-3">&larr; Back to edit</a>
+    {% else %}
+      <a href="{{ url_for('admin_module_edit', module_id=module.id) }}" class="btn btn-sm btn-outline-light me-3">&larr; Back to edit</a>
+    {% endif %}
+  {% endif %}
+{% endblock %}
+
 {% block content %}
 <div class="gb-result">
-  <span class="gb-eyebrow">Result</span>
+  <span class="gb-eyebrow">{% if preview %}Preview result{% else %}Result{% endif %}</span>
   <h2>{{ module.title }}</h2>
   <div class="gb-result-score">{{ attempt.score }}%</div>
   <div class="gb-result-sub">{{ attempt.correct }} of {{ attempt.total }} correct &mdash; pass mark {{ threshold }}%</div>
@@ -13,9 +24,17 @@
     <div class="gb-result-chip is-fail">Not passed &mdash; please review and retake</div>
   {% endif %}
 
-  <div class="d-flex gap-2 justify-content-center flex-wrap">
-    <a class="btn btn-outline-secondary" href="{{ url_for('my_module', module_id=module.id) }}">Back to module</a>
-    <a class="btn btn-primary gb-arrow" href="{{ url_for('my_modules') }}">My training</a>
-  </div>
+  {% if preview %}
+    <div class="form-text mb-3">Preview run &mdash; this attempt was not saved.</div>
+    <div class="d-flex gap-2 justify-content-center flex-wrap">
+      <a class="btn btn-outline-secondary" href="{{ url_for('admin_module_preview', module_id=module.id, back=preview_back or 'edit') }}">Back to preview</a>
+      <a class="btn btn-primary gb-arrow" href="{{ url_for('admin_module_preview_quiz', module_id=module.id, back=preview_back or 'edit') }}">Retake</a>
+    </div>
+  {% else %}
+    <div class="d-flex gap-2 justify-content-center flex-wrap">
+      <a class="btn btn-outline-secondary" href="{{ url_for('my_module', module_id=module.id) }}">Back to module</a>
+      <a class="btn btn-primary gb-arrow" href="{{ url_for('my_modules') }}">My training</a>
+    </div>
+  {% endif %}
 </div>
 {% endblock %}

@@ -8,7 +8,15 @@
       "Bash(git add *)",
       "Bash(git commit *)",
       "Bash(git push *)",
-      "Bash(python -m py_compile app.py)"
+      "Bash(python -m py_compile app.py)",
+      "Bash(python *)",
+      "Bash(awk *)",
+      "Bash(grep -E \"\\\\.py$|^d\")",
+      "WebFetch(domain:meyerfood.com.au)",
+      "Bash(dir /b C:\\\\Users\\\\Sanjay.Khadka\\\\LMS\\\\LMS-1)",
+      "Bash(grep -v -E \"^\\(\\\\.venv|\\\\.git|static|templates|__pycache__\\)$\")",
+      "Bash(mkdir -p /tmp/qa-skill)",
+      "Bash(unzip -o \"/c/Users/Sanjay.Khadka/Downloads/qa-quiz-creator.skill\" -d /tmp/qa-skill)"
     ]
   }
 }

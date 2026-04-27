@@ -4,6 +4,11 @@
 <style>
   #empTable thead th { background: var(--gb-cream, #faf5ec); }
   #empTable .emp-status { white-space: nowrap; }
+  #assignTable tr.group-header td {
+    background: var(--gb-cream, #faf5ec);
+    font-weight: 600;
+    border-top: 2px solid var(--gb-burgundy, #6e1b1b);
+  }
 </style>
 
 <div class="gb-pageheader">
@@ -22,10 +27,20 @@
       </select>
     </div>
 
-    <label class="form-label d-block mb-1">Employees</label>
+    <label class="form-label d-block mb-1">People</label>
     <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
       <input type="text" id="empFilter" class="form-control form-control-sm"
-             placeholder="Filter name / email / department / phone…" style="max-width: 340px">
+             placeholder="Filter name / email / department / phone / role…" style="max-width: 340px">
+      <div class="btn-group btn-group-sm" role="group" aria-label="Filter by role">
+        <input type="radio" class="btn-check" name="roleFilter" id="roleAll" value="" checked>
+        <label class="btn btn-outline-secondary" for="roleAll">All</label>
+        <input type="radio" class="btn-check" name="roleFilter" id="roleEmp" value="employee">
+        <label class="btn btn-outline-secondary" for="roleEmp">Employees</label>
+        <input type="radio" class="btn-check" name="roleFilter" id="roleQaQc" value="qaqc">
+        <label class="btn btn-outline-secondary" for="roleQaQc">QA/QC</label>
+        <input type="radio" class="btn-check" name="roleFilter" id="roleAdmin" value="admin">
+        <label class="btn btn-outline-secondary" for="roleAdmin">Admin</label>
+      </div>
       <div class="form-text ms-auto mb-0"><span id="pickedCount">0</span> selected</div>
     </div>
 
@@ -35,6 +50,7 @@
           <tr>
             <th style="width: 36px;"><input type="checkbox" id="empCheckAll" aria-label="Select all"></th>
             <th>Name</th>
+            <th>Role</th>
             <th>Email</th>
             <th>Department</th>
             <th>Phone</th>
@@ -45,24 +61,33 @@
           {% for e in employees %}
             {% set dept = e.department.name if e.department else '' %}
             {% set phone = e.phone or '' %}
+            {% if e.role == 'admin' %}
+              {% set role_class = 'bg-primary text-white' %}
+            {% elif e.role == 'qaqc' %}
+              {% set role_class = 'bg-info text-dark' %}
+            {% else %}
+              {% set role_class = 'bg-light text-dark border' %}
+            {% endif %}
             <tr data-uid="{{ e.id }}"
                 data-name="{{ e.name }}"
-                data-search="{{ (e.name ~ ' ' ~ e.email ~ ' ' ~ dept ~ ' ' ~ phone) | lower }}">
+                data-role="{{ e.role }}"
+                data-search="{{ (e.name ~ ' ' ~ e.email ~ ' ' ~ dept ~ ' ' ~ phone ~ ' ' ~ e.role_label) | lower }}">
               <td><input type="checkbox" class="emp-check" name="user_ids" value="{{ e.id }}"></td>
               <td>{{ e.name }}</td>
+              <td><span class="badge {{ role_class }}">{{ e.role_label }}</span></td>
               <td>{{ e.email }}</td>
               <td>{{ dept }}</td>
               <td>{{ phone }}</td>
               <td class="emp-status"><span class="badge bg-secondary">—</span></td>
             </tr>
           {% else %}
-            <tr><td colspan="6" class="text-muted">No active employees.</td></tr>
+            <tr><td colspan="7" class="text-muted">No active users.</td></tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
 
-    <div class="form-text mt-1">Tick employees to assign the selected module. Employees who have already completed it are flagged — you can still re-assign to force a retake.</div>
+    <div class="form-text mt-1">Tick people to assign the selected module — modules can be assigned to employees, QA/QC, or admins. Anyone who has already completed it is flagged; you can still re-assign to force a retake.</div>
 
     <button class="btn btn-primary gb-arrow mt-3" type="submit">Assign</button>
   </form>
@@ -73,14 +98,20 @@
 <div class="card p-4">
   <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <h5 class="mb-0">All assignments</h5>
-    <div class="d-flex align-items-center gap-2">
-      <label class="form-label mb-0 small text-muted">Status</label>
-      <select class="form-select form-select-sm" id="statusFilter" style="min-width: 170px;">
-        <option value="">All</option>
-        <option value="Overdue">Overdue</option>
-        <option value="In progress">In progress</option>
-        <option value="Completed">Completed</option>
-      </select>
+    <div class="d-flex align-items-center gap-3">
+      <div class="form-check form-switch mb-0">
+        <input class="form-check-input" type="checkbox" id="groupByUserAssign">
+        <label class="form-check-label small" for="groupByUserAssign">Group by user</label>
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        <label class="form-label mb-0 small text-muted">Status</label>
+        <select class="form-select form-select-sm" id="statusFilter" style="min-width: 170px;">
+          <option value="">All</option>
+          <option value="Overdue">Overdue</option>
+          <option value="In progress">In progress</option>
+          <option value="Completed">Completed</option>
+        </select>
+      </div>
     </div>
   </div>
 
@@ -109,7 +140,9 @@
           {% set status_label = 'In progress' %}
           {% set status_class = 'bg-warning text-dark' %}
         {% endif %}
-        <tr data-status="{{ status_label }}">
+        <tr data-status="{{ status_label }}"
+            data-user-name="{{ a.user.name }}"
+            data-user-email="{{ a.user.email }}">
           <td>{{ a.user.name }}</td>
           <td>{{ a.module.title }}</td>
           <td>{{ a.assigned_at.strftime('%Y-%m-%d') }}</td>
@@ -170,7 +203,11 @@
   var modalBody = document.getElementById('completedModalBody');
   var cancelBtn = document.getElementById('modalCancelBtn');
   var proceedBtn = document.getElementById('modalProceedBtn');
-  var modal     = new bootstrap.Modal(modalEl);
+  var _modal     = null;
+  function modal() {
+    if (!_modal) _modal = new bootstrap.Modal(modalEl);
+    return _modal;
+  }
   var pendingCb = null;
 
   function fmtDate(iso) {
@@ -206,11 +243,19 @@
     pickedEl.textContent = empTable.querySelectorAll('.emp-check:checked').length;
   }
 
-  empFilter.addEventListener('input', function () {
+  function applyEmpFilters() {
     var q = (empFilter.value || '').trim().toLowerCase();
+    var roleEl = document.querySelector('input[name="roleFilter"]:checked');
+    var role = roleEl ? roleEl.value : '';
     empTable.querySelectorAll('tbody tr[data-uid]').forEach(function (tr) {
-      tr.style.display = (!q || (tr.dataset.search || '').indexOf(q) !== -1) ? '' : 'none';
+      var matchText = !q || (tr.dataset.search || '').indexOf(q) !== -1;
+      var matchRole = !role || tr.dataset.role === role;
+      tr.style.display = (matchText && matchRole) ? '' : 'none';
     });
+  }
+  empFilter.addEventListener('input', applyEmpFilters);
+  document.querySelectorAll('input[name="roleFilter"]').forEach(function (r) {
+    r.addEventListener('change', applyEmpFilters);
   });
 
   checkAll.addEventListener('change', function () {
@@ -234,7 +279,7 @@
         var name = tr.dataset.name || 'This employee';
         var moduleTitle = moduleSel.options[moduleSel.selectedIndex].text;
         modalBody.textContent = name + ' has already completed "' + moduleTitle + '" on ' + fmtDate(completedAt) + '.';
-        modal.show();
+        modal().show();
       }
     }
   });
@@ -243,11 +288,11 @@
     if (pendingCb) pendingCb.checked = false;
     pendingCb = null;
     updateCount();
-    modal.hide();
+    modal().hide();
   });
   proceedBtn.addEventListener('click', function () {
     pendingCb = null;
-    modal.hide();
+    modal().hide();
   });
   modalEl.addEventListener('hidden.bs.modal', function () {
     pendingCb = null;
@@ -257,12 +302,89 @@
   repaintStatuses();
   updateCount();
 
+  var groupByUserAssign = document.getElementById('groupByUserAssign');
+  var assignDataRows = assignRows
+    ? Array.prototype.slice.call(assignRows.querySelectorAll('tr[data-status]'))
+    : [];
+  var assignGrouped = false;
+
+  function escapeHtmlA(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function clearAssignGroupHeaders() {
+    if (!assignRows) return;
+    Array.prototype.slice.call(assignRows.querySelectorAll('tr.group-header'))
+      .forEach(function (t) { t.remove(); });
+  }
+
+  function renderAssignGroupHeaders() {
+    if (!assignRows) return;
+    clearAssignGroupHeaders();
+    var ordered = assignDataRows.slice().sort(function (a, b) {
+      var an = (a.dataset.userName || '').toLowerCase();
+      var bn = (b.dataset.userName || '').toLowerCase();
+      return an.localeCompare(bn);
+    });
+    ordered.forEach(function (r) { assignRows.appendChild(r); });
+
+    var counts = {};
+    ordered.forEach(function (r) {
+      if (r.style.display === 'none') return;
+      var key = r.dataset.userName || '';
+      if (!counts[key]) counts[key] = { total: 0, completed: 0, overdue: 0,
+                                        in_progress: 0,
+                                        email: r.dataset.userEmail || '' };
+      counts[key].total++;
+      var s = r.dataset.status;
+      if (s === 'Completed') counts[key].completed++;
+      else if (s === 'Overdue') counts[key].overdue++;
+      else counts[key].in_progress++;
+    });
+
+    var seen = {};
+    ordered.forEach(function (r) {
+      if (r.style.display === 'none') return;
+      var key = r.dataset.userName || '';
+      if (seen[key]) return;
+      seen[key] = true;
+      var c = counts[key];
+      var hdr = document.createElement('tr');
+      hdr.className = 'group-header';
+      hdr.innerHTML = '<td colspan="7">' +
+        '<strong>' + escapeHtmlA(key || '—') + '</strong>' +
+        (c.email ? ' <span class="text-muted small">&lt;' + escapeHtmlA(c.email) + '&gt;</span>' : '') +
+        ' <span class="text-muted small ms-2">' +
+        c.total + ' assigned · ' + c.completed + ' completed · ' +
+        c.overdue + ' overdue · ' + c.in_progress + ' in progress' +
+        '</span></td>';
+      assignRows.insertBefore(hdr, r);
+    });
+  }
+
+  function setAssignGrouped(on) {
+    assignGrouped = !!on;
+    if (assignGrouped) {
+      renderAssignGroupHeaders();
+    } else {
+      clearAssignGroupHeaders();
+      assignDataRows.forEach(function (r) { assignRows.appendChild(r); });
+    }
+  }
+
+  if (groupByUserAssign) groupByUserAssign.addEventListener('change', function () {
+    setAssignGrouped(groupByUserAssign.checked);
+  });
+
   if (statusFilter && assignRows) {
     statusFilter.addEventListener('change', function () {
       var v = statusFilter.value;
-      assignRows.querySelectorAll('tr[data-status]').forEach(function (tr) {
+      assignDataRows.forEach(function (tr) {
         tr.style.display = (!v || tr.dataset.status === v) ? '' : 'none';
       });
+      if (assignGrouped) renderAssignGroupHeaders();
     });
   }
 })();

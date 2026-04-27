@@ -1,24 +1,36 @@
 {% extends "base.html" %}
 {% block title %}{{ module.title }}{% endblock %}
 
-{% macro render_section_media(ci) %}
-  {% if ci.file_path %}
-    {% set mk = ci.file_path|media_kind %}
-    {% if mk == 'image' %}
-      <img src="{{ url_for('uploaded_file', name=ci.file_path) }}"
-           class="img-fluid mt-2" style="border-radius:4px">
-    {% elif mk == 'video' %}
-      <video controls class="w-100 mt-2" style="border-radius:4px">
-        <source src="{{ url_for('uploaded_file', name=ci.file_path) }}">
-      </video>
-    {% endif %}
+{% macro render_one_media(path) %}
+  {% set mk = path|media_kind %}
+  {% if mk == 'image' %}
+    <img src="{{ url_for('uploaded_file', name=path) }}"
+         class="img-fluid mt-2" style="border-radius:4px">
+  {% elif mk == 'video' %}
+    <video controls class="w-100 mt-2" style="border-radius:4px">
+      <source src="{{ url_for('uploaded_file', name=path) }}">
+    </video>
   {% endif %}
 {% endmacro %}
 
+{% macro render_section_media(ci) %}
+  {% if ci.file_path %}{{ render_one_media(ci.file_path) }}{% endif %}
+  {% for m in ci.media_items %}{{ render_one_media(m.file_path) }}{% endfor %}
+{% endmacro %}
+
+{% block navbar_action %}
+  {% if preview %}
+    {% set back_endpoint = 'admin_module_ai_studio' if preview_back == 'ai_studio' else 'admin_module_edit' %}
+    {% if preview_back == 'ai_studio' %}
+      <a href="{{ url_for('admin_module_ai_studio', module_id=module.id) }}" class="btn btn-sm btn-outline-light me-3">&larr; Back to edit</a>
+    {% else %}
+      <a href="{{ url_for('admin_module_edit', module_id=module.id) }}" class="btn btn-sm btn-outline-light me-3">&larr; Back to edit</a>
+    {% endif %}
+  {% endif %}
+{% endblock %}
+
 {% block content %}
-{% if preview %}
-  <a href="{{ url_for('admin_module_edit', module_id=module.id) }}" class="small text-decoration-none">&larr; Back to edit</a>
-{% else %}
+{% if not preview %}
   <a href="{{ url_for('my_modules') }}" class="small text-decoration-none">&larr; Back to my training</a>
 {% endif %}
 
@@ -55,7 +67,7 @@
 {% if preview %}
   <div class="alert alert-warning py-2 small">
     <b>Preview mode</b> &mdash; this is how employees will see the module.
-    Self-assign the module to take the quiz.
+    You can run the quiz from this page; the result is not saved.
   </div>
 {% endif %}
 
@@ -143,8 +155,8 @@
 
 {% if module.questions %}
   {% if preview %}
-    <button class="btn btn-primary btn-lg" disabled>Start quiz</button>
-    <div class="form-text">Quiz is disabled in preview. Self-assign the module to attempt it.</div>
+    <a class="btn btn-primary btn-lg gb-arrow" href="{{ url_for('admin_module_preview_quiz', module_id=module.id, back=preview_back or 'edit') }}">Start quiz</a>
+    <div class="form-text">Preview &mdash; your attempt will not be saved.</div>
   {% else %}
     <a class="btn btn-primary btn-lg gb-arrow" href="{{ url_for('my_quiz', module_id=module.id) }}">
       {{ 'Retake quiz' if assignment and assignment.completed_at else 'Start quiz' }}

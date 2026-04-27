@@ -96,7 +96,27 @@ class ContentItem(db.Model):
     kind = db.Column(db.String(20), nullable=False)  # pdf | audio | video | text | link | image
     title = db.Column(db.String(255), nullable=False)
     body = db.Column(db.Text, default="")   # used for text/link
-    file_path = db.Column(db.String(500), default="")  # for uploaded files
+    file_path = db.Column(db.String(500), default="")  # legacy single-file slot
+    position = db.Column(db.Integer, default=0)
+
+    media_items = db.relationship(
+        "ContentItemMedia",
+        backref="content_item",
+        cascade="all, delete-orphan",
+        order_by="ContentItemMedia.position",
+    )
+
+
+class ContentItemMedia(db.Model):
+    """Multiple images/videos per section. Coexists with the legacy
+    ContentItem.file_path slot — both render in templates."""
+    __tablename__ = "content_item_media"
+    id = db.Column(db.Integer, primary_key=True)
+    content_item_id = db.Column(db.Integer,
+                                db.ForeignKey("content_items.id"),
+                                nullable=False, index=True)
+    file_path = db.Column(db.String(500), nullable=False)
+    kind = db.Column(db.String(20), default="")  # image | video
     position = db.Column(db.Integer, default=0)
 
 
