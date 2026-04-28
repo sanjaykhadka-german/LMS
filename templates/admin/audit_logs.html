@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% block title %}Audit Logs{% endblock %}
+{% block content %}
+<div class="gb-pageheader">
+  <span class="gb-eyebrow">06 / Audit</span>
+  <h1>Audit Logs</h1>
+  <p class="lede">All admin and author CRUD activity. Visible to administrators only.</p>
+</div>
+
+<div class="card p-4 mb-4">
+  <h5 class="mb-3">Filter</h5>
+  <form method="get" action="{{ url_for('admin_audit_logs') }}" class="row g-2">
+    <div class="col-md-3">
+      <label class="form-label small text-muted mb-1">User</label>
+      <select name="actor_id" class="form-select">
+        <option value="">All users</option>
+        {% for u in users %}
+          <option value="{{ u.id }}" {% if f.actor_id and f.actor_id|string == u.id|string %}selected{% endif %}>
+            {{ u.name }} ({{ u.email }})
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label small text-muted mb-1">Entity</label>
+      <select name="entity_type" class="form-select">
+        <option value="">All entities</option>
+        {% for et in entity_types %}
+          <option value="{{ et }}" {% if f.entity_type == et %}selected{% endif %}>{{ et }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label small text-muted mb-1">Action</label>
+      <select name="action" class="form-select">
+        <option value="">All actions</option>
+        {% for a in actions %}
+          <option value="{{ a }}" {% if f.action == a %}selected{% endif %}>{{ a }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label small text-muted mb-1">From</label>
+      <input type="date" name="date_from" value="{{ f.date_from }}" class="form-control">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label small text-muted mb-1">To</label>
+      <input type="date" name="date_to" value="{{ f.date_to }}" class="form-control">
+    </div>
+    <div class="col-md-1 d-flex align-items-end">
+      <button class="btn btn-primary w-100" type="submit">Apply</button>
+    </div>
+    <div class="col-12 mt-1">
+      <a href="{{ url_for('admin_audit_logs') }}" class="small text-muted">Clear filters</a>
+      <span class="small text-muted ms-3">{{ total }} total row(s)</span>
+    </div>
+  </form>
+</div>
+
+<div class="card p-4 mb-4">
+  <div class="table-responsive">
+    <table class="table align-middle table-sm">
+      <thead>
+        <tr>
+          <th style="width:160px;">Time (UTC)</th>
+          <th>Actor</th>
+          <th>Action</th>
+          <th>Entity</th>
+          <th>Summary</th>
+          <th style="width:120px;">IP</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for r in rows %}
+        <tr>
+          <td class="text-nowrap"><small>{{ r.created_at.strftime('%Y-%m-%d %H:%M') }}</small></td>
+          <td>
+            {% if r.user %}
+              <div>{{ r.user.name }}</div>
+              <div class="small text-muted">{{ r.user.email }}</div>
+            {% else %}
+              <div>{{ r.actor_name or '—' }}</div>
+              <div class="small text-muted">{{ r.actor_email or '—' }}</div>
+            {% endif %}
+          </td>
+          <td>
+            {% set act = r.action %}
+            {% if act == 'create' %}<span class="badge bg-success">{{ act }}</span>
+            {% elif act == 'update' %}<span class="badge bg-primary">{{ act }}</span>
+            {% elif act == 'delete' %}<span class="badge bg-danger">{{ act }}</span>
+            {% elif act == 'role_change' %}<span class="badge bg-warning text-dark">{{ act }}</span>
+            {% elif act == 'toggle_active' %}<span class="badge bg-secondary">{{ act }}</span>
+            {% elif act == 'password_reset' %}<span class="badge bg-warning text-dark">{{ act }}</span>
+            {% elif act == 'version_save' %}<span class="badge bg-info text-dark">{{ act }}</span>
+            {% else %}<span class="badge bg-secondary">{{ act }}</span>
+            {% endif %}
+          </td>
+          <td class="text-nowrap">
+            <span class="text-muted">{{ r.entity_type }}</span>
+            {% if r.entity_id %}<span class="small text-muted">#{{ r.entity_id }}</span>{% endif %}
+          </td>
+          <td>
+            {{ r.summary }}
+            {% if r.details_json %}
+              <button class="btn btn-link btn-sm p-0 ms-2 align-baseline"
+                      type="button" data-bs-toggle="collapse"
+                      data-bs-target="#details-{{ r.id }}">details</button>
+              <div class="collapse mt-2" id="details-{{ r.id }}">
+                <pre class="small bg-light p-2 mb-0">{{ r.details_json }}</pre>
+              </div>
+            {% endif %}
+          </td>
+          <td><small class="text-muted">{{ r.ip_address or '—' }}</small></td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6" class="text-center text-muted py-4">No audit log entries match the current filter.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if pages > 1 %}
+    {% set base_args = request.args.to_dict() %}
+    {% if 'page' in base_args %}{% set _ = base_args.pop('page') %}{% endif %}
+    <nav class="d-flex justify-content-between align-items-center">
+      <small class="text-muted">Page {{ page }} of {{ pages }}</small>
+      <ul class="pagination pagination-sm mb-0">
+        {% if page > 1 %}
+          <li class="page-item">
+            <a class="page-link" href="{{ url_for('admin_audit_logs', page=page-1, **base_args) }}">Prev</a>
+          </li>
+        {% else %}
+          <li class="page-item disabled"><span class="page-link">Prev</span></li>
+        {% endif %}
+        {% if page < pages %}
+          <li class="page-item">
+            <a class="page-link" href="{{ url_for('admin_audit_logs', page=page+1, **base_args) }}">Next</a>
+          </li>
+        {% else %}
+          <li class="page-item disabled"><span class="page-link">Next</span></li>
+        {% endif %}
+      </ul>
+    </nav>
+  {% endif %}
+</div>
+
+<div class="card p-4 mb-4">
+  <h5>Prune old entries</h5>
+  <p class="small text-muted mb-3">Permanently deletes audit rows older than the chosen number of days. Use occasionally to keep storage lean.</p>
+  <form method="post" action="{{ url_for('admin_audit_logs_prune') }}"
+        class="row g-2 align-items-end"
+        onsubmit="return confirm('Delete audit log rows older than ' + this.days.value + ' days? This cannot be undone.');">
+    <div class="col-md-3">
+      <label class="form-label small text-muted mb-1">Days to keep</label>
+      <input type="number" name="days" value="365" min="1" class="form-control">
+    </div>
+    <div class="col-md-3">
+      <button class="btn btn-outline-danger w-100" type="submit">Prune older rows</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

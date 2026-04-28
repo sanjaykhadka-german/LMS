@@ -16,7 +16,8 @@ from werkzeug.utils import secure_filename
 from config import Config
 from models import (db, User, Module, ModuleMedia, ContentItem,
                     ContentItemMedia, Question, Choice, Assignment, Attempt,
-                    Department, Machine, UploadedFile, ModuleVersion)
+                    Department, Machine, UploadedFile, ModuleVersion,
+                    AuditLog)
 from email_service import (notify_invite, notify_assignment,
                            notify_attempt, notify_reminder,
                            notify_password_reset)
@@ -178,6 +179,38 @@ def admin_required(fn):
             abort(403)
         return fn(*args, **kwargs)
     return wrapper
+
+
+def log_audit(action, entity_type, entity_id=None, summary="", details=None):
+    """Append an AuditLog row. Caller commits via the existing
+    db.session.commit(). Errors are swallowed so audit failures never break
+    the originating action."""
+    try:
+        actor_id = (current_user.id
+                    if current_user.is_authenticated else None)
+        actor_email = (current_user.email
+                       if current_user.is_authenticated else "")
+        actor_name = (current_user.name
+                      if current_user.is_authenticated else "")
+        ip_raw = (request.headers.get("X-Forwarded-For",
+                                      request.remote_addr or "") or "")
+        ip = ip_raw.split(",")[0].strip()[:64]
+        ua = (request.headers.get("User-Agent") or "")[:255]
+        row = AuditLog(
+            user_id=actor_id,
+            actor_email=actor_email,
+            actor_name=actor_name,
+            action=action,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            summary=(summary or "")[:500],
+            details_json=json.dumps(details) if details else "",
+            ip_address=ip,
+            user_agent=ua,
+        )
+        db.session.add(row)
+    except Exception:
+        current_app.logger.exception("audit log append failed")
 
 
 def author_required(fn):
@@ -823,6 +856,9 @@ def register_routes(app):
                 return render_template("admin/module_import.html", payload=raw)
             try:
                 created = import_module_from_json(data, current_user.id)
+                for _m in created:
+                    log_audit("create", "module", _m.id,
+                              f"Imported module '{_m.title}' from JSON")
                 db.session.commit()
             except ValueError as e:
                 db.session.rollback()
@@ -954,6 +990,8 @@ def register_routes(app):
             data = data[0] if data else None
         try:
             apply_module_json_to_existing(module, data)
+            log_audit("update", "module", module.id,
+                      f"AI-applied update to '{module.title}'")
             db.session.commit()
         except ValueError as e:
             db.session.rollback()
@@ -987,6 +1025,8 @@ def register_routes(app):
             m.is_published = bool(value)
         else:
             m.description = value or ""
+        log_audit("update", "module", m.id,
+                  f"Updated module '{m.title}' ({field})")
         db.session.commit()
         return jsonify(ok=True)
 
@@ -1075,6 +1115,8 @@ def register_routes(app):
             ci.title = v
         else:
             ci.body = value or ""
+        log_audit("update", "content", ci.id,
+                  f"Updated section '{ci.title}' in module #{ci.module_id} ({field})")
         db.session.commit()
         return jsonify(ok=True)
 
@@ -1172,6 +1214,9 @@ def register_routes(app):
                        description=request.form.get("description", ""),
                        created_by_id=current_user.id)
             db.session.add(m)
+            db.session.flush()
+            log_audit("create", "module", m.id,
+                      f"Created module '{m.title}'")
             db.session.commit()
             flash("Module created.", "success")
             return redirect(url_for("admin_module_edit", module_id=m.id))
@@ -1187,6 +1232,8 @@ def register_routes(app):
             m.title = request.form["title"].strip()
             m.description = request.form.get("description", "")
             m.is_published = bool(request.form.get("is_published"))
+            log_audit("update", "module", m.id,
+                      f"Updated module '{m.title}'")
             db.session.commit()
             flash("Module saved.", "success")
         return redirect(url_for("admin_module_ai_studio", module_id=m.id))
@@ -1258,6 +1305,9 @@ def register_routes(app):
                           snapshot_json=json.dumps(build_module_snapshot(m)),
                           created_by_id=current_user.id, summary=summary)
         db.session.add(v)
+        db.session.flush()
+        log_audit("version_save", "module", m.id,
+                  f"Saved v{v.version_number} of '{m.title}'")
         db.session.commit()
         return jsonify({"ok": True, "version_id": v.id,
                         "version_number": v.version_number,
@@ -1335,6 +1385,9 @@ def register_routes(app):
                                assigned_at=now, due_at=assignment_due_from(now),
                                version_id=latest.id if latest else None)
                 db.session.add(a)
+                db.session.flush()
+                log_audit("create", "assignment", a.id,
+                          f"Assigned '{m.title}' to {u.email}")
                 db.session.commit()
                 try:
                     notify_assignment(u, m, app.config["APP_BASE_URL"])
@@ -1347,6 +1400,8 @@ def register_routes(app):
                             "is_latest": True})
         else:
             if a is not None:
+                log_audit("delete", "assignment", a.id,
+                          f"Unassigned '{m.title}' from {u.email}")
                 db.session.delete(a)
                 db.session.commit()
             return jsonify({"ok": True, "status": "unassigned",
@@ -1366,6 +1421,8 @@ def register_routes(app):
                   .order_by(ModuleVersion.version_number.desc()).first())
         if latest is not None:
             a.version_id = latest.id
+            log_audit("update", "assignment", a.id,
+                      f"Pushed v{latest.version_number} to assignment #{a.id}")
             db.session.commit()
         return jsonify({"ok": True,
                         "version_number": latest.version_number if latest else None,
@@ -1375,6 +1432,8 @@ def register_routes(app):
     @author_required
     def admin_module_delete(module_id):
         m = db.session.get(Module, module_id) or abort(404)
+        log_audit("delete", "module", module_id,
+                  f"Deleted module #{module_id} '{m.title}'")
         db.session.delete(m)
         db.session.commit()
         flash("Module deleted.", "success")
@@ -1405,6 +1464,9 @@ def register_routes(app):
                          body=body, file_path=file_path,
                          position=len(m.content_items))
         db.session.add(ci)
+        db.session.flush()
+        log_audit("create", "content", ci.id,
+                  f"Added '{ci.title}' ({ci.kind}) to module '{m.title}'")
         db.session.commit()
         flash("Content added.", "success")
         return redirect(url_for("admin_module_edit", module_id=m.id))
@@ -1414,6 +1476,8 @@ def register_routes(app):
     def admin_content_delete(item_id):
         ci = db.session.get(ContentItem, item_id) or abort(404)
         mid = ci.module_id
+        log_audit("delete", "content", ci.id,
+                  f"Deleted section '{ci.title}' from module #{mid}")
         db.session.delete(ci)
         db.session.commit()
         return redirect(url_for("admin_module_edit", module_id=mid))
@@ -1445,6 +1509,8 @@ def register_routes(app):
                        is_correct=str(idx) in correct_set,
                        position=idx)
             db.session.add(c)
+        log_audit("create", "question", q.id,
+                  f"Added question to module #{m.id}: {q.prompt[:80]}")
         db.session.commit()
         flash("Question added.", "success")
         return redirect(url_for("admin_module_edit", module_id=m.id))
@@ -1454,6 +1520,8 @@ def register_routes(app):
     def admin_question_delete(q_id):
         q = db.session.get(Question, q_id) or abort(404)
         mid = q.module_id
+        log_audit("delete", "question", q.id,
+                  f"Deleted question from module #{mid}: {q.prompt[:80]}")
         db.session.delete(q)
         db.session.commit()
         return redirect(url_for("admin_module_edit", module_id=mid))
@@ -1473,6 +1541,8 @@ def register_routes(app):
         c2 = Choice(question_id=q.id, text="Option B",
                     is_correct=False, position=1)
         db.session.add_all([c1, c2])
+        log_audit("create", "question", q.id,
+                  f"Quick-added question to module #{m.id}")
         db.session.commit()
         return jsonify(ok=True, question_id=q.id,
                        choices=[{"id": c1.id, "text": c1.text, "is_correct": True, "position": 0},
@@ -1496,6 +1566,8 @@ def register_routes(app):
             q.kind = value
         else:
             return jsonify(error="Unsupported field."), 400
+        log_audit("update", "question", q.id,
+                  f"Updated question in module #{q.module_id} ({field})")
         db.session.commit()
         return jsonify(ok=True)
 
@@ -1503,6 +1575,8 @@ def register_routes(app):
     @author_required
     def admin_question_delete_ajax(qid):
         q = db.session.get(Question, qid) or abort(404)
+        log_audit("delete", "question", q.id,
+                  f"Deleted question from module #{q.module_id}: {q.prompt[:80]}")
         db.session.delete(q)
         db.session.commit()
         return jsonify(ok=True)
@@ -1514,6 +1588,9 @@ def register_routes(app):
         c = Choice(question_id=q.id, text="New option",
                    is_correct=False, position=len(q.choices))
         db.session.add(c)
+        db.session.flush()
+        log_audit("create", "choice", c.id,
+                  f"Added choice to question #{q.id}")
         db.session.commit()
         return jsonify(ok=True, id=c.id, text=c.text,
                        is_correct=False, position=c.position)
@@ -1539,6 +1616,8 @@ def register_routes(app):
                         other.is_correct = False
         else:
             return jsonify(error="Unsupported field."), 400
+        log_audit("update", "choice", c.id,
+                  f"Updated choice in question #{c.question_id} ({field})")
         db.session.commit()
         return jsonify(ok=True)
 
@@ -1548,9 +1627,83 @@ def register_routes(app):
         c = db.session.get(Choice, cid) or abort(404)
         if len(c.question.choices) <= 2:
             return jsonify(error="A question needs at least two choices."), 400
+        log_audit("delete", "choice", c.id,
+                  f"Deleted choice from question #{c.question_id}")
         db.session.delete(c)
         db.session.commit()
         return jsonify(ok=True)
+
+    # audit logs (admin-only)
+    @app.route("/admin/audit-logs")
+    @admin_required
+    def admin_audit_logs():
+        try:
+            page = max(int(request.args.get("page", 1) or 1), 1)
+        except (TypeError, ValueError):
+            page = 1
+        per_page = 50
+        q = AuditLog.query
+        actor_id = request.args.get("actor_id", type=int)
+        if actor_id:
+            q = q.filter(AuditLog.user_id == actor_id)
+        et = (request.args.get("entity_type") or "").strip()
+        if et:
+            q = q.filter(AuditLog.entity_type == et)
+        act = (request.args.get("action") or "").strip()
+        if act:
+            q = q.filter(AuditLog.action == act)
+        df = (request.args.get("date_from") or "").strip()
+        dt_ = (request.args.get("date_to") or "").strip()
+        if df:
+            try:
+                q = q.filter(AuditLog.created_at
+                             >= datetime.strptime(df, "%Y-%m-%d"))
+            except ValueError:
+                df = ""
+        if dt_:
+            try:
+                q = q.filter(AuditLog.created_at
+                             < datetime.strptime(dt_, "%Y-%m-%d")
+                             + timedelta(days=1))
+            except ValueError:
+                dt_ = ""
+        total = q.count()
+        rows = (q.order_by(AuditLog.created_at.desc())
+                  .offset((page - 1) * per_page)
+                  .limit(per_page)
+                  .all())
+        pages = max((total + per_page - 1) // per_page, 1)
+        users = User.query.order_by(User.name).all()
+        entity_types = ["user", "module", "content", "question", "choice",
+                        "assignment", "department", "machine"]
+        actions = ["create", "update", "delete", "role_change",
+                   "toggle_active", "password_reset", "version_save"]
+        return render_template(
+            "admin/audit_logs.html",
+            rows=rows, page=page, pages=pages, total=total,
+            users=users, entity_types=entity_types, actions=actions,
+            f={"actor_id": actor_id or "",
+               "entity_type": et,
+               "action": act,
+               "date_from": df,
+               "date_to": dt_},
+        )
+
+    @app.route("/admin/audit-logs/prune", methods=["POST"])
+    @admin_required
+    def admin_audit_logs_prune():
+        try:
+            days = max(int(request.form.get("days", 365) or 365), 1)
+        except (TypeError, ValueError):
+            days = 365
+        cutoff = datetime.utcnow() - timedelta(days=days)
+        n = (AuditLog.query
+             .filter(AuditLog.created_at < cutoff)
+             .delete(synchronize_session=False))
+        db.session.commit()
+        flash(f"Pruned {n} audit log row(s) older than {days} days.",
+              "success")
+        return redirect(url_for("admin_audit_logs"))
 
     # users (employees + admins)
     @app.route("/admin/employees")
@@ -1582,6 +1735,9 @@ def register_routes(app):
         u = User(name=name, email=email, role=role, department_id=department_id)
         u.set_password(temp_pw)
         db.session.add(u)
+        db.session.flush()
+        log_audit("create", "user", u.id,
+                  f"Created user {u.email} ({u.role})")
         db.session.commit()
         notify_invite(u, temp_pw, app.config["APP_BASE_URL"])
         flash(f"{u.role_label} created. Temporary password: {temp_pw}", "success")
@@ -1595,6 +1751,8 @@ def register_routes(app):
             flash("You cannot disable your own account.", "danger")
             return redirect(url_for("admin_employees"))
         u.is_active_flag = not u.is_active_flag
+        log_audit("toggle_active", "user", u.id,
+                  f"{'Activated' if u.is_active_flag else 'Deactivated'} {u.email}")
         db.session.commit()
         return redirect(url_for("admin_employees"))
 
@@ -1607,7 +1765,10 @@ def register_routes(app):
             return redirect(url_for("admin_employees"))
         new_role = request.form.get("role", "")
         if new_role in VALID_ROLES:
+            old_role = u.role
             u.role = new_role
+            log_audit("role_change", "user", u.id,
+                      f"Role of {u.email}: {old_role} -> {new_role}")
             db.session.commit()
             flash(f"{u.name} is now {u.role_label}.", "success")
         return redirect(url_for("admin_employees"))
@@ -1618,6 +1779,8 @@ def register_routes(app):
         u = db.session.get(User, uid) or abort(404)
         temp_pw = secrets.token_urlsafe(9)
         u.set_password(temp_pw)
+        log_audit("password_reset", "user", u.id,
+                  f"Reset password for {u.email}")
         db.session.commit()
         emailed = False
         try:
@@ -1646,6 +1809,8 @@ def register_routes(app):
             new_role = request.form.get("role", u.role)
             if new_role in VALID_ROLES and u.id != current_user.id:
                 u.role = new_role
+            log_audit("update", "user", u.id,
+                      f"Edited user {u.email}")
             db.session.commit()
             flash(f"{u.name} updated.", "success")
             return redirect(url_for("admin_employees"))
@@ -1788,6 +1953,11 @@ def register_routes(app):
                 pass
             created += 1
 
+        if created:
+            log_audit("create", "user", None,
+                      f"Bulk imported {created} user(s) from CSV "
+                      f"(skipped {skipped}, invited {invited})")
+            db.session.commit()
         flash(f"Imported {created} user(s); skipped {skipped}; invites sent: {invited}.", "success")
         return redirect(url_for("admin_employees"))
 
@@ -1797,7 +1967,11 @@ def register_routes(app):
         if request.method == "POST":
             name = request.form.get("name", "").strip()
             if name and not Department.query.filter_by(name=name).first():
-                db.session.add(Department(name=name))
+                d = Department(name=name)
+                db.session.add(d)
+                db.session.flush()
+                log_audit("create", "department", d.id,
+                          f"Created department '{d.name}'")
                 db.session.commit()
                 flash(f"Department '{name}' added.", "success")
             elif name:
@@ -1811,6 +1985,8 @@ def register_routes(app):
     def admin_department_delete(did):
         d = db.session.get(Department, did) or abort(404)
         User.query.filter_by(department_id=d.id).update({"department_id": None})
+        log_audit("delete", "department", d.id,
+                  f"Deleted department '{d.name}'")
         db.session.delete(d)
         db.session.commit()
         flash(f"Department '{d.name}' deleted.", "success")
@@ -1822,7 +1998,11 @@ def register_routes(app):
         if request.method == "POST":
             name = request.form.get("name", "").strip()
             if name and not Machine.query.filter_by(name=name).first():
-                db.session.add(Machine(name=name))
+                m = Machine(name=name)
+                db.session.add(m)
+                db.session.flush()
+                log_audit("create", "machine", m.id,
+                          f"Created machine '{m.name}'")
                 db.session.commit()
                 flash(f"Machine '{name}' added.", "success")
             elif name:
@@ -1835,6 +2015,8 @@ def register_routes(app):
     @admin_required
     def admin_machine_delete(mid):
         m = db.session.get(Machine, mid) or abort(404)
+        log_audit("delete", "machine", m.id,
+                  f"Deleted machine '{m.name}'")
         db.session.delete(m)
         db.session.commit()
         flash(f"Machine '{m.name}' deleted.", "success")
@@ -1862,6 +2044,9 @@ def register_routes(app):
                 db.session.add(a)
                 notify_assignment(u, m, app.config["APP_BASE_URL"])
                 created += 1
+            if created:
+                log_audit("create", "assignment", m.id,
+                          f"Assigned '{m.title}' to {created} user(s)")
             db.session.commit()
             flash(f"Assigned to {created} employee(s).", "success")
             return redirect(url_for("admin_assignments"))
@@ -1906,6 +2091,10 @@ def register_routes(app):
     @author_required
     def admin_assignment_delete(aid):
         a = db.session.get(Assignment, aid) or abort(404)
+        u_email = a.user.email if a.user else f"user #{a.user_id}"
+        m_title = a.module.title if a.module else f"module #{a.module_id}"
+        log_audit("delete", "assignment", a.id,
+                  f"Removed assignment of '{m_title}' from {u_email}")
         db.session.delete(a)
         db.session.commit()
         return redirect(url_for("admin_assignments"))

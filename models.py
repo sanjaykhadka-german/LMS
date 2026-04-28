@@ -228,3 +228,28 @@ class UploadedFile(db.Model):
     uploaded_by_id = db.Column(db.Integer, db.ForeignKey("users.id"),
                                nullable=True)
     uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class AuditLog(db.Model):
+    __tablename__ = "audit_logs"
+    id = db.Column(db.Integer, primary_key=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow,
+                           nullable=False, index=True)
+    user_id = db.Column(db.Integer,
+                        db.ForeignKey("users.id", ondelete="SET NULL"),
+                        nullable=True, index=True)
+    actor_email = db.Column(db.String(255), default="")
+    actor_name = db.Column(db.String(255), default="")
+    action = db.Column(db.String(40), nullable=False, index=True)
+    entity_type = db.Column(db.String(40), nullable=False, index=True)
+    entity_id = db.Column(db.Integer, nullable=True, index=True)
+    summary = db.Column(db.String(500), default="")
+    details_json = db.Column(db.Text, default="")
+    ip_address = db.Column(db.String(64), default="")
+    user_agent = db.Column(db.String(255), default="")
+
+    user = db.relationship("User", foreign_keys=[user_id])
+
+    __table_args__ = (
+        db.Index("ix_audit_entity", "entity_type", "entity_id"),
+    )
