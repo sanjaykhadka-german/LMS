@@ -4,34 +4,155 @@
 <div class="gb-pageheader">
   <span class="gb-eyebrow">01 / Your training</span>
   <h1>My training</h1>
-  <p class="lede">Work through each module, then complete the quiz to mark it done.</p>
+  <p class="lede">Track your progress, pick up where you left off, and review past results.</p>
 </div>
 
-<div class="row g-4">
-{% for a in assignments %}
+{% if progress.total == 0 %}
+  <div class="card p-4 text-center">
+    <span class="gb-eyebrow">Nothing yet</span>
+    <p class="text-muted mb-0">No training assigned yet. Check back soon.</p>
+  </div>
+{% else %}
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="gb-stat">
+      <div class="gb-stat-label">Completion</div>
+      <div class="gb-stat-value">{{ progress.completion_rate }}%</div>
+    </div>
+    <div class="progress mt-2" style="height: 6px;">
+      <div class="progress-bar bg-success" role="progressbar"
+           style="width: {{ progress.completion_rate }}%;"></div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="gb-stat">
+      <div class="gb-stat-label">Completed</div>
+      <div class="gb-stat-value">{{ progress.completed }}<span class="text-muted small"> / {{ progress.total }}</span></div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="gb-stat">
+      <div class="gb-stat-label">Outstanding</div>
+      <div class="gb-stat-value">
+        {{ progress.outstanding }}
+        {% if progress.overdue %}<span class="badge bg-danger ms-1">{{ progress.overdue }} overdue</span>{% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="gb-stat">
+      <div class="gb-stat-label">Avg score</div>
+      <div class="gb-stat-value">
+        {% if progress.attempts %}{{ progress.avg_score }}%{% else %}&mdash;{% endif %}
+      </div>
+      {% if progress.attempts %}
+        <div class="text-muted small mt-1">{{ progress.pass_rate }}% pass &middot; {{ progress.attempts }} attempt{{ '' if progress.attempts == 1 else 's' }}</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% if next_up %}
+  <div class="card p-4 mb-4 border-dark">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+      <div>
+        <span class="gb-eyebrow">Continue where you left off</span>
+        <h4 class="mb-1">{{ next_up.module.title }}</h4>
+        <div class="text-muted small">
+          {% if next_up.attempts %}
+            Best score so far: <strong>{{ next_up.best_score }}%</strong>
+            &middot; {{ next_up.attempts }} attempt{{ '' if next_up.attempts == 1 else 's' }}
+          {% else %}
+            Not started yet.
+          {% endif %}
+          {% if next_up.assignment.due_at %}
+            &middot; Due {{ next_up.assignment.due_at.strftime('%b %d, %Y') }}
+            {% if next_up.status == 'overdue' %}
+              <span class="badge bg-danger ms-1">Overdue</span>
+            {% elif next_up.status == 'due_soon' %}
+              <span class="badge bg-warning text-dark ms-1">Due soon</span>
+            {% endif %}
+          {% endif %}
+        </div>
+      </div>
+      <a class="btn btn-primary gb-arrow"
+         href="{{ url_for('my_module', module_id=next_up.module.id) }}">
+        {{ 'Resume' if next_up.attempts else 'Start' }}
+      </a>
+    </div>
+  </div>
+{% endif %}
+
+<h5 class="mb-3">All assigned modules</h5>
+<div class="row g-4 mb-4">
+{% for r in rows %}
   <div class="col-md-6">
-    <div class="gb-module-card">
-      {% if a.completed_at %}
+    <div class="gb-module-card h-100 d-flex flex-column">
+      {% if r.status == 'completed' %}
         <span class="gb-pill is-done">Completed</span>
+      {% elif r.status == 'overdue' %}
+        <span class="gb-pill" style="background:#dc3545;color:#fff;">Overdue</span>
+      {% elif r.status == 'due_soon' %}
+        <span class="gb-pill" style="background:#ffc107;color:#000;">Due soon</span>
       {% else %}
         <span class="gb-pill is-open">Outstanding</span>
       {% endif %}
-      <h3>{{ a.module.title }}</h3>
-      <p>{{ a.module.description }}</p>
+      <h3>{{ r.module.title }}</h3>
+      <p class="flex-grow-1">{{ r.module.description }}</p>
+
+      <div class="text-muted small mb-2">
+        {% if r.attempts %}
+          Best <strong>{{ r.best_score }}%</strong>
+          &middot; {{ r.attempts }} attempt{{ '' if r.attempts == 1 else 's' }}
+          {% if r.last_attempt %}
+            &middot; Last {{ r.last_attempt.created_at.strftime('%b %d') }}
+          {% endif %}
+        {% else %}
+          No attempts yet
+        {% endif %}
+        {% if r.assignment.due_at %}
+          &middot; Due {{ r.assignment.due_at.strftime('%b %d, %Y') }}
+        {% endif %}
+      </div>
+
       <div>
-        <a class="btn btn-primary gb-arrow" href="{{ url_for('my_module', module_id=a.module_id) }}">
-          {{ 'Review' if a.completed_at else 'Open' }}
+        <a class="btn btn-primary gb-arrow"
+           href="{{ url_for('my_module', module_id=r.module.id) }}">
+          {{ 'Review' if r.status == 'completed' else ('Resume' if r.attempts else 'Open') }}
         </a>
       </div>
     </div>
   </div>
-{% else %}
-  <div class="col-12">
-    <div class="card p-4 text-center">
-      <span class="gb-eyebrow">Nothing yet</span>
-      <p class="text-muted mb-0">No training assigned yet. Check back soon.</p>
-    </div>
-  </div>
 {% endfor %}
 </div>
+
+{% if recent %}
+  <div class="card p-4">
+    <div class="d-flex justify-content-between align-items-baseline mb-3">
+      <h5 class="mb-0">Recent attempts</h5>
+      <span class="gb-eyebrow mb-0">Your last {{ recent|length }}</span>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead><tr><th>Date</th><th>Module</th><th class="text-end">Score</th><th>Result</th></tr></thead>
+        <tbody>
+        {% for a in recent %}
+          <tr>
+            <td>{{ a.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+            <td>{{ a.module.title if a.module else a.module_id }}</td>
+            <td class="text-end"><strong>{{ a.score }}%</strong></td>
+            <td>
+              {% if a.passed %}<span class="badge bg-success">Passed</span>
+              {% else %}<span class="badge bg-danger">Failed</span>{% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endif %}
+
+{% endif %}
 {% endblock %}

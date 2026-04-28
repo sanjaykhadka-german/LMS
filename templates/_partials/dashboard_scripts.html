@@ -1,0 +1,117 @@
+<script>
+(function () {
+  const data = JSON.parse(document.getElementById('dashboard-data').textContent);
+  const palette = {
+    pass: '#198754',
+    fail: '#dc3545',
+    warn: '#ffc107',
+    neutral: '#6c757d',
+    info: '#0d6efd',
+  };
+  const noData = (canvasId, msg) => {
+    const c = document.getElementById(canvasId);
+    if (!c) return;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#888';
+    ctx.font = '14px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(msg || 'No data for this period', c.width / 2, c.height / 2);
+  };
+
+  const ts = data.timeseries;
+  if (ts.labels.length && (ts.passed.some(v => v) || ts.failed.some(v => v))) {
+    new Chart(document.getElementById('chartTimeseries'), {
+      type: 'bar',
+      data: {
+        labels: ts.labels,
+        datasets: [
+          { label: 'Passed', data: ts.passed, backgroundColor: palette.pass },
+          { label: 'Failed', data: ts.failed, backgroundColor: palette.fail },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: {
+          x: { stacked: true, ticks: { maxRotation: 0, autoSkip: true } },
+          y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } },
+        },
+        plugins: { legend: { position: 'bottom' } },
+      },
+    });
+  } else { noData('chartTimeseries'); }
+
+  const st = data.status;
+  if (st.values.some(v => v)) {
+    new Chart(document.getElementById('chartStatus'), {
+      type: 'doughnut',
+      data: {
+        labels: st.labels,
+        datasets: [{
+          data: st.values,
+          backgroundColor: [palette.pass, palette.fail, palette.warn, palette.neutral],
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'bottom' } },
+      },
+    });
+  } else { noData('chartStatus'); }
+
+  const bm = data.by_module;
+  if (bm.labels.length) {
+    new Chart(document.getElementById('chartByModule'), {
+      type: 'bar',
+      data: {
+        labels: bm.labels,
+        datasets: [{
+          label: 'Pass rate (%)',
+          data: bm.rates,
+          backgroundColor: bm.rates.map(r => r < 60 ? palette.fail : (r < 80 ? palette.warn : palette.pass)),
+        }],
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true, maintainAspectRatio: false,
+        scales: { x: { beginAtZero: true, max: 100 } },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              title: (items) => bm.full_titles[items[0].dataIndex] || items[0].label,
+              label: (ctx) => `${ctx.parsed.x}% pass · ${bm.attempts[ctx.dataIndex]} attempts`,
+            },
+          },
+        },
+      },
+    });
+  } else { noData('chartByModule'); }
+
+  const bd = data.by_dept;
+  if (bd.labels.length) {
+    new Chart(document.getElementById('chartByDept'), {
+      type: 'bar',
+      data: {
+        labels: bd.labels,
+        datasets: [{
+          label: 'Pass rate (%)',
+          data: bd.rates,
+          backgroundColor: bd.rates.map(r => r < 60 ? palette.fail : (r < 80 ? palette.warn : palette.pass)),
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: { y: { beginAtZero: true, max: 100 } },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => `${ctx.parsed.y}% pass · ${bd.attempts[ctx.dataIndex]} attempts`,
+            },
+          },
+        },
+      },
+    });
+  } else { noData('chartByDept'); }
+})();
+</script>

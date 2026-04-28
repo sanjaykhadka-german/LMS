@@ -1,0 +1,222 @@
+{# Shared dashboard markup. Expects: stats, chart_data, top_learners,
+   worst_modules, recent, filters, departments, all_modules. The form posts
+   back to whichever route rendered this partial (current endpoint). #}
+<form method="get" class="card p-3 mb-4">
+  <div class="row g-2 align-items-end">
+    <div class="col-6 col-md-2">
+      <label class="form-label small text-muted mb-1">From</label>
+      <input type="date" name="from" value="{{ filters['from'] }}" class="form-control form-control-sm">
+    </div>
+    <div class="col-6 col-md-2">
+      <label class="form-label small text-muted mb-1">To</label>
+      <input type="date" name="to" value="{{ filters['to'] }}" class="form-control form-control-sm">
+    </div>
+    <div class="col-12 col-md-3">
+      <label class="form-label small text-muted mb-1">Department</label>
+      <select name="dept" class="form-select form-select-sm">
+        <option value="">All departments</option>
+        {% for d in departments %}
+          <option value="{{ d.id }}" {% if filters['dept'] == d.id %}selected{% endif %}>{{ d.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-12 col-md-3">
+      <label class="form-label small text-muted mb-1">Module</label>
+      <select name="module" class="form-select form-select-sm">
+        <option value="">All modules</option>
+        {% for m in all_modules %}
+          <option value="{{ m.id }}" {% if filters['module'] == m.id %}selected{% endif %}>{{ m.title }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-12 col-md-2 d-flex gap-2">
+      <button class="btn btn-dark btn-sm flex-grow-1">Apply</button>
+      <a href="{{ url_for(request.endpoint) }}" class="btn btn-outline-secondary btn-sm">Reset</a>
+    </div>
+  </div>
+</form>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-2">
+    <div class="gb-stat">
+      <div class="gb-stat-label">Attempts</div>
+      <div class="gb-stat-value">{{ stats.window_attempts }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-2">
+    <div class="gb-stat">
+      <div class="gb-stat-label">Pass rate</div>
+      <div class="gb-stat-value">{{ stats.pass_rate }}%</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-2">
+    <div class="gb-stat">
+      <div class="gb-stat-label">Avg score</div>
+      <div class="gb-stat-value">{{ stats.avg_score }}%</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-2">
+    <div class="gb-stat">
+      <div class="gb-stat-label">Active learners</div>
+      <div class="gb-stat-value">{{ stats.active_learners }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-2">
+    <div class="gb-stat">
+      <div class="gb-stat-label">Overdue</div>
+      <div class="gb-stat-value">{{ stats.overdue }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-2">
+    <div class="gb-stat">
+      <div class="gb-stat-label">Completion</div>
+      <div class="gb-stat-value">{{ stats.completion_rate }}%</div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-2">
+  <div class="col-12 col-md-2">
+    <div class="text-muted small">Lifetime</div>
+    <div>Modules <strong>{{ stats.modules }}</strong> &middot; Employees <strong>{{ stats.employees }}</strong></div>
+    <div>Assignments <strong>{{ stats.assignments }}</strong> &middot; Attempts <strong>{{ stats.attempts }}</strong></div>
+  </div>
+  <div class="col-12 col-md-10 text-md-end">
+    <form method="post" action="{{ url_for('admin_send_reminders') }}" class="d-inline">
+      <button class="btn btn-outline-secondary btn-sm gb-arrow">Send reminder emails for outstanding trainings</button>
+    </form>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-12 col-lg-8">
+    <div class="card p-3 h-100">
+      <div class="d-flex justify-content-between align-items-baseline mb-2">
+        <h6 class="mb-0">Attempts over time</h6>
+        <span class="gb-eyebrow mb-0">Passed vs failed, daily</span>
+      </div>
+      <div style="position: relative; height: 280px;">
+        <canvas id="chartTimeseries"></canvas>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-lg-4">
+    <div class="card p-3 h-100">
+      <div class="d-flex justify-content-between align-items-baseline mb-2">
+        <h6 class="mb-0">Assignment status</h6>
+        <span class="gb-eyebrow mb-0">Right now</span>
+      </div>
+      <div style="position: relative; height: 280px;">
+        <canvas id="chartStatus"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-12 col-lg-7">
+    <div class="card p-3 h-100">
+      <div class="d-flex justify-content-between align-items-baseline mb-2">
+        <h6 class="mb-0">Pass rate by module</h6>
+        <span class="gb-eyebrow mb-0">Worst first &mdash; training-gap signal</span>
+      </div>
+      <div style="position: relative; height: 320px;">
+        <canvas id="chartByModule"></canvas>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-lg-5">
+    <div class="card p-3 h-100">
+      <div class="d-flex justify-content-between align-items-baseline mb-2">
+        <h6 class="mb-0">Pass rate by department</h6>
+        <span class="gb-eyebrow mb-0">Best first</span>
+      </div>
+      <div style="position: relative; height: 320px;">
+        <canvas id="chartByDept"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-12 col-lg-6">
+    <div class="card p-3 h-100">
+      <h6 class="mb-3">Top 5 learners</h6>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead><tr><th>Employee</th><th class="text-end">Attempts</th><th class="text-end">Avg score</th></tr></thead>
+          <tbody>
+          {% for l in top_learners %}
+            <tr>
+              {% if current_user.is_admin %}
+                <td><a href="{{ url_for('admin_employee_detail', uid=l.id) }}">{{ l.name }}</a></td>
+              {% else %}
+                <td>{{ l.name }}</td>
+              {% endif %}
+              <td class="text-end">{{ l.attempts }}</td>
+              <td class="text-end"><strong>{{ l.avg_score }}%</strong></td>
+            </tr>
+          {% else %}
+            <tr><td colspan="3" class="text-muted">No attempts in this period.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-lg-6">
+    <div class="card p-3 h-100">
+      <h6 class="mb-3">Modules needing attention</h6>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead><tr><th>Module</th><th class="text-end">Attempts</th><th class="text-end">Pass rate</th></tr></thead>
+          <tbody>
+          {% for m in worst_modules %}
+            <tr>
+              <td><a href="{{ url_for('admin_module_edit', module_id=m.id) }}">{{ m.title }}</a></td>
+              <td class="text-end">{{ m.attempts }}</td>
+              <td class="text-end">
+                {% if m.rate < 60 %}<span class="badge bg-danger">{{ m.rate }}%</span>
+                {% elif m.rate < 80 %}<span class="badge bg-warning text-dark">{{ m.rate }}%</span>
+                {% else %}<span class="badge bg-success">{{ m.rate }}%</span>{% endif %}
+              </td>
+            </tr>
+          {% else %}
+            <tr><td colspan="3" class="text-muted">No data yet.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card p-4">
+  <div class="d-flex justify-content-between align-items-baseline mb-3">
+    <h5 class="mb-0">Recent attempts</h5>
+    <span class="gb-eyebrow mb-0">Latest activity</span>
+  </div>
+  <div class="table-responsive">
+    <table class="table align-middle">
+      <thead><tr><th>Date</th><th>Employee</th><th>Module</th><th>Score</th><th>Result</th></tr></thead>
+      <tbody>
+      {% for a in recent %}
+        <tr>
+          <td>{{ a.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+          <td>{{ a.user.name }}</td>
+          <td>{{ a.module.title if a.module else a.module_id }}</td>
+          <td>{{ a.score }}%</td>
+          <td>
+            {% if a.passed %}<span class="badge bg-success">Passed</span>
+            {% else %}<span class="badge bg-danger">Failed</span>{% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="text-muted">No attempts yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script id="dashboard-data" type="application/json">{{ chart_data | tojson }}</script>
