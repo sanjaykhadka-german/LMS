@@ -87,6 +87,11 @@ class Module(db.Model):
                                 order_by="Question.position")
     assignments = db.relationship("Assignment", backref="module",
                                   cascade="all, delete-orphan")
+    media_items = db.relationship(
+        "ModuleMedia", backref="module",
+        cascade="all, delete-orphan",
+        order_by="ModuleMedia.position",
+    )
 
 
 class ContentItem(db.Model):
@@ -115,6 +120,18 @@ class ContentItemMedia(db.Model):
     content_item_id = db.Column(db.Integer,
                                 db.ForeignKey("content_items.id"),
                                 nullable=False, index=True)
+    file_path = db.Column(db.String(500), nullable=False)
+    kind = db.Column(db.String(20), default="")  # image | video
+    position = db.Column(db.Integer, default=0)
+
+
+class ModuleMedia(db.Model):
+    """Multiple images/videos for a module's title/cover area. Coexists with
+    the legacy Module.cover_path slot — both render in templates."""
+    __tablename__ = "module_media"
+    id = db.Column(db.Integer, primary_key=True)
+    module_id = db.Column(db.Integer, db.ForeignKey("modules.id"),
+                          nullable=False, index=True)
     file_path = db.Column(db.String(500), nullable=False)
     kind = db.Column(db.String(20), default="")  # image | video
     position = db.Column(db.Integer, default=0)

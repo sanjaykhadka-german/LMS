@@ -10,6 +10,11 @@
     height: calc(100vh - 220px);
     min-height: 520px;
   }
+  .studio-grid.is-edit-only {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: 0;
+  }
   @media (max-width: 900px) {
     .studio-grid { grid-template-columns: 1fr; height: auto; }
     .studio-chat, .studio-json { height: 480px; }
@@ -261,18 +266,30 @@
 
 <div class="d-flex justify-content-between align-items-end flex-wrap gap-3 mb-3">
   <div class="gb-pageheader mb-0">
-    <span class="gb-eyebrow">AI studio · using {{ provider_label }}</span>
-    <h1 class="mb-1">Build a module</h1>
-    <p class="lede mb-0">Upload documents, images, audio or video. Chat to refine. Import when ready.</p>
+    {% if hide_chat %}
+      <span class="gb-eyebrow">Edit module</span>
+      <h1 class="mb-1">{{ edit_module.title }}</h1>
+      <p class="lede mb-0">Refine the module&rsquo;s sections, media, and quiz.</p>
+    {% else %}
+      <span class="gb-eyebrow">AI studio · using {{ provider_label }}</span>
+      <h1 class="mb-1">Build a module</h1>
+      <p class="lede mb-0">Upload documents, images, audio or video. Chat to refine. Import when ready.</p>
+    {% endif %}
   </div>
   <div class="d-flex gap-2">
-    <button id="studio-reset" class="btn btn-outline-secondary btn-sm">New chat</button>
+    {% if hide_chat %}
+      <a href="{{ url_for('admin_module_ai_studio', module_id=edit_module.id) }}"
+         class="btn btn-outline-primary btn-sm">Refine with AI</a>
+    {% else %}
+      <button id="studio-reset" class="btn btn-outline-secondary btn-sm">New chat</button>
+    {% endif %}
     <a href="{{ url_for('admin_modules') }}" class="btn btn-outline-secondary btn-sm">Back to modules</a>
   </div>
 </div>
 
-<div class="studio-grid">
+<div class="studio-grid {% if hide_chat %}is-edit-only{% endif %}">
 
+  {% if not hide_chat %}
   <!-- Chat pane -->
   <section id="studio-chat" class="studio-chat" aria-label="Chat with {{ provider_label }}">
     <div class="studio-drop-overlay" aria-hidden="true">
@@ -299,6 +316,7 @@
       <button id="studio-send" type="submit" class="btn btn-primary btn-sm" style="align-self:flex-end">Send</button>
     </form>
   </section>
+  {% endif %}
 
   <!-- Right pane: JSON import OR Edit module -->
   {% if edit_module %}
@@ -308,50 +326,77 @@
     <div class="studio-json-head">
       <strong class="small">Edit module</strong>
       <span class="edit-save-indicator" id="editStatus"></span>
-      <div class="ms-auto d-flex gap-2">
+      <div class="ms-auto d-flex gap-2 align-items-center">
+        <div class="form-check form-switch m-0" title="Published — visible to assigned learners">
+          <input class="form-check-input edit-field" type="checkbox"
+                 id="modPublished"
+                 data-target="module" data-field="is_published"
+                 {% if edit_module.is_published %}checked{% endif %}>
+          <label class="form-check-label small" for="modPublished">Published</label>
+        </div>
+        <form method="post" action="{{ url_for('admin_module_self_assign', module_id=edit_module.id) }}" class="m-0">
+          <button class="btn btn-outline-secondary btn-sm" title="Assign this module to yourself so you can take it">Assign to me</button>
+        </form>
         <a href="{{ url_for('admin_module_preview', module_id=edit_module.id, back='ai_studio') }}"
            class="btn btn-outline-primary btn-sm">Preview</a>
-        <a href="{{ url_for('admin_module_edit', module_id=edit_module.id) }}"
-           class="btn btn-outline-secondary btn-sm">Advanced edit</a>
         <a href="{{ url_for('admin_modules') }}"
            class="btn btn-outline-secondary btn-sm">Done</a>
       </div>
     </div>
 
     <div class="edit-body">
-      <!-- Cover + title row -->
-      <div class="d-flex gap-3 align-items-start mb-3">
-        {% set cover_kind = edit_module.cover_path|media_kind %}
-        <div class="edit-cover" id="coverSlot"
-             data-path="{{ edit_module.cover_path or '' }}"
-             data-kind="{{ cover_kind }}"
-             data-url="{% if edit_module.cover_path %}{{ url_for('uploaded_file', name=edit_module.cover_path) }}{% endif %}"
-             title="Drop a file here or click below to upload">
-          <!-- preview/placeholder rendered by JS -->
-          <div class="cover-drop-hint">Drop to set cover</div>
+      <!-- Title row -->
+      <div class="mb-3">
+        <label class="form-label small text-muted mb-1">Module title</label>
+        <input class="form-control form-control-lg fw-bold mb-2 edit-field"
+               id="modTitle"
+               value="{{ edit_module.title }}"
+               data-target="module" data-field="title">
+
+        <label class="form-label small text-muted mb-1">Description</label>
+        <textarea class="form-control edit-field" rows="6"
+                  id="modDescription"
+                  style="min-height: 140px; resize: vertical;"
+                  data-target="module" data-field="description">{{ edit_module.description }}</textarea>
+      </div>
+
+      <!-- Module title-area gallery: legacy cover_path tile + ModuleMedia tiles + drop zone -->
+      <label class="form-label small text-muted mb-1">Title images</label>
+      <div class="edit-module-media" data-mid="{{ edit_module.id }}">
+        <div class="section-media-list" id="moduleMediaList">
+          {% if edit_module.cover_path %}
+            {% set lk = edit_module.cover_path|media_kind %}
+            <div class="section-media-tile" data-legacy-cover="1">
+              {% if lk == 'image' %}
+                <img src="{{ url_for('uploaded_file', name=edit_module.cover_path) }}" alt="">
+              {% elif lk == 'video' %}
+                <video><source src="{{ url_for('uploaded_file', name=edit_module.cover_path) }}"></video>
+              {% else %}
+                <div class="edit-media-placeholder small">📎 {{ edit_module.cover_path }}</div>
+              {% endif %}
+              <button type="button" class="remove-x module-cover-clear"
+                      title="Remove">×</button>
+            </div>
+          {% endif %}
+          {% for m in edit_module.media_items %}
+            <div class="section-media-tile" data-mid="{{ m.id }}">
+              {% if m.kind == 'image' %}
+                <img src="{{ url_for('uploaded_file', name=m.file_path) }}" alt="">
+              {% elif m.kind == 'video' %}
+                <video><source src="{{ url_for('uploaded_file', name=m.file_path) }}"></video>
+              {% endif %}
+              <button type="button" class="remove-x module-media-remove"
+                      data-mid="{{ m.id }}" title="Remove">×</button>
+            </div>
+          {% endfor %}
         </div>
-        <div class="flex-grow-1">
-          <label class="form-label small text-muted mb-1">Module title</label>
-          <input class="form-control form-control-lg fw-bold mb-2 edit-field"
-                 id="modTitle"
-                 value="{{ edit_module.title }}"
-                 data-target="module" data-field="title">
-
-          <label class="form-label small text-muted mb-1">Description</label>
-          <textarea class="form-control edit-field" rows="10"
-                    id="modDescription"
-                    style="min-height: 220px; resize: vertical;"
-                    data-target="module" data-field="description">{{ edit_module.description }}</textarea>
-
-          <div class="edit-media-actions">
-            <label class="btn btn-outline-secondary btn-sm mb-0">
-              <span>📎 Add cover (image / video / audio / PDF)</span>
-              <input type="file" hidden id="coverFile"
-                     accept=".png,.jpg,.jpeg,.gif,.webp,.mp4,.mov,.webm,.mp3,.wav,.m4a,.ogg,.pdf">
-            </label>
-            <button type="button" class="btn btn-outline-danger btn-sm"
-                    id="coverClearBtn" style="display:none">Remove cover</button>
-          </div>
+        <div class="section-dropzone" id="moduleDropzone">
+          Drag images or videos here, or
+          <label>
+            browse
+            <input type="file" hidden multiple id="moduleMediaFile"
+                   accept=".png,.jpg,.jpeg,.gif,.webp,.mp4,.mov,.webm">
+          </label>
         </div>
       </div>
 
@@ -451,6 +496,45 @@
       {% else %}
         <p class="text-muted">This module has no sections yet. Ask the AI on the left to add some.</p>
       {% endfor %}
+
+      <hr>
+      <h6 class="mb-3">Quiz</h6>
+      <div id="quizList">
+        {% for q in edit_module.questions %}
+          <div class="edit-question p-3 border rounded mb-3" data-qid="{{ q.id }}">
+            <div class="d-flex gap-2 align-items-start mb-2">
+              <span class="badge bg-secondary mt-2">Q{{ loop.index }}</span>
+              <textarea class="form-control quiz-prompt"
+                        data-qid="{{ q.id }}" rows="2"
+                        placeholder="Question text">{{ q.prompt }}</textarea>
+              <select class="form-select form-select-sm quiz-kind"
+                      data-qid="{{ q.id }}" style="width: auto;">
+                <option value="single" {% if q.kind == 'single' %}selected{% endif %}>Single answer</option>
+                <option value="multi"  {% if q.kind == 'multi'  %}selected{% endif %}>Multiple answers</option>
+              </select>
+              <button type="button" class="btn btn-outline-danger btn-sm quiz-question-delete"
+                      data-qid="{{ q.id }}" title="Delete question">×</button>
+            </div>
+            <div class="quiz-choices" data-qid="{{ q.id }}">
+              {% for c in q.choices %}
+                <div class="quiz-choice d-flex gap-2 align-items-center mb-1" data-cid="{{ c.id }}">
+                  <input type="checkbox" class="form-check-input quiz-correct"
+                         data-cid="{{ c.id }}" {% if c.is_correct %}checked{% endif %}
+                         title="Mark as correct">
+                  <input type="text" class="form-control form-control-sm quiz-choice-text"
+                         data-cid="{{ c.id }}" value="{{ c.text }}"
+                         placeholder="Answer choice">
+                  <button type="button" class="btn btn-outline-danger btn-sm quiz-choice-delete"
+                          data-cid="{{ c.id }}" title="Remove choice">×</button>
+                </div>
+              {% endfor %}
+            </div>
+            <button type="button" class="btn btn-outline-secondary btn-sm mt-2 quiz-choice-add"
+                    data-qid="{{ q.id }}">+ Add choice</button>
+          </div>
+        {% endfor %}
+      </div>
+      <button type="button" class="btn btn-outline-primary btn-sm" id="quizAddBtn">+ Add question</button>
     </div>
   </section>
   {% else %}
@@ -667,6 +751,12 @@
     }
   }
 
+  function hasFiles(e) {
+    return e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+  }
+
+  if (composeForm) {
+
   // -------- file upload --------
   fileInput.addEventListener('change', async () => {
     const files = Array.from(fileInput.files || []);
@@ -677,10 +767,6 @@
   // -------- drag-and-drop --------
   const chatPanel = document.getElementById('studio-chat');
   let dragDepth = 0;
-
-  function hasFiles(e) {
-    return e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
-  }
 
   chatPanel.addEventListener('dragenter', (e) => {
     if (!hasFiles(e)) return;
@@ -834,6 +920,8 @@
     {% endif %}
   {% endfor %}
 
+  } // end if (composeForm)
+
   // -------- Edit-module pane (only present when edit_module is set) --------
   const editPane = document.getElementById('editModulePane');
   if (editPane) {
@@ -879,15 +967,7 @@
       if (btn) btn.style.display = hasMedia ? '' : 'none';
     }
 
-    // Cover preview on load
-    const coverSlot = document.getElementById('coverSlot');
-    const coverClearBtn = document.getElementById('coverClearBtn');
-    if (coverSlot) {
-      renderMediaPreview(coverSlot);
-      toggleClearBtn(coverClearBtn, !!coverSlot.dataset.url);
-    }
-
-    // Section media tiles are rendered server-side; nothing to bootstrap here.
+    // Module title-area media tiles are rendered server-side; nothing to bootstrap here.
 
     // Inline text edits (debounced save per field)
     const debouncedSaves = new WeakMap();
@@ -895,7 +975,7 @@
     function saveField(el) {
       const target = el.dataset.target;
       const field  = el.dataset.field;
-      const value  = el.value;
+      const value  = (el.type === 'checkbox') ? el.checked : el.value;
       let url;
       if (target === 'module') {
         url = '/admin/modules/' + mid + '/update';
@@ -997,21 +1077,38 @@
       });
     });
 
-    // Cover upload / clear / drag-drop
-    async function uploadCoverFile(f) {
-      setStatus('saving', 'Uploading cover…');
-      const fd = new FormData(); fd.append('file', f);
+    // ---- Module title-area gallery: upload, drag-drop, remove ----
+
+    function appendModuleTile(b) {
+      const list = document.getElementById('moduleMediaList');
+      if (!list) return;
+      const tile = document.createElement('div');
+      tile.className = 'section-media-tile';
+      tile.dataset.mid = b.id;
+      let inner;
+      if (b.kind === 'image') {
+        inner = '<img src="' + b.url + '" alt="">';
+      } else if (b.kind === 'video') {
+        inner = '<video><source src="' + b.url + '"></video>';
+      } else {
+        inner = '<div class="edit-media-placeholder small">📎</div>';
+      }
+      tile.innerHTML = inner +
+        '<button type="button" class="remove-x module-media-remove" ' +
+        'data-mid="' + b.id + '" title="Remove">×</button>';
+      list.appendChild(tile);
+    }
+
+    async function uploadModuleMedia(file) {
+      setStatus('saving', 'Uploading ' + file.name + '…');
+      const fd = new FormData(); fd.append('file', file);
       try {
-        const r = await fetch('/admin/modules/' + mid + '/cover', {
+        const r = await fetch('/admin/modules/' + mid + '/media/add', {
           method: 'POST', credentials: 'same-origin', body: fd,
         });
         const b = await r.json().catch(() => ({}));
         if (!r.ok) { setStatus('error', b.error || 'Upload failed'); return; }
-        coverSlot.dataset.path = b.path;
-        coverSlot.dataset.kind = b.kind;
-        coverSlot.dataset.url  = b.url;
-        renderMediaPreview(coverSlot);
-        toggleClearBtn(coverClearBtn, true);
+        appendModuleTile(b);
         setStatus('saved', 'Saved');
         setTimeout(() => setStatus('', ''), 1200);
       } catch (e) {
@@ -1019,62 +1116,85 @@
       }
     }
 
-    const coverFile = document.getElementById('coverFile');
-    if (coverFile) {
-      coverFile.addEventListener('change', async () => {
-        const files = Array.from(coverFile.files || []);
-        coverFile.value = '';
-        if (files[0]) await uploadCoverFile(files[0]);
+    // Click-to-pick (multi)
+    const moduleMediaFile = document.getElementById('moduleMediaFile');
+    if (moduleMediaFile) {
+      moduleMediaFile.addEventListener('change', async () => {
+        const files = Array.from(moduleMediaFile.files || []);
+        moduleMediaFile.value = '';
+        for (const f of files) await uploadModuleMedia(f);
       });
     }
 
-    // Cover drag-drop
-    if (coverSlot) {
-      let coverDepth = 0;
-      coverSlot.addEventListener('dragenter', (e) => {
+    // Drag-drop on module dropzone
+    const moduleDropzone = document.getElementById('moduleDropzone');
+    if (moduleDropzone) {
+      let depth = 0;
+      moduleDropzone.addEventListener('dragenter', (e) => {
         if (!hasFiles(e)) return;
         e.preventDefault();
-        coverDepth++;
-        coverSlot.classList.add('is-dragging');
+        depth++;
+        moduleDropzone.classList.add('is-dragging');
       });
-      coverSlot.addEventListener('dragover', (e) => {
+      moduleDropzone.addEventListener('dragover', (e) => {
         if (!hasFiles(e)) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = 'copy';
       });
-      coverSlot.addEventListener('dragleave', (e) => {
+      moduleDropzone.addEventListener('dragleave', (e) => {
         if (!hasFiles(e)) return;
-        coverDepth = Math.max(0, coverDepth - 1);
-        if (coverDepth === 0) coverSlot.classList.remove('is-dragging');
+        depth = Math.max(0, depth - 1);
+        if (depth === 0) moduleDropzone.classList.remove('is-dragging');
       });
-      coverSlot.addEventListener('drop', async (e) => {
+      moduleDropzone.addEventListener('drop', async (e) => {
         if (!hasFiles(e)) return;
         e.preventDefault();
-        coverDepth = 0;
-        coverSlot.classList.remove('is-dragging');
-        const f = (e.dataTransfer.files || [])[0];
-        if (f) await uploadCoverFile(f);
+        depth = 0;
+        moduleDropzone.classList.remove('is-dragging');
+        const files = Array.from(e.dataTransfer.files || []);
+        for (const f of files) await uploadModuleMedia(f);
       });
     }
-    if (coverClearBtn) {
-      coverClearBtn.addEventListener('click', async () => {
-        if (!confirm('Remove the cover?')) return;
-        setStatus('saving', 'Removing…');
-        try {
-          const r = await fetch('/admin/modules/' + mid + '/cover/clear', {
-            method: 'POST', credentials: 'same-origin',
-          });
-          const b = await r.json().catch(() => ({}));
-          if (!r.ok) { setStatus('error', b.error || 'Failed'); return; }
-          coverSlot.dataset.path = '';
-          coverSlot.dataset.kind = '';
-          coverSlot.dataset.url  = '';
-          renderMediaPreview(coverSlot);
-          toggleClearBtn(coverClearBtn, false);
-          setStatus('saved', 'Removed');
-          setTimeout(() => setStatus('', ''), 1200);
-        } catch (e) {
-          setStatus('error', 'Network error');
+
+    // Delegated remove handlers (legacy cover_path × and new ModuleMedia ×)
+    const moduleMediaWrap = editPane.querySelector('.edit-module-media');
+    if (moduleMediaWrap) {
+      moduleMediaWrap.addEventListener('click', async (e) => {
+        const removeBtn = e.target.closest('.module-media-remove');
+        if (removeBtn) {
+          if (!confirm('Remove this image?')) return;
+          const mediaId = removeBtn.dataset.mid;
+          setStatus('saving', 'Removing…');
+          try {
+            const r = await fetch('/admin/modules/' + mid + '/media/' + mediaId + '/remove', {
+              method: 'POST', credentials: 'same-origin',
+            });
+            const b = await r.json().catch(() => ({}));
+            if (!r.ok) { setStatus('error', b.error || 'Failed'); return; }
+            removeBtn.closest('.section-media-tile').remove();
+            setStatus('saved', 'Removed');
+            setTimeout(() => setStatus('', ''), 1200);
+          } catch (err) {
+            setStatus('error', 'Network error');
+          }
+          return;
+        }
+        const coverClearBtn = e.target.closest('.module-cover-clear');
+        if (coverClearBtn) {
+          if (!confirm('Remove this image?')) return;
+          setStatus('saving', 'Removing…');
+          try {
+            const r = await fetch('/admin/modules/' + mid + '/cover/clear', {
+              method: 'POST', credentials: 'same-origin',
+            });
+            const b = await r.json().catch(() => ({}));
+            if (!r.ok) { setStatus('error', b.error || 'Failed'); return; }
+            coverClearBtn.closest('.section-media-tile').remove();
+            setStatus('saved', 'Removed');
+            setTimeout(() => setStatus('', ''), 1200);
+          } catch (err) {
+            setStatus('error', 'Network error');
+          }
         }
       });
     }
@@ -1200,6 +1320,140 @@
         }
       }
     });
+
+    // -------- Quiz editor --------
+    function quizPost(url, body) {
+      const myToken = ++saveTokens;
+      setStatus('saving', 'Saving…');
+      return fetch(url, {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: body ? JSON.stringify(body) : '{}',
+      }).then(r => r.json().then(b => ({ ok: r.ok, body: b }))).then(({ ok, body }) => {
+        if (myToken !== saveTokens) return { ok, body };
+        if (!ok) setStatus('error', body.error || 'Save failed');
+        else {
+          setStatus('saved', 'Saved');
+          setTimeout(() => { if (myToken === saveTokens) setStatus('', ''); }, 1200);
+        }
+        return { ok, body };
+      }).catch(err => {
+        if (myToken === saveTokens) setStatus('error', 'Network error');
+        return { ok: false, body: { error: err.message } };
+      });
+    }
+
+    // Prompt + kind
+    editPane.addEventListener('input', (e) => {
+      const t = e.target;
+      if (t.classList && t.classList.contains('quiz-prompt')) {
+        clearTimeout(debouncedSaves.get(t));
+        const timer = setTimeout(() => {
+          quizPost('/admin/questions/' + t.dataset.qid + '/update',
+                   { field: 'prompt', value: t.value });
+        }, 500);
+        debouncedSaves.set(t, timer);
+      } else if (t.classList && t.classList.contains('quiz-choice-text')) {
+        clearTimeout(debouncedSaves.get(t));
+        const timer = setTimeout(() => {
+          quizPost('/admin/choices/' + t.dataset.cid + '/update',
+                   { field: 'text', value: t.value });
+        }, 500);
+        debouncedSaves.set(t, timer);
+      }
+    });
+    editPane.addEventListener('change', (e) => {
+      const t = e.target;
+      if (t.classList && t.classList.contains('quiz-kind')) {
+        quizPost('/admin/questions/' + t.dataset.qid + '/update',
+                 { field: 'kind', value: t.value });
+      } else if (t.classList && t.classList.contains('quiz-correct')) {
+        const cid = t.dataset.cid;
+        quizPost('/admin/choices/' + cid + '/update',
+                 { field: 'is_correct', value: t.checked }).then(({ ok }) => {
+          if (!ok) { t.checked = !t.checked; return; }
+          // For single-answer questions, toggling one off others server-side.
+          // Reflect that locally.
+          const choiceRow = t.closest('.quiz-choice');
+          const question = t.closest('.edit-question');
+          const kindSel = question.querySelector('.quiz-kind');
+          if (t.checked && kindSel && kindSel.value === 'single') {
+            question.querySelectorAll('.quiz-correct').forEach(other => {
+              if (other !== t) other.checked = false;
+            });
+          }
+        });
+      }
+    });
+
+    // Add choice
+    editPane.addEventListener('click', async (e) => {
+      const addChoiceBtn = e.target.closest('.quiz-choice-add');
+      if (addChoiceBtn) {
+        const qid = addChoiceBtn.dataset.qid;
+        const { ok, body } = await quizPost('/admin/questions/' + qid + '/choices/add');
+        if (!ok) return;
+        const list = editPane.querySelector('.quiz-choices[data-qid="' + qid + '"]');
+        const row = document.createElement('div');
+        row.className = 'quiz-choice d-flex gap-2 align-items-center mb-1';
+        row.dataset.cid = body.id;
+        row.innerHTML =
+          '<input type="checkbox" class="form-check-input quiz-correct" data-cid="' + body.id + '" title="Mark as correct">' +
+          '<input type="text" class="form-control form-control-sm quiz-choice-text" data-cid="' + body.id + '" value="' + esc(body.text) + '" placeholder="Answer choice">' +
+          '<button type="button" class="btn btn-outline-danger btn-sm quiz-choice-delete" data-cid="' + body.id + '" title="Remove choice">×</button>';
+        list.appendChild(row);
+        return;
+      }
+      const delChoiceBtn = e.target.closest('.quiz-choice-delete');
+      if (delChoiceBtn) {
+        const { ok } = await quizPost('/admin/choices/' + delChoiceBtn.dataset.cid + '/delete');
+        if (ok) delChoiceBtn.closest('.quiz-choice').remove();
+        return;
+      }
+      const delQBtn = e.target.closest('.quiz-question-delete');
+      if (delQBtn) {
+        if (!confirm('Delete this question?')) return;
+        const { ok } = await quizPost('/admin/questions/' + delQBtn.dataset.qid + '/delete-ajax');
+        if (ok) delQBtn.closest('.edit-question').remove();
+        return;
+      }
+    });
+
+    // Add question
+    const addQBtn = document.getElementById('quizAddBtn');
+    if (addQBtn) {
+      addQBtn.addEventListener('click', async () => {
+        const { ok, body } = await quizPost('/admin/modules/' + mid + '/questions/add-quick');
+        if (!ok) return;
+        const list = document.getElementById('quizList');
+        const idx = list.querySelectorAll('.edit-question').length + 1;
+        const wrap = document.createElement('div');
+        wrap.className = 'edit-question p-3 border rounded mb-3';
+        wrap.dataset.qid = body.question_id;
+        let choicesHtml = '';
+        body.choices.forEach(c => {
+          choicesHtml +=
+            '<div class="quiz-choice d-flex gap-2 align-items-center mb-1" data-cid="' + c.id + '">' +
+              '<input type="checkbox" class="form-check-input quiz-correct" data-cid="' + c.id + '"' + (c.is_correct ? ' checked' : '') + ' title="Mark as correct">' +
+              '<input type="text" class="form-control form-control-sm quiz-choice-text" data-cid="' + c.id + '" value="' + esc(c.text) + '" placeholder="Answer choice">' +
+              '<button type="button" class="btn btn-outline-danger btn-sm quiz-choice-delete" data-cid="' + c.id + '" title="Remove choice">×</button>' +
+            '</div>';
+        });
+        wrap.innerHTML =
+          '<div class="d-flex gap-2 align-items-start mb-2">' +
+            '<span class="badge bg-secondary mt-2">Q' + idx + '</span>' +
+            '<textarea class="form-control quiz-prompt" data-qid="' + body.question_id + '" rows="2" placeholder="Question text">New question</textarea>' +
+            '<select class="form-select form-select-sm quiz-kind" data-qid="' + body.question_id + '" style="width: auto;">' +
+              '<option value="single" selected>Single answer</option>' +
+              '<option value="multi">Multiple answers</option>' +
+            '</select>' +
+            '<button type="button" class="btn btn-outline-danger btn-sm quiz-question-delete" data-qid="' + body.question_id + '" title="Delete question">×</button>' +
+          '</div>' +
+          '<div class="quiz-choices" data-qid="' + body.question_id + '">' + choicesHtml + '</div>' +
+          '<button type="button" class="btn btn-outline-secondary btn-sm mt-2 quiz-choice-add" data-qid="' + body.question_id + '">+ Add choice</button>';
+        list.appendChild(wrap);
+      });
+    }
   }
 })();
 </script>

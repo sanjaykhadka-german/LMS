@@ -14,9 +14,9 @@ from flask_login import (LoginManager, login_user, logout_user,
 from werkzeug.utils import secure_filename
 
 from config import Config
-from models import (db, User, Module, ContentItem, ContentItemMedia,
-                    Question, Choice, Assignment, Attempt, Department,
-                    Machine, UploadedFile)
+from models import (db, User, Module, ModuleMedia, ContentItem,
+                    ContentItemMedia, Question, Choice, Assignment, Attempt,
+                    Department, Machine, UploadedFile)
 from email_service import (notify_invite, notify_assignment,
                            notify_attempt, notify_reminder,
                            notify_password_reset)
@@ -798,6 +798,9 @@ def register_routes(app):
         edit_module = db.session.get(Module, module_id) if module_id else None
         if edit_module and not current_user.can_author:
             edit_module = None
+        # focus=edit: full-width edit pane, no chat. Used when editing a saved
+        # module from the modules list. Ignored when there's no module to edit.
+        hide_chat = bool(edit_module) and request.args.get("focus") == "edit"
 
         return render_template(
             "admin/module_ai_studio.html",
@@ -807,6 +810,7 @@ def register_routes(app):
             provider=provider,
             provider_label=provider_label,
             edit_module=edit_module,
+            hide_chat=hide_chat,
             rich_kinds=list(RICH_KINDS),
         )
 
@@ -897,7 +901,7 @@ def register_routes(app):
 
     # -------- inline module / content-item editing (used by AI studio edit pane) --------
 
-    MODULE_EDITABLE_FIELDS = {"title", "description"}
+    MODULE_EDITABLE_FIELDS = {"title", "description", "is_published"}
     CONTENT_EDITABLE_FIELDS = {"title", "body"}
 
     @app.route("/admin/modules/<int:mid>/update", methods=["POST"])
@@ -914,6 +918,8 @@ def register_routes(app):
             if not v:
                 return jsonify(error="Title cannot be empty."), 400
             m.title = v
+        elif field == "is_published":
+            m.is_published = bool(value)
         else:
             m.description = value or ""
         db.session.commit()
@@ -942,6 +948,46 @@ def register_routes(app):
     def admin_module_cover_clear(mid):
         m = db.session.get(Module, mid) or abort(404)
         m.cover_path = ""
+        db.session.commit()
+        return jsonify(ok=True)
+
+    @app.route("/admin/modules/<int:mid>/media/add", methods=["POST"])
+    @author_required
+    def admin_module_media_add(mid):
+        """Append one image/video to a module's title-area gallery."""
+        m = db.session.get(Module, mid) or abort(404)
+        fs = request.files.get("file")
+        if not fs or not fs.filename:
+            return jsonify(error="No file uploaded."), 400
+        try:
+            stored = save_upload(fs, prefix="mod_")
+        except ValueError as e:
+            return jsonify(error=str(e)), 400
+        kind = media_kind_for(stored)
+        if kind not in ("image", "video"):
+            return jsonify(error="Only image or video files are allowed."), 400
+        next_pos = (db.session.query(db.func.coalesce(db.func.max(ModuleMedia.position), -1))
+                    .filter(ModuleMedia.module_id == m.id).scalar()) + 1
+        mm = ModuleMedia(module_id=m.id, file_path=stored,
+                         kind=kind, position=next_pos)
+        db.session.add(mm)
+        db.session.commit()
+        return jsonify(ok=True,
+                       id=mm.id,
+                       path=stored,
+                       url=url_for("uploaded_file", name=stored),
+                       kind=kind,
+                       position=mm.position)
+
+    @app.route("/admin/modules/<int:mid>/media/<int:media_id>/remove",
+               methods=["POST"])
+    @author_required
+    def admin_module_media_remove(mid, media_id):
+        m = db.session.get(Module, mid) or abort(404)
+        mm = db.session.get(ModuleMedia, media_id) or abort(404)
+        if mm.module_id != m.id:
+            abort(404)
+        db.session.delete(mm)
         db.session.commit()
         return jsonify(ok=True)
 
@@ -1069,6 +1115,8 @@ def register_routes(app):
     @app.route("/admin/modules/<int:module_id>", methods=["GET", "POST"])
     @author_required
     def admin_module_edit(module_id):
+        # Legacy form editor superseded by the AI studio side-by-side layout.
+        # Keep the route so existing links keep working — redirect to studio.
         m = db.session.get(Module, module_id) or abort(404)
         if request.method == "POST":
             m.title = request.form["title"].strip()
@@ -1076,7 +1124,7 @@ def register_routes(app):
             m.is_published = bool(request.form.get("is_published"))
             db.session.commit()
             flash("Module saved.", "success")
-        return render_template("admin/module_form.html", module=m)
+        return redirect(url_for("admin_module_ai_studio", module_id=m.id))
 
     @app.route("/admin/modules/<int:module_id>/preview")
     @author_required
@@ -1217,6 +1265,100 @@ def register_routes(app):
         db.session.delete(q)
         db.session.commit()
         return redirect(url_for("admin_module_edit", module_id=mid))
+
+    # ---- AJAX quiz editing (used by the AI studio edit pane) ----
+
+    @app.route("/admin/modules/<int:mid>/questions/add-quick", methods=["POST"])
+    @author_required
+    def admin_question_add_quick(mid):
+        m = db.session.get(Module, mid) or abort(404)
+        q = Question(module_id=m.id, prompt="New question",
+                     kind="single", position=len(m.questions))
+        db.session.add(q)
+        db.session.flush()
+        c1 = Choice(question_id=q.id, text="Option A",
+                    is_correct=True, position=0)
+        c2 = Choice(question_id=q.id, text="Option B",
+                    is_correct=False, position=1)
+        db.session.add_all([c1, c2])
+        db.session.commit()
+        return jsonify(ok=True, question_id=q.id,
+                       choices=[{"id": c1.id, "text": c1.text, "is_correct": True, "position": 0},
+                                {"id": c2.id, "text": c2.text, "is_correct": False, "position": 1}])
+
+    @app.route("/admin/questions/<int:qid>/update", methods=["POST"])
+    @author_required
+    def admin_question_update(qid):
+        q = db.session.get(Question, qid) or abort(404)
+        data = request.get_json(silent=True) or {}
+        field = (data.get("field") or "").strip()
+        value = data.get("value", "")
+        if field == "prompt":
+            v = (value or "").strip()
+            if not v:
+                return jsonify(error="Question text cannot be empty."), 400
+            q.prompt = v
+        elif field == "kind":
+            if value not in ("single", "multi"):
+                return jsonify(error="Unsupported question kind."), 400
+            q.kind = value
+        else:
+            return jsonify(error="Unsupported field."), 400
+        db.session.commit()
+        return jsonify(ok=True)
+
+    @app.route("/admin/questions/<int:qid>/delete-ajax", methods=["POST"])
+    @author_required
+    def admin_question_delete_ajax(qid):
+        q = db.session.get(Question, qid) or abort(404)
+        db.session.delete(q)
+        db.session.commit()
+        return jsonify(ok=True)
+
+    @app.route("/admin/questions/<int:qid>/choices/add", methods=["POST"])
+    @author_required
+    def admin_choice_add(qid):
+        q = db.session.get(Question, qid) or abort(404)
+        c = Choice(question_id=q.id, text="New option",
+                   is_correct=False, position=len(q.choices))
+        db.session.add(c)
+        db.session.commit()
+        return jsonify(ok=True, id=c.id, text=c.text,
+                       is_correct=False, position=c.position)
+
+    @app.route("/admin/choices/<int:cid>/update", methods=["POST"])
+    @author_required
+    def admin_choice_update(cid):
+        c = db.session.get(Choice, cid) or abort(404)
+        data = request.get_json(silent=True) or {}
+        field = (data.get("field") or "").strip()
+        value = data.get("value", "")
+        if field == "text":
+            v = (value or "").strip()
+            if not v:
+                return jsonify(error="Choice text cannot be empty."), 400
+            c.text = v
+        elif field == "is_correct":
+            c.is_correct = bool(value)
+            # If single-answer mode, clear other choices' correct flags.
+            if c.is_correct and c.question.kind == "single":
+                for other in c.question.choices:
+                    if other.id != c.id:
+                        other.is_correct = False
+        else:
+            return jsonify(error="Unsupported field."), 400
+        db.session.commit()
+        return jsonify(ok=True)
+
+    @app.route("/admin/choices/<int:cid>/delete", methods=["POST"])
+    @author_required
+    def admin_choice_delete(cid):
+        c = db.session.get(Choice, cid) or abort(404)
+        if len(c.question.choices) <= 2:
+            return jsonify(error="A question needs at least two choices."), 400
+        db.session.delete(c)
+        db.session.commit()
+        return jsonify(ok=True)
 
     # users (employees + admins)
     @app.route("/admin/employees")

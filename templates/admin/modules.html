@@ -16,12 +16,14 @@
 
 <div class="card p-4">
   <div class="table-responsive">
-    <table class="table align-middle">
+    <table class="table align-middle module-table">
       <thead><tr><th>Title</th><th>Content</th><th>Questions</th><th>Created by</th><th>Status</th><th></th></tr></thead>
       <tbody>
       {% for m in modules %}
-        <tr>
-          <td><a href="{{ url_for('admin_module_edit', module_id=m.id) }}">{{ m.title }}</a></td>
+        <tr class="module-row"
+            data-href="{{ url_for('admin_module_ai_studio', module_id=m.id, focus='edit') }}"
+            tabindex="0">
+          <td><a class="module-title-link" href="{{ url_for('admin_module_ai_studio', module_id=m.id, focus='edit') }}">{{ m.title }}</a></td>
           <td>{{ m.content_items|length }}</td>
           <td>{{ m.questions|length }}</td>
           <td>{{ m.created_by.name if m.created_by else '—' }}</td>
@@ -45,4 +47,30 @@
     </table>
   </div>
 </div>
+
+<style>
+  .module-table .module-row { cursor: pointer; transition: background-color .12s; }
+  .module-table .module-row:hover { background-color: #faf6ee; }
+  .module-table .module-row:focus { outline: 2px solid var(--gb-burgundy, #7a1e2b); outline-offset: -2px; }
+</style>
+<script>
+(function () {
+  document.querySelectorAll('.module-row').forEach(function (row) {
+    row.addEventListener('click', function (e) {
+      // Ignore clicks on interactive children (buttons, links, forms).
+      if (e.target.closest('a, button, form, input, label')) return;
+      var href = row.dataset.href;
+      if (href) window.location.href = href;
+    });
+    row.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        if (e.target !== row) return;
+        e.preventDefault();
+        var href = row.dataset.href;
+        if (href) window.location.href = href;
+      }
+    });
+  });
+})();
+</script>
 {% endblock %}

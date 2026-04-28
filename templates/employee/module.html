@@ -64,6 +64,12 @@
   </div>
 {% endif %}
 
+{% if module.media_items %}
+  <div class="module-cover mb-4">
+    {% for m in module.media_items %}{{ render_one_media(m.file_path) }}{% endfor %}
+  </div>
+{% endif %}
+
 {% if preview %}
   <div class="alert alert-warning py-2 small">
     <b>Preview mode</b> &mdash; this is how employees will see the module.
