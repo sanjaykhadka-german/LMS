@@ -16,7 +16,7 @@ from werkzeug.utils import secure_filename
 from config import Config
 from models import (db, User, Module, ModuleMedia, ContentItem,
                     ContentItemMedia, Question, Choice, Assignment, Attempt,
-                    Department, Machine, UploadedFile)
+                    Department, Machine, UploadedFile, ModuleVersion)
 from email_service import (notify_invite, notify_assignment,
                            notify_attempt, notify_reminder,
                            notify_password_reset)
@@ -91,6 +91,9 @@ def ensure_schema_upgrades(app):
     if "modules" in tables and not col_exists("modules", "cover_path"):
         upgrades.append(("modules.cover_path",
             "ALTER TABLE modules ADD COLUMN cover_path VARCHAR(500) DEFAULT ''"))
+    if "assignments" in tables and not col_exists("assignments", "version_id"):
+        upgrades.append(("assignments.version_id",
+            "ALTER TABLE assignments ADD COLUMN version_id INTEGER REFERENCES module_versions(id)"))
 
     for label, stmt in upgrades:
         try:
@@ -267,6 +270,68 @@ def save_upload(fs, prefix=""):
     db.session.add(uf)
     db.session.commit()
     return stored
+
+
+def build_module_snapshot(m):
+    """Capture the editable surface of a module as a JSON-friendly dict.
+    Used by ModuleVersion to pin a user's training to a specific revision."""
+    return {
+        "title": m.title,
+        "description": m.description,
+        "is_published": m.is_published,
+        "cover_path": m.cover_path,
+        "media_items": [{"id": x.id, "kind": x.kind, "file_path": x.file_path}
+                        for x in m.media_items],
+        "content_items": [{
+            "id": ci.id, "kind": ci.kind, "title": ci.title,
+            "body": ci.body, "file_path": ci.file_path,
+            "position": ci.position,
+            "media_items": [{"id": x.id, "kind": x.kind, "file_path": x.file_path}
+                            for x in ci.media_items],
+        } for ci in m.content_items],
+        "questions": [{
+            "id": q.id, "kind": q.kind, "prompt": q.prompt, "position": q.position,
+            "choices": [{"id": c.id, "text": c.text, "is_correct": c.is_correct}
+                        for c in q.choices],
+        } for q in m.questions],
+    }
+
+
+def hydrate_module_view(snapshot, live_module=None):
+    """Wrap a snapshot in a SimpleNamespace tree so module/quiz templates
+    can iterate it like a live Module. live_module supplies the real id
+    so url_for('my_quiz', module_id=...) keeps working."""
+    from types import SimpleNamespace as NS
+    questions = [NS(id=q["id"], kind=q["kind"], prompt=q["prompt"],
+                    position=q.get("position", 0),
+                    choices=[NS(**c) for c in q["choices"]])
+                 for q in snapshot.get("questions", [])]
+    content_items = [NS(id=ci["id"], kind=ci["kind"], title=ci["title"],
+                        body=ci["body"], file_path=ci.get("file_path", ""),
+                        position=ci.get("position", 0),
+                        media_items=[NS(**x) for x in ci.get("media_items", [])])
+                     for ci in snapshot.get("content_items", [])]
+    return NS(
+        id=live_module.id if live_module is not None else None,
+        title=snapshot.get("title", ""),
+        description=snapshot.get("description", ""),
+        is_published=snapshot.get("is_published", True),
+        cover_path=snapshot.get("cover_path", ""),
+        media_items=[NS(**x) for x in snapshot.get("media_items", [])],
+        content_items=content_items, questions=questions,
+    )
+
+
+def module_for_assignment(a):
+    """Return the module shape a user should see — pinned snapshot if set,
+    otherwise the live module."""
+    if a.version_id and a.version is not None:
+        try:
+            snap = json.loads(a.version.snapshot_json)
+            return hydrate_module_view(snap, live_module=a.module)
+        except (ValueError, TypeError):
+            pass
+    return a.module
 
 
 def score_attempt(module, answers):
@@ -1171,13 +1236,140 @@ def register_routes(app):
         a = Assignment.query.filter_by(user_id=current_user.id,
                                        module_id=module_id).first()
         if not a:
-            a = Assignment(user_id=current_user.id, module_id=module_id)
+            latest = (ModuleVersion.query.filter_by(module_id=module_id)
+                      .order_by(ModuleVersion.version_number.desc()).first())
+            a = Assignment(user_id=current_user.id, module_id=module_id,
+                           version_id=latest.id if latest else None)
             db.session.add(a)
             db.session.commit()
             flash(f"'{m.title}' assigned to you.", "success")
         else:
             flash("You already have this module assigned.", "info")
         return redirect(url_for("my_module", module_id=module_id))
+
+    @app.route("/admin/modules/<int:module_id>/versions/save", methods=["POST"])
+    @author_required
+    def admin_module_version_save(module_id):
+        m = db.session.get(Module, module_id) or abort(404)
+        summary = ((request.get_json(silent=True) or {}).get("summary", "") or "")[:255]
+        next_n = (db.session.query(db.func.max(ModuleVersion.version_number))
+                  .filter_by(module_id=module_id).scalar() or 0) + 1
+        v = ModuleVersion(module_id=module_id, version_number=next_n,
+                          snapshot_json=json.dumps(build_module_snapshot(m)),
+                          created_by_id=current_user.id, summary=summary)
+        db.session.add(v)
+        db.session.commit()
+        return jsonify({"ok": True, "version_id": v.id,
+                        "version_number": v.version_number,
+                        "created_at": v.created_at.isoformat()})
+
+    @app.route("/admin/modules/<int:module_id>/assignments-json")
+    @author_required
+    def admin_module_assignments_json(module_id):
+        m = db.session.get(Module, module_id) or abort(404)
+        latest_v = (ModuleVersion.query.filter_by(module_id=module_id)
+                    .order_by(ModuleVersion.version_number.desc()).first())
+        role_order = db.case(
+            (User.role == "employee", 0),
+            (User.role == "qaqc", 1),
+            (User.role == "admin", 2),
+            else_=3,
+        )
+        users = (User.query
+                 .options(db.joinedload(User.department))
+                 .filter(User.is_active_flag == True,
+                         User.role.in_(("employee", "qaqc", "admin")))
+                 .order_by(role_order, User.name).all())
+        assigns = {a.user_id: a for a in
+                   Assignment.query.filter_by(module_id=module_id).all()}
+        rows = []
+        for u in users:
+            a = assigns.get(u.id)
+            if a is None:
+                status = "unassigned"
+            elif a.completed_at is not None:
+                status = "completed"
+            else:
+                status = "assigned"
+            v = a.version if a else None
+            if a is None:
+                is_latest = False
+            elif v is None:
+                # Assigned without a pinned version (legacy or no versions saved).
+                # Treat as "latest" only if no versions exist for this module.
+                is_latest = latest_v is None
+            else:
+                is_latest = (latest_v is not None and v.id == latest_v.id)
+            rows.append({
+                "user_id": u.id, "name": u.name, "email": u.email,
+                "department": u.department.name if u.department else "",
+                "status": status,
+                "completed_at": a.completed_at.isoformat() if a and a.completed_at else None,
+                "version_number": v.version_number if v else None,
+                "is_latest": is_latest,
+            })
+        return jsonify({
+            "module_id": m.id, "module_title": m.title,
+            "latest_version_number": latest_v.version_number if latest_v else None,
+            "users": rows,
+        })
+
+    @app.route("/admin/modules/<int:module_id>/assignments/toggle", methods=["POST"])
+    @author_required
+    def admin_module_assignment_toggle(module_id):
+        m = db.session.get(Module, module_id) or abort(404)
+        data = request.get_json(silent=True) or {}
+        try:
+            uid = int(data.get("user_id") or 0)
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "Invalid user_id"}), 400
+        assign = bool(data.get("assign"))
+        u = db.session.get(User, uid) or abort(404)
+        a = Assignment.query.filter_by(user_id=uid, module_id=module_id).first()
+        if assign:
+            if a is None:
+                latest = (ModuleVersion.query.filter_by(module_id=module_id)
+                          .order_by(ModuleVersion.version_number.desc()).first())
+                now = datetime.utcnow()
+                a = Assignment(user_id=uid, module_id=module_id,
+                               assigned_at=now, due_at=assignment_due_from(now),
+                               version_id=latest.id if latest else None)
+                db.session.add(a)
+                db.session.commit()
+                try:
+                    notify_assignment(u, m, app.config["APP_BASE_URL"])
+                except Exception:
+                    pass
+            status = "completed" if a.completed_at else "assigned"
+            v = a.version
+            return jsonify({"ok": True, "status": status,
+                            "version_number": v.version_number if v else None,
+                            "is_latest": True})
+        else:
+            if a is not None:
+                db.session.delete(a)
+                db.session.commit()
+            return jsonify({"ok": True, "status": "unassigned",
+                            "version_number": None, "is_latest": False})
+
+    @app.route("/admin/modules/<int:module_id>/assignments/push-latest",
+               methods=["POST"])
+    @author_required
+    def admin_module_assignment_push_latest(module_id):
+        try:
+            uid = int((request.get_json(silent=True) or {}).get("user_id") or 0)
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "Invalid user_id"}), 400
+        a = (Assignment.query.filter_by(user_id=uid, module_id=module_id).first()
+             or abort(404))
+        latest = (ModuleVersion.query.filter_by(module_id=module_id)
+                  .order_by(ModuleVersion.version_number.desc()).first())
+        if latest is not None:
+            a.version_id = latest.id
+            db.session.commit()
+        return jsonify({"ok": True,
+                        "version_number": latest.version_number if latest else None,
+                        "is_latest": True})
 
     @app.route("/admin/modules/<int:module_id>/delete", methods=["POST"])
     @author_required
@@ -1778,14 +1970,14 @@ def register_routes(app):
         a = Assignment.query.filter_by(user_id=current_user.id,
                                        module_id=module_id).first() or abort(404)
         return render_template("employee/module.html",
-                               module=a.module, assignment=a)
+                               module=module_for_assignment(a), assignment=a)
 
     @app.route("/my/modules/<int:module_id>/quiz", methods=["GET", "POST"])
     @login_required
     def my_quiz(module_id):
         a = Assignment.query.filter_by(user_id=current_user.id,
                                        module_id=module_id).first() or abort(404)
-        m = a.module
+        m = module_for_assignment(a)
         if not m.questions:
             flash("This module has no quiz yet.", "info")
             return redirect(url_for("my_module", module_id=module_id))

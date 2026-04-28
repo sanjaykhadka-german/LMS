@@ -167,8 +167,35 @@ class Assignment(db.Model):
     assigned_at = db.Column(db.DateTime, default=datetime.utcnow)
     due_at = db.Column(db.DateTime, nullable=True)
     completed_at = db.Column(db.DateTime, nullable=True)
+    version_id = db.Column(db.Integer,
+                           db.ForeignKey("module_versions.id"),
+                           nullable=True)
+
+    version = db.relationship("ModuleVersion", foreign_keys=[version_id])
 
     __table_args__ = (db.UniqueConstraint("user_id", "module_id", name="uq_user_module"),)
+
+
+class ModuleVersion(db.Model):
+    __tablename__ = "module_versions"
+    id = db.Column(db.Integer, primary_key=True)
+    module_id = db.Column(db.Integer, db.ForeignKey("modules.id"), nullable=False)
+    version_number = db.Column(db.Integer, nullable=False)
+    snapshot_json = db.Column(db.Text, nullable=False)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    summary = db.Column(db.String(255), default="")
+
+    module = db.relationship(
+        "Module",
+        backref=db.backref("versions",
+                           cascade="all, delete-orphan",
+                           order_by="ModuleVersion.version_number.desc()"),
+    )
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+
+    __table_args__ = (db.UniqueConstraint("module_id", "version_number",
+                                          name="uq_module_version_number"),)
 
 
 class Attempt(db.Model):

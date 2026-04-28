@@ -334,6 +334,11 @@
                  {% if edit_module.is_published %}checked{% endif %}>
           <label class="form-check-label small" for="modPublished">Published</label>
         </div>
+        <button type="button" class="btn btn-outline-primary btn-sm" id="assignOpenBtn"
+                data-bs-toggle="modal" data-bs-target="#assignModal"
+                title="Assign this module to other users">Assign</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="saveVersionBtn"
+                title="Snapshot the current state — newly assigned users get pinned to this version">Save version</button>
         <form method="post" action="{{ url_for('admin_module_self_assign', module_id=edit_module.id) }}" class="m-0">
           <button class="btn btn-outline-secondary btn-sm" title="Assign this module to yourself so you can take it">Assign to me</button>
         </form>
@@ -537,6 +542,50 @@
       <button type="button" class="btn btn-outline-primary btn-sm" id="quizAddBtn">+ Add question</button>
     </div>
   </section>
+
+  <div class="modal fade" id="assignModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">
+            Assign &mdash; {{ edit_module.title }}
+            <span class="text-muted small ms-2" id="assignLatestVer"></span>
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-2">
+            <input type="text" class="form-control form-control-sm" id="assignFilter"
+                   placeholder="Filter by name, email, or department">
+          </div>
+          <div class="table-responsive" style="max-height: 60vh;">
+            <table class="table table-sm align-middle">
+              <thead class="sticky-top bg-light">
+                <tr>
+                  <th style="width: 70px;">Assign</th>
+                  <th>Name</th>
+                  <th>Department</th>
+                  <th style="width: 120px;">Status</th>
+                  <th style="width: 140px;">Version</th>
+                </tr>
+              </thead>
+              <tbody id="assignTbody">
+                <tr><td colspan="5" class="text-muted text-center py-3">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="small text-muted mt-2">
+            <span class="badge bg-success">Completed</span>
+            <span class="badge bg-warning text-dark">Assigned, not completed</span>
+            <span class="badge bg-danger">Not assigned</span>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Done</button>
+        </div>
+      </div>
+    </div>
+  </div>
   {% else %}
   <!-- Generated-module preview pane (replaces the raw JSON view) -->
   <section class="studio-json" aria-label="Generated module preview">
@@ -1452,6 +1501,189 @@
           '<div class="quiz-choices" data-qid="' + body.question_id + '">' + choicesHtml + '</div>' +
           '<button type="button" class="btn btn-outline-secondary btn-sm mt-2 quiz-choice-add" data-qid="' + body.question_id + '">+ Add choice</button>';
         list.appendChild(wrap);
+      });
+    }
+
+    // -------- Save version --------
+    const saveVersionBtn = document.getElementById('saveVersionBtn');
+    if (saveVersionBtn) {
+      saveVersionBtn.addEventListener('click', async () => {
+        const summary = (prompt('Optional one-line note for this version (e.g. "added scenario 3"):') || '').trim();
+        saveVersionBtn.disabled = true;
+        setStatus('saving', 'Saving version…');
+        try {
+          const r = await fetch('/admin/modules/' + mid + '/versions/save', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ summary: summary }),
+          });
+          const b = await r.json().catch(() => ({}));
+          if (!r.ok) {
+            setStatus('error', b.error || 'Failed to save version');
+          } else {
+            setStatus('saved', 'Version v' + b.version_number + ' saved');
+            setTimeout(() => setStatus('', ''), 1800);
+          }
+        } catch (err) {
+          setStatus('error', 'Network error');
+        } finally {
+          saveVersionBtn.disabled = false;
+        }
+      });
+    }
+
+    // -------- Assign dialog --------
+    const assignModalEl = document.getElementById('assignModal');
+    const assignTbody = document.getElementById('assignTbody');
+    const assignFilter = document.getElementById('assignFilter');
+    const assignLatestVer = document.getElementById('assignLatestVer');
+
+    function badgeFor(status) {
+      if (status === 'completed')  return '<span class="badge bg-success">Completed</span>';
+      if (status === 'assigned')   return '<span class="badge bg-warning text-dark">Assigned</span>';
+      return '<span class="badge bg-danger">Not assigned</span>';
+    }
+
+    function versionCell(row, latestNum) {
+      if (row.status === 'unassigned') return '—';
+      const vLabel = row.version_number ? ('v' + row.version_number)
+                                        : '<span class="text-muted">unpinned</span>';
+      let html = vLabel;
+      if (!row.is_latest && latestNum != null) {
+        html += ' <a href="#" class="ms-1 small push-latest" data-uid="' + row.user_id + '">Push latest</a>';
+      }
+      return html;
+    }
+
+    function renderAssignRows(data) {
+      const latestNum = data.latest_version_number;
+      assignLatestVer.textContent = latestNum != null
+        ? ('Latest: v' + latestNum)
+        : '(no versions saved yet)';
+      if (!data.users.length) {
+        assignTbody.innerHTML = '<tr><td colspan="5" class="text-muted text-center py-3">No active users.</td></tr>';
+        return;
+      }
+      const rows = data.users.map(u => {
+        const checked = u.status !== 'unassigned' ? 'checked' : '';
+        const search = (u.name + ' ' + u.email + ' ' + u.department).toLowerCase();
+        return (
+          '<tr data-uid="' + u.user_id + '" data-status="' + u.status +
+          '" data-search="' + esc(search) + '">' +
+            '<td><input type="checkbox" class="form-check-input assign-toggle" ' +
+                 'data-uid="' + u.user_id + '" ' + checked + '></td>' +
+            '<td>' + esc(u.name) + '<div class="text-muted small">' + esc(u.email) + '</div></td>' +
+            '<td>' + esc(u.department || '') + '</td>' +
+            '<td class="assign-status-cell">' + badgeFor(u.status) + '</td>' +
+            '<td class="assign-version-cell">' + versionCell(u, latestNum) + '</td>' +
+          '</tr>'
+        );
+      });
+      assignTbody.innerHTML = rows.join('');
+      applyAssignFilter();
+    }
+
+    function applyAssignFilter() {
+      const q = (assignFilter.value || '').trim().toLowerCase();
+      assignTbody.querySelectorAll('tr[data-search]').forEach(tr => {
+        tr.style.display = (!q || tr.dataset.search.indexOf(q) !== -1) ? '' : 'none';
+      });
+    }
+
+    let assignLatestNumCache = null;
+
+    async function loadAssignList() {
+      assignTbody.innerHTML = '<tr><td colspan="5" class="text-muted text-center py-3">Loading…</td></tr>';
+      try {
+        const r = await fetch('/admin/modules/' + mid + '/assignments-json',
+                              { credentials: 'same-origin' });
+        const b = await r.json();
+        if (!r.ok) {
+          assignTbody.innerHTML = '<tr><td colspan="5" class="text-danger text-center py-3">' +
+            esc(b.error || 'Failed to load') + '</td></tr>';
+          return;
+        }
+        assignLatestNumCache = b.latest_version_number;
+        renderAssignRows(b);
+      } catch (err) {
+        assignTbody.innerHTML = '<tr><td colspan="5" class="text-danger text-center py-3">Network error</td></tr>';
+      }
+    }
+
+    if (assignModalEl) {
+      assignModalEl.addEventListener('show.bs.modal', loadAssignList);
+    }
+    if (assignFilter) {
+      assignFilter.addEventListener('input', applyAssignFilter);
+    }
+
+    // Toggle, push-latest — delegated.
+    if (assignTbody) {
+      assignTbody.addEventListener('change', async (e) => {
+        const cb = e.target.closest('.assign-toggle');
+        if (!cb) return;
+        const tr = cb.closest('tr');
+        const wasStatus = tr.dataset.status;
+        const wantAssign = cb.checked;
+        if (!wantAssign && wasStatus === 'completed') {
+          const ok = confirm('This user has already completed the module. ' +
+            'Removing the assignment will delete their completion record ' +
+            '(their quiz attempts are kept). Continue?');
+          if (!ok) { cb.checked = true; return; }
+        }
+        cb.disabled = true;
+        try {
+          const r = await fetch('/admin/modules/' + mid + '/assignments/toggle', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: parseInt(cb.dataset.uid, 10),
+                                   assign: wantAssign }),
+          });
+          const b = await r.json().catch(() => ({}));
+          if (!r.ok) {
+            cb.checked = !wantAssign;
+            setStatus('error', b.error || 'Save failed');
+            return;
+          }
+          tr.dataset.status = b.status;
+          tr.querySelector('.assign-status-cell').innerHTML = badgeFor(b.status);
+          tr.querySelector('.assign-version-cell').innerHTML = versionCell({
+            status: b.status, version_number: b.version_number,
+            is_latest: b.is_latest, user_id: parseInt(cb.dataset.uid, 10),
+          }, assignLatestNumCache);
+          setStatus('saved', 'Saved');
+          setTimeout(() => setStatus('', ''), 1200);
+        } catch (err) {
+          cb.checked = !wantAssign;
+          setStatus('error', 'Network error');
+        } finally {
+          cb.disabled = false;
+        }
+      });
+
+      assignTbody.addEventListener('click', async (e) => {
+        const link = e.target.closest('.push-latest');
+        if (!link) return;
+        e.preventDefault();
+        const uid = parseInt(link.dataset.uid, 10);
+        const tr = link.closest('tr');
+        try {
+          const r = await fetch('/admin/modules/' + mid + '/assignments/push-latest', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: uid }),
+          });
+          const b = await r.json().catch(() => ({}));
+          if (!r.ok) { setStatus('error', b.error || 'Failed'); return; }
+          tr.querySelector('.assign-version-cell').innerHTML = versionCell({
+            status: tr.dataset.status, version_number: b.version_number,
+            is_latest: true, user_id: uid,
+          }, assignLatestNumCache);
+          setStatus('saved', 'Pushed to v' + b.version_number);
+          setTimeout(() => setStatus('', ''), 1200);
+        } catch (err) {
+          setStatus('error', 'Network error');
+        }
       });
     }
   }
