@@ -95,8 +95,11 @@ def _load_system_prompt():
         + "(with 0-indexed `correctAnswer`) or `true_false` (with boolean "
         + "`correctAnswer`).\n\n"
         + "Reply WITHOUT a JSON block only when (a) it is the very first turn of a "
-        + "new chat with no source material yet, or (b) the user asks a meta question "
-        + "that does not require module changes AND no module exists yet.\n\n"
+        + "new chat AND no files are attached AND the user's message has no usable "
+        + "description (then you may ask one short clarifying question), or (b) the "
+        + "user asks a meta question that does not require module changes AND no "
+        + "module exists yet. Files attached = always generate the module, even if "
+        + "the user's text is empty or vague.\n\n"
         + "# Accepted inputs\n\n"
         + "Inputs can be any mix of the following — all of them are valid starting "
         + "points for a training module:\n"
@@ -124,7 +127,11 @@ def _load_system_prompt():
         + "answer (e.g. 'Want this focused on labelling, storage, or allergens? I'll "
         + "default to labelling if you don't say.').\n\n"
         + "If the user provides additional text alongside the media ('this is for "
-        + "new starters on the slicing line'), that steers the angle. Use it."
+        + "new starters on the slicing line'), that steers the angle. Use it.\n\n"
+        + "**Multi-file uploads.** If multiple files are attached, treat them as "
+        + "related context for one module. Pick the most specific document as the "
+        + "primary source and use the others to enrich examples, roles, and "
+        + "consequences. Build ONE module. Do not ask which file to use."
     )
 
 

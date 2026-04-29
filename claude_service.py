@@ -65,8 +65,10 @@ def _load_system_prompt():
         + "`quiz.questions[]` of type `multiple_choice` (with 0-indexed `correctAnswer`) "
         + "or `true_false` (with boolean `correctAnswer`).\n\n"
         + "The only times it is OK to reply WITHOUT a JSON block:\n"
-        + "1. The very first turn of a new chat with no source material yet — you "
-        + "can ask one clarifying question.\n"
+        + "1. The very first turn of a new chat where BOTH no files are attached "
+        + "AND the user's message has no usable description — only then may you ask "
+        + "one short clarifying question. If files ARE attached, always generate the "
+        + "module, even if the user's text is empty or vague.\n"
         + "2. The user asks a meta question that doesn't require module changes "
         + "('what's a good NC number for a labelling issue?') AND no module exists yet.\n\n"
         + "# Accepted inputs\n\n"
@@ -79,7 +81,11 @@ def _load_system_prompt():
         + "storage temps, allergen control, cross-contamination, slicing safety) and "
         + "build the module. Briefly say which angle you picked at the top of your "
         + "reply. Only ask a clarifying question if the content is genuinely ambiguous "
-        + "AND you still offer a default choice."
+        + "AND you still offer a default choice.\n\n"
+        + "**Multi-file uploads.** If multiple files are attached, treat them as "
+        + "related context for one module. Pick the most specific document as the "
+        + "primary source and use the others to enrich examples, roles, and "
+        + "consequences. Build ONE module. Do not ask which file to use."
     )
 
 

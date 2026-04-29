@@ -29,9 +29,9 @@ talking to a mate, not writing a policy document.
 
 ## Step 1 — Read the source document
 
-The user will upload a Word (.docx) or PDF file. Read it using the appropriate tool:
-- For .docx files: use the Read tool on the uploaded file path
-- For .pdf files: read the file directly
+The source documents are already attached to this chat turn — read them directly
+from the message content. You do not have a file-reading tool, and you do not
+need one.
 
 Pull out these key things:
 - **What the auditor found** — the specific problem
@@ -42,16 +42,25 @@ Pull out these key things:
 - **SQF clause** — e.g. "9.2.1.6"
 - **NC number** — e.g. "NC7"
 
-If the NC number or SQF clause isn't in the document, ask the user before continuing.
+If the NC number or SQF clause isn't in the document, infer a reasonable value
+(e.g. derive `moduleId` from the filename, leave `sqfClause` as `"TBD"`, or add a
+`// TODO` comment) and proceed. The author edits the JSON afterwards anyway —
+never block generation on missing metadata.
 
 ---
 
-## Step 2 — Check for missing info
+## Step 2 — Fill in metadata with sensible defaults
 
-Before writing anything, confirm:
-- **moduleId** — e.g. "NC7" (ask if not obvious)
-- **sqfClause** — e.g. "9.2.1.6" (ask if not in the document)
-- **version** — default "1.0"
+Never block on missing info. Use defaults and flag them in the output so the
+author can edit afterwards:
+- **moduleId** — derive from the filename or NC reference if present, otherwise
+  use `"TBD"`.
+- **sqfClause** — pull from the document if present, otherwise `"TBD"`.
+- **version** — default `"1.0"`.
+
+If you defaulted any field, mention it in ONE short sentence at the top of your
+reply (before the JSON block) — e.g. "Defaulted moduleId to NC-CLEAN-2026 and
+sqfClause to TBD."
 
 ---
 
@@ -165,15 +174,17 @@ The whole module — sections and quiz — must follow these rules:
 
 ---
 
-## Step 4 — Save the JSON file
+## Step 4 — Output format
 
-Save to:
-```
-/sessions/<session-id>/mnt/outputs/<moduleId>-<slug>.json
-```
+Your deliverable is the JSON itself, embedded at the END of your chat reply
+inside a fenced ```json code block. Do NOT try to save a file. Do NOT offer a
+download link. The web app extracts the fenced JSON block from your reply and
+loads it into the editor pane. Without that block, nothing happens on the
+user's screen.
 
-Write clean, indented JSON. Validate it parses correctly before saving.
-Give the user a download link when done.
+Before the JSON block, write 1–3 short sentences max — what you built and any
+defaults you chose (e.g. moduleId derived from filename). Then the ```json
+block with the complete module.
 
 ---
 

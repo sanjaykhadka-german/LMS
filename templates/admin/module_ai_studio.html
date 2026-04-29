@@ -648,8 +648,22 @@
     }
   }
 
+  function clearEmptyState() {
+    const e = log.querySelector('.studio-empty');
+    if (e) e.remove();
+  }
+
+  function renderEmptyState() {
+    if (log.querySelector('.studio-msg') || log.querySelector('.studio-empty')) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'studio-empty';
+    wrap.textContent = "Drop a file or several — I'll read them and build the module. Add a note if you want a specific angle, length, or audience.";
+    log.appendChild(wrap);
+  }
+
   function appendMsg(role, text, fileLabels) {
     if (!text && (!fileLabels || !fileLabels.length)) return;
+    clearEmptyState();
     const wrap = document.createElement('div');
     wrap.className = 'studio-msg studio-msg-' + role;
     const bubble = document.createElement('div');
@@ -870,11 +884,15 @@
   }
 
   // -------- chat message --------
+  const DEFAULT_FILES_PROMPT = "Build a training module from these documents — pick the most relevant angle and use the others as supporting context.";
   composeForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const text = textArea.value.trim();
+    let text = textArea.value.trim();
     if (!text && !pendingIds.length) return;
     const fileLabels = pendingMeta.map(m => m.filename);
+    if (!text && pendingIds.length) {
+      text = DEFAULT_FILES_PROMPT;
+    }
     appendMsg('user', text, fileLabels);
     textArea.value = '';
     const sentIds = pendingIds.slice();
@@ -957,6 +975,7 @@
     pendingIds = [];
     pendingMeta = [];
     renderChips();
+    renderEmptyState();
   });
 
   // -------- render existing history on page load --------
@@ -968,6 +987,7 @@
       appendMsg('model', {{ (turn.text or '') | tojson }});
     {% endif %}
   {% endfor %}
+  renderEmptyState();
 
   } // end if (composeForm)
 
