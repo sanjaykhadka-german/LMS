@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}My profile{% endblock %}
+{% block content %}
+<div class="gb-pageheader">
+  <span class="gb-eyebrow">Account</span>
+  <h1>My profile</h1>
+  <p class="lede">Update your contact details or change your password. Other fields are managed by your admin.</p>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-7">
+    <div class="card p-4">
+      <h5 class="mb-3">Your information</h5>
+      <form method="post" class="row g-3">
+        <input type="hidden" name="form_type" value="info">
+
+        <div class="col-md-6">
+          <label class="form-label">First name <span class="text-danger">*</span></label>
+          <input name="first_name" required class="form-control"
+                 value="{{ user.first_name or '' }}">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Last name <span class="text-danger">*</span></label>
+          <input name="last_name" required class="form-control"
+                 value="{{ user.last_name or '' }}">
+        </div>
+
+        <div class="col-md-6">
+          <label class="form-label">Email</label>
+          <input class="form-control" value="{{ user.email }}" disabled>
+          <div class="form-text">Email is your login identifier — contact your admin to change it.</div>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Phone <span class="text-danger">*</span></label>
+          <input name="phone" required class="form-control" value="{{ user.phone or '' }}">
+        </div>
+
+        <div class="col-12">
+          <button class="btn btn-primary gb-arrow">Save changes</button>
+        </div>
+      </form>
+
+      <hr class="my-4">
+
+      <h6 class="text-muted mb-3">Admin-managed</h6>
+      <dl class="row mb-0">
+        <dt class="col-sm-4 text-muted fw-normal">Role</dt>
+        <dd class="col-sm-8">{{ user.role_label }}</dd>
+
+        <dt class="col-sm-4 text-muted fw-normal">Department</dt>
+        <dd class="col-sm-8">{{ user.department.name if user.department else '—' }}</dd>
+
+        <dt class="col-sm-4 text-muted fw-normal">Employer</dt>
+        <dd class="col-sm-8">{{ user.employer.name if user.employer else '—' }}</dd>
+
+        <dt class="col-sm-4 text-muted fw-normal">Machines</dt>
+        <dd class="col-sm-8">
+          {% if user.machines %}
+            {{ user.machines|map(attribute='name')|join(', ') }}
+          {% else %}—{% endif %}
+        </dd>
+      </dl>
+      <div class="form-text mt-2">Need any of these changed? Ask your admin.</div>
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="card p-4">
+      <h5 class="mb-3">Change password</h5>
+      <p class="text-muted small">Pick something at least 8 characters, and memorable.</p>
+      <form method="post">
+        <input type="hidden" name="form_type" value="password">
+        <div class="mb-3">
+          <label class="form-label">Current password</label>
+          <div class="input-group">
+            <input type="password" name="old" required class="form-control js-pw">
+            <button type="button" class="btn btn-outline-secondary js-pw-toggle" tabindex="-1">Show</button>
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">New password</label>
+          <div class="input-group">
+            <input type="password" name="new" required minlength="8" class="form-control js-pw">
+            <button type="button" class="btn btn-outline-secondary js-pw-toggle" tabindex="-1">Show</button>
+          </div>
+        </div>
+        <div class="mb-4">
+          <label class="form-label">Confirm new password</label>
+          <div class="input-group">
+            <input type="password" name="confirm" required minlength="8" class="form-control js-pw">
+            <button type="button" class="btn btn-outline-secondary js-pw-toggle" tabindex="-1">Show</button>
+          </div>
+        </div>
+        <button class="btn btn-primary w-100 gb-arrow">Update password</button>
+      </form>
+      <script>
+        document.querySelectorAll('.js-pw-toggle').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            var input = btn.parentElement.querySelector('.js-pw');
+            if (!input) return;
+            var showing = input.type === 'text';
+            input.type = showing ? 'password' : 'text';
+            btn.textContent = showing ? 'Show' : 'Hide';
+          });
+        });
+      </script>
+    </div>
+  </div>
+</div>
+{% endblock %}

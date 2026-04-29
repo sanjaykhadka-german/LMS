@@ -851,25 +851,56 @@ def register_routes(app):
         logout_user()
         return redirect(url_for("login"))
 
-    @app.route("/change-password", methods=["GET", "POST"])
+    @app.route("/profile", methods=["GET", "POST"])
+    @login_required
+    def profile():
+        u = current_user
+        if request.method == "POST":
+            kind = request.form.get("form_type", "")
+            if kind == "info":
+                first = request.form.get("first_name", "").strip()
+                last  = request.form.get("last_name", "").strip()
+                phone = request.form.get("phone", "").strip()
+                missing = [n for n, v in
+                           (("First name", first), ("Last name", last), ("Phone", phone))
+                           if not v]
+                if missing:
+                    flash("Missing required field(s): " + ", ".join(missing), "danger")
+                else:
+                    u.first_name = first
+                    u.last_name = last
+                    u.name = f"{first} {last}".strip()
+                    u.phone = phone
+                    log_audit("update", "user", u.id,
+                              f"Self-edited profile for {u.email}")
+                    db.session.commit()
+                    flash("Profile updated.", "success")
+                return redirect(url_for("profile"))
+            if kind == "password":
+                old = request.form.get("old", "")
+                new = request.form.get("new", "")
+                confirm = request.form.get("confirm", "")
+                if not u.check_password(old):
+                    flash("Current password is incorrect.", "danger")
+                elif len(new) < 8:
+                    flash("New password must be at least 8 characters.", "danger")
+                elif new != confirm:
+                    flash("Passwords do not match.", "danger")
+                else:
+                    u.set_password(new)
+                    log_audit("password_change", "user", u.id,
+                              f"Self-changed password for {u.email}")
+                    db.session.commit()
+                    flash("Password updated.", "success")
+                return redirect(url_for("profile"))
+        return render_template("profile.html", user=u)
+
+    @app.route("/change-password")
     @login_required
     def change_password():
-        if request.method == "POST":
-            old = request.form.get("old", "")
-            new = request.form.get("new", "")
-            confirm = request.form.get("confirm", "")
-            if not current_user.check_password(old):
-                flash("Current password is incorrect.", "danger")
-            elif len(new) < 8:
-                flash("New password must be at least 8 characters.", "danger")
-            elif new != confirm:
-                flash("Passwords do not match.", "danger")
-            else:
-                current_user.set_password(new)
-                db.session.commit()
-                flash("Password updated.", "success")
-                return redirect(url_for("index"))
-        return render_template("change_password.html")
+        # Back-compat redirect — old bookmarks and any url_for('change_password')
+        # call sites still resolve to the new combined profile page.
+        return redirect(url_for("profile"))
 
     # --- admin ---
     @app.route("/admin")

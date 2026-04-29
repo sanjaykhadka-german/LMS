@@ -20,9 +20,9 @@
 {% set is_depts      = ep.startswith('admin_department') %}
 {% set is_machines   = ep.startswith('admin_machine') %}
 {% set is_my         = ep.startswith('my_') %}
-{% set is_pass       = ep == 'change_password' %}
+{% set is_profile    = ep == 'profile' or ep == 'change_password' %}
 {% set is_audit      = ep.startswith('admin_audit_logs') %}
-{% set in_user_menu  = is_employers or is_depts or is_machines or is_audit or is_my or is_pass %}
+{% set in_user_menu  = is_employers or is_depts or is_machines or is_audit or is_my or is_profile %}
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top gb-navbar">
   <div class="container">
     {% if current_user.is_authenticated %}
@@ -78,7 +78,7 @@
               {% if current_user.is_admin %}
                 <li><a class="dropdown-item {% if is_audit %}active{% endif %}" href="{{ url_for('admin_audit_logs') }}">Audit Logs</a></li>
               {% endif %}
-              <li><a class="dropdown-item {% if is_pass %}active{% endif %}" href="{{ url_for('change_password') }}">Password</a></li>
+              <li><a class="dropdown-item {% if is_profile %}active{% endif %}" href="{{ url_for('profile') }}">Profile</a></li>
               <li><hr class="dropdown-divider"></li>
               <li><a class="dropdown-item" href="{{ url_for('logout') }}">Logout</a></li>
             </ul>
