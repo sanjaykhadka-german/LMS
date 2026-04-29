@@ -10,26 +10,48 @@
 <div class="card p-4 mb-4">
   <h5>Add user</h5>
   <form method="post" action="{{ url_for('admin_employee_new') }}" class="row g-2">
-    <div class="col-md-3"><input name="name" required class="form-control" placeholder="Full name"></div>
-    <div class="col-md-3"><input name="email" type="email" required class="form-control" placeholder="Email"></div>
-    <div class="col-md-2">
-      <select name="department_id" class="form-select">
-        <option value="">Department (optional)</option>
+    <div class="col-md-3">
+      <input name="first_name" required class="form-control" placeholder="First name *">
+    </div>
+    <div class="col-md-3">
+      <input name="last_name" required class="form-control" placeholder="Last name *">
+    </div>
+    <div class="col-md-3">
+      <input name="email" type="email" required class="form-control" placeholder="Email *">
+    </div>
+    <div class="col-md-3">
+      <input name="phone" required class="form-control" placeholder="Phone *">
+    </div>
+    <div class="col-md-3">
+      <select name="department_id" required class="form-select">
+        <option value="">Department * — choose…</option>
         {% for d in departments %}
           <option value="{{ d.id }}">{{ d.name }}</option>
         {% endfor %}
       </select>
     </div>
-    <div class="col-md-2">
+    <div class="col-md-3">
+      <input name="employer_name" required class="form-control" list="employers-list"
+             placeholder="Employer * (type or pick)">
+      <datalist id="employers-list">
+        {% for e in employers %}<option value="{{ e.name }}">{% endfor %}
+      </datalist>
+    </div>
+    <div class="col-md-3">
       <select name="role" class="form-select">
         <option value="employee">Employee</option>
         <option value="qaqc">QA/QC</option>
         <option value="admin">Administrator</option>
       </select>
     </div>
-    <div class="col-md-2"><button class="btn btn-primary w-100">Add</button></div>
+    <div class="col-md-3"><button class="btn btn-primary w-100">Add user</button></div>
   </form>
-  <div class="form-text mt-2">A temporary password is generated and emailed (if Resend is configured) — it is also shown here on the next page. Phone and machines can be set by clicking <em>Edit</em> on a row.</div>
+  <div class="form-text mt-2">
+    Fields marked <code>*</code> are required. Employer is free-text — type a new
+    name and it'll be created automatically. A temporary password is generated and
+    emailed (if Resend is configured); it's also shown to you on the next page.
+    Machines can be assigned via <em>Edit</em> on a row.
+  </div>
 </div>
 
 <div class="card p-4 mb-4">
@@ -48,10 +70,11 @@
     </div>
   </form>
   <div class="form-text mt-2">
-    <strong>Required columns:</strong> <code>email</code>, <code>name</code>, <code>department</code>.
-    <strong>Optional:</strong> <code>phone</code>, <code>role</code>, <code>machines</code>
-    (comma- or pipe-separated). Missing departments and machines are created
-    automatically. Existing emails are skipped.
+    <strong>Required columns:</strong> <code>First Name</code>, <code>Last Name</code>,
+    <code>Email</code>, <code>Phone</code>, <code>Department</code>, <code>Employer</code>.
+    <strong>Optional:</strong> <code>Role</code>, <code>Machines</code>
+    (comma- or pipe-separated). Missing departments, employers and machines
+    are created automatically. Existing emails are skipped.
   </div>
 </div>
 
@@ -60,7 +83,7 @@
     <table class="table align-middle">
       <thead>
         <tr>
-          <th>Name</th><th>Email</th><th>Phone</th><th>Department</th><th>Machines</th>
+          <th>Name</th><th>Email</th><th>Phone</th><th>Department</th><th>Employer</th><th>Machines</th>
           <th class="text-end">Actions</th>
         </tr>
       </thead>
@@ -78,6 +101,7 @@
           <td>{{ e.email }}</td>
           <td>{{ e.phone or '—' }}</td>
           <td>{{ e.department.name if e.department else '—' }}</td>
+          <td>{{ e.employer.name if e.employer else '—' }}</td>
           <td>
             {% if e.machines %}
               {{ e.machines|map(attribute='name')|join(', ') }}
@@ -98,7 +122,7 @@
           </td>
         </tr>
       {% else %}
-        <tr><td colspan="6" class="text-muted">No users yet.</td></tr>
+        <tr><td colspan="7" class="text-muted">No users yet.</td></tr>
       {% endfor %}
       </tbody>
     </table>

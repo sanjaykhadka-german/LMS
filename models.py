@@ -21,6 +21,14 @@ class Department(db.Model):
     users = db.relationship("User", backref="department")
 
 
+class Employer(db.Model):
+    __tablename__ = "employers"
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+
+    users = db.relationship("User", backref="employer")
+
+
 class Machine(db.Model):
     __tablename__ = "machines"
     id = db.Column(db.Integer, primary_key=True)
@@ -32,12 +40,15 @@ class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(255), unique=True, nullable=False, index=True)
     name = db.Column(db.String(255), nullable=False)
+    first_name = db.Column(db.String(120), default="")
+    last_name = db.Column(db.String(120), default="")
     password_hash = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(20), nullable=False, default="employee")  # admin | qaqc | employee
     is_active_flag = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     phone = db.Column(db.String(30), default="")
     department_id = db.Column(db.Integer, db.ForeignKey("departments.id"), nullable=True)
+    employer_id = db.Column(db.Integer, db.ForeignKey("employers.id"), nullable=True)
 
     assignments = db.relationship("Assignment", backref="user", cascade="all, delete-orphan")
     attempts = db.relationship("Attempt", backref="user", cascade="all, delete-orphan")

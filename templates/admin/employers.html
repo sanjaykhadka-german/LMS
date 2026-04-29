@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Employers{% endblock %}
+{% block content %}
+<div class="gb-pageheader">
+  <span class="gb-eyebrow">06 / Structure</span>
+  <h1>Employers</h1>
+  <p class="lede">Companies that staff work for &mdash; e.g. German Butchery itself, or staffing agencies that supply contractors.</p>
+</div>
+
+<div class="card p-4 mb-4">
+  <h5>Add employer</h5>
+  <form method="post" class="row g-2">
+    <div class="col-md-8"><input name="name" required class="form-control" placeholder="Employer name"></div>
+    <div class="col-md-4"><button class="btn btn-primary w-100">Add</button></div>
+  </form>
+</div>
+
+<div class="card p-4">
+  <div class="table-responsive">
+    <table class="table align-middle">
+      <thead><tr><th>Name</th><th class="text-end">Actions</th></tr></thead>
+      <tbody>
+      {% for e in employers %}
+        <tr>
+          <td>{{ e.name }}</td>
+          <td class="text-end">
+            <form method="post" action="{{ url_for('admin_employer_delete', eid=e.id) }}"
+                  class="d-inline"
+                  onsubmit="return confirm('Delete this employer? Users assigned to it will be unassigned.');">
+              <button class="btn btn-sm btn-outline-danger">Delete</button>
+            </form>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="2" class="text-muted">No employers yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

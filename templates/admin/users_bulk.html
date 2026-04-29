@@ -26,12 +26,14 @@
     </div>
   </form>
   <div class="form-text mt-2">
-    <strong>Required columns:</strong> <code>email</code>, <code>name</code>, <code>department</code>.
-    <strong>Optional:</strong> <code>phone</code>, <code>role</code>, <code>machines</code>.
-    Missing departments and machines are created automatically. Existing emails are skipped.
-    A temporary password is generated and emailed (if Resend is configured).
+    <strong>Required columns:</strong> <code>First Name</code>, <code>Last Name</code>,
+    <code>Email</code>, <code>Phone</code>, <code>Department</code>, <code>Employer</code>.
+    <strong>Optional:</strong> <code>Role</code>, <code>Machines</code>.
+    Missing departments, employers and machines are created automatically.
+    Existing emails are skipped. A temporary password is generated and emailed
+    (if Resend is configured).
     {% if not current_user.is_admin %}
-      <br><strong>Note:</strong> the <code>role</code> column is ignored for QA/QC uploaders &mdash; all imported users will be created as employees. Ask an admin to promote anyone who needs a different role.
+      <br><strong>Note:</strong> the <code>Role</code> column is ignored for QA/QC uploaders &mdash; all imported users will be created as employees. Ask an admin to promote anyone who needs a different role.
     {% endif %}
   </div>
 </div>

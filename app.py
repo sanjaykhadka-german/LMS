@@ -16,7 +16,7 @@ from werkzeug.utils import secure_filename
 from config import Config
 from models import (db, User, Module, ModuleMedia, ContentItem,
                     ContentItemMedia, Question, Choice, Assignment, Attempt,
-                    Department, Machine, UploadedFile, ModuleVersion,
+                    Department, Employer, Machine, UploadedFile, ModuleVersion,
                     AuditLog)
 from email_service import (notify_invite, notify_assignment,
                            notify_attempt, notify_reminder,
@@ -45,6 +45,7 @@ def create_app():
         db.create_all()
         ensure_schema_upgrades(app)
         backfill_missing_due_at()
+        backfill_user_first_last()
         bootstrap_admin(app)
 
     @app.template_filter("fromjson")
@@ -86,6 +87,15 @@ def ensure_schema_upgrades(app):
         if not col_exists("users", "department_id") and "departments" in tables:
             upgrades.append(("users.department_id",
                 "ALTER TABLE users ADD COLUMN department_id INTEGER REFERENCES departments(id)"))
+        if not col_exists("users", "first_name"):
+            upgrades.append(("users.first_name",
+                "ALTER TABLE users ADD COLUMN first_name VARCHAR(120) DEFAULT ''"))
+        if not col_exists("users", "last_name"):
+            upgrades.append(("users.last_name",
+                "ALTER TABLE users ADD COLUMN last_name VARCHAR(120) DEFAULT ''"))
+        if not col_exists("users", "employer_id") and "employers" in tables:
+            upgrades.append(("users.employer_id",
+                "ALTER TABLE users ADD COLUMN employer_id INTEGER REFERENCES employers(id)"))
     if "modules" in tables and not col_exists("modules", "created_by_id"):
         upgrades.append(("modules.created_by_id",
             "ALTER TABLE modules ADD COLUMN created_by_id INTEGER REFERENCES users(id)"))
@@ -109,6 +119,26 @@ def assignment_due_from(dt):
     """Due date for an assignment assigned at `dt` (+ ASSIGNMENT_VALIDITY_DAYS)."""
     days = current_app.config.get("ASSIGNMENT_VALIDITY_DAYS", 180)
     return dt + timedelta(days=days)
+
+
+def backfill_user_first_last():
+    """Split legacy User.name into first_name / last_name on first space.
+    Only touches rows whose first_name is still empty so we don't clobber
+    edited names. Trailing parts collapse into last_name."""
+    rows = User.query.filter((User.first_name == "") | (User.first_name.is_(None))).all()
+    if not rows:
+        return
+    changed = 0
+    for u in rows:
+        full = (u.name or "").strip()
+        if not full:
+            continue
+        parts = full.split(None, 1)
+        u.first_name = parts[0]
+        u.last_name = parts[1] if len(parts) > 1 else ""
+        changed += 1
+    if changed:
+        db.session.commit()
 
 
 def backfill_missing_due_at():
@@ -237,6 +267,34 @@ def qaqc_required(fn):
 
 
 VALID_ROLES = ("admin", "qaqc", "employee")
+
+
+def get_or_create_employer(name):
+    """Look up an Employer by name (case-sensitive match like Department),
+    create it if missing. Caller is responsible for db.session.commit().
+    Returns None for blank input."""
+    name = (name or "").strip()
+    if not name:
+        return None
+    emp = Employer.query.filter_by(name=name).first()
+    if not emp:
+        emp = Employer(name=name)
+        db.session.add(emp)
+        db.session.flush()
+    return emp
+
+
+def get_or_create_department(name):
+    """Same idea as get_or_create_employer for departments."""
+    name = (name or "").strip()
+    if not name:
+        return None
+    dept = Department.query.filter_by(name=name).first()
+    if not dept:
+        dept = Department(name=name)
+        db.session.add(dept)
+        db.session.flush()
+    return dept
 
 
 def allowed_file(filename):
@@ -1704,28 +1762,51 @@ def register_routes(app):
     def admin_employees():
         employees = (User.query
                      .options(db.joinedload(User.department),
+                              db.joinedload(User.employer),
                               db.selectinload(User.machines))
                      .order_by(User.role.desc(), User.name)
                      .all())
         departments = Department.query.order_by(Department.name).all()
+        employers = Employer.query.order_by(Employer.name).all()
         return render_template("admin/employees.html",
-                               employees=employees, departments=departments)
+                               employees=employees, departments=departments,
+                               employers=employers)
 
     @app.route("/admin/employees/new", methods=["POST"])
     @admin_required
     def admin_employee_new():
-        name = request.form["name"].strip()
-        email = request.form["email"].strip().lower()
+        first_name = request.form.get("first_name", "").strip()
+        last_name = request.form.get("last_name", "").strip()
+        email = request.form.get("email", "").strip().lower()
+        phone = request.form.get("phone", "").strip()
+        dept_raw = request.form.get("department_id", "").strip()
+        employer_name = request.form.get("employer_name", "").strip()
         role = request.form.get("role", "employee")
         if role not in VALID_ROLES:
             role = "employee"
+
+        missing = []
+        if not first_name: missing.append("First name")
+        if not last_name:  missing.append("Last name")
+        if not email or "@" not in email: missing.append("Email")
+        if not phone:      missing.append("Phone")
+        if not dept_raw.isdigit(): missing.append("Department")
+        if not employer_name: missing.append("Employer")
+        if missing:
+            flash("Missing required field(s): " + ", ".join(missing), "danger")
+            return redirect(url_for("admin_employees"))
+
         if User.query.filter_by(email=email).first():
             flash("A user with this email already exists.", "danger")
             return redirect(url_for("admin_employees"))
-        dept_raw = request.form.get("department_id", "").strip()
-        department_id = int(dept_raw) if dept_raw.isdigit() else None
+
+        employer = get_or_create_employer(employer_name)
+        full_name = f"{first_name} {last_name}".strip()
         temp_pw = secrets.token_urlsafe(9)
-        u = User(name=name, email=email, role=role, department_id=department_id)
+        u = User(name=full_name, first_name=first_name, last_name=last_name,
+                 email=email, phone=phone, role=role,
+                 department_id=int(dept_raw),
+                 employer_id=employer.id if employer else None)
         u.set_password(temp_pw)
         db.session.add(u)
         db.session.flush()
@@ -1793,10 +1874,29 @@ def register_routes(app):
     def admin_employee_edit(uid):
         u = db.session.get(User, uid) or abort(404)
         if request.method == "POST":
-            u.name = request.form.get("name", u.name).strip() or u.name
-            u.phone = request.form.get("phone", "").strip()
+            first_name = request.form.get("first_name", u.first_name or "").strip()
+            last_name = request.form.get("last_name", u.last_name or "").strip()
+            phone = request.form.get("phone", "").strip()
             dept_raw = request.form.get("department_id", "").strip()
-            u.department_id = int(dept_raw) if dept_raw else None
+            employer_name = request.form.get("employer_name", "").strip()
+
+            missing = []
+            if not first_name: missing.append("First name")
+            if not last_name:  missing.append("Last name")
+            if not phone:      missing.append("Phone")
+            if not dept_raw.isdigit(): missing.append("Department")
+            if not employer_name: missing.append("Employer")
+            if missing:
+                flash("Missing required field(s): " + ", ".join(missing), "danger")
+                return redirect(url_for("admin_employee_edit", uid=u.id))
+
+            u.first_name = first_name
+            u.last_name = last_name
+            u.name = f"{first_name} {last_name}".strip()
+            u.phone = phone
+            u.department_id = int(dept_raw)
+            u.employer_id = get_or_create_employer(employer_name).id
+
             machine_ids = [int(x) for x in request.form.getlist("machine_ids") if x.isdigit()]
             u.machines = Machine.query.filter(Machine.id.in_(machine_ids)).all() if machine_ids else []
             new_role = request.form.get("role", u.role)
@@ -1808,9 +1908,11 @@ def register_routes(app):
             flash(f"{u.name} updated.", "success")
             return redirect(url_for("admin_employees"))
         departments = Department.query.order_by(Department.name).all()
+        employers = Employer.query.order_by(Employer.name).all()
         machines = Machine.query.order_by(Machine.name).all()
         return render_template("admin/employee_edit.html",
-                               employee=u, departments=departments, machines=machines)
+                               employee=u, departments=departments,
+                               employers=employers, machines=machines)
 
     @app.route("/admin/employees/<int:uid>")
     @admin_required
@@ -1882,11 +1984,13 @@ def register_routes(app):
         """Download a CSV template that opens cleanly in Excel."""
         buf = io.StringIO()
         w = csv.writer(buf)
-        w.writerow(["name", "email", "phone", "department", "role", "machines"])
-        w.writerow(["Jane Doe", "jane.doe@example.com", "0400 000 000",
-                    "Production", "employee", "Mincer; Sausage filler"])
-        w.writerow(["John Smith", "john.smith@example.com", "",
-                    "Packing", "employee", ""])
+        w.writerow(["First Name", "Last Name", "Email", "Phone",
+                    "Department", "Role", "Employer", "Machines"])
+        w.writerow(["Jane", "Doe", "jane.doe@example.com", "0400 000 000",
+                    "Production", "employee", "German Butchery",
+                    "Mincer; Sausage filler"])
+        w.writerow(["John", "Smith", "john.smith@example.com", "0411 111 111",
+                    "Packing", "employee", "Acme Staffing", ""])
         # UTF-8 BOM so Excel auto-detects encoding when opening the .csv
         body = "﻿" + buf.getvalue()
         return Response(body, mimetype="text/csv",
@@ -1919,10 +2023,20 @@ def register_routes(app):
             flash("CSV must be UTF-8 encoded.", "danger")
             return redirect(back)
         reader = csv.DictReader(io.StringIO(text))
-        if not reader.fieldnames or "email" not in [h.lower().strip() for h in reader.fieldnames]:
-            flash("CSV must have a header row with at least an 'email' column.", "danger")
+        if not reader.fieldnames:
+            flash("CSV is empty — no header row found.", "danger")
             return redirect(back)
-        header_map = {h.lower().strip(): h for h in reader.fieldnames}
+
+        # Normalize header keys: lowercase + collapse internal whitespace to
+        # single spaces so "First Name" / "first name" / "first  name" all map
+        # to the same canonical key "first name".
+        def _norm(h):
+            return " ".join((h or "").lower().split())
+        header_map = {_norm(h): h for h in reader.fieldnames}
+
+        if "email" not in header_map:
+            flash("CSV must have an 'Email' column.", "danger")
+            return redirect(back)
 
         def cell(row, key):
             return (row.get(header_map.get(key, ""), "") or "").strip()
@@ -1934,8 +2048,18 @@ def register_routes(app):
         # CSV row 1 is the header; data rows start at line 2.
         for row_num, row in enumerate(reader, start=2):
             email = cell(row, "email").lower()
-            name = cell(row, "name")
+            first_name = cell(row, "first name")
+            last_name = cell(row, "last name")
+            # Back-compat: accept a single "Name" column and split on first space.
+            if not first_name and not last_name:
+                legacy = cell(row, "name")
+                if legacy:
+                    parts = legacy.split(None, 1)
+                    first_name = parts[0]
+                    last_name = parts[1] if len(parts) > 1 else ""
+            phone = cell(row, "phone")
             dept_name = cell(row, "department")
+            employer_name = cell(row, "employer")
 
             def _reject(reason):
                 nonlocal skipped
@@ -1951,17 +2075,25 @@ def register_routes(app):
             if "@" not in email:
                 _reject("invalid email")
                 continue
-            if not name:
-                _reject("missing name")
+            if not first_name:
+                _reject("missing first name")
+                continue
+            if not last_name:
+                _reject("missing last name")
+                continue
+            if not phone:
+                _reject("missing phone")
                 continue
             if not dept_name:
                 _reject("missing department")
+                continue
+            if not employer_name:
+                _reject("missing employer")
                 continue
             if User.query.filter_by(email=email).first():
                 _reject("duplicate email (already exists)")
                 continue
 
-            phone = cell(row, "phone")
             machines_raw = cell(row, "machines")
             role = cell(row, "role").lower() or "employee"
             if role not in VALID_ROLES:
@@ -1969,11 +2101,8 @@ def register_routes(app):
             if not actor_is_admin:
                 role = "employee"
 
-            dept = Department.query.filter_by(name=dept_name).first()
-            if not dept:
-                dept = Department(name=dept_name)
-                db.session.add(dept)
-                db.session.flush()
+            dept = get_or_create_department(dept_name)
+            employer = get_or_create_employer(employer_name)
 
             machine_objs = []
             if machines_raw:
@@ -1985,9 +2114,12 @@ def register_routes(app):
                         db.session.flush()
                     machine_objs.append(m)
 
+            full_name = f"{first_name} {last_name}".strip()
             temp_pw = secrets.token_urlsafe(9)
-            u = User(name=name, email=email, role=role, phone=phone,
-                     department_id=dept.id)
+            u = User(name=full_name, first_name=first_name, last_name=last_name,
+                     email=email, role=role, phone=phone,
+                     department_id=dept.id,
+                     employer_id=employer.id)
             u.set_password(temp_pw)
             u.machines = machine_objs
             db.session.add(u)
@@ -2013,8 +2145,39 @@ def register_routes(app):
                                error_cap=ERROR_CAP,
                                back_url=back)
 
+    @app.route("/admin/employers", methods=["GET", "POST"])
+    @author_required
+    def admin_employers():
+        if request.method == "POST":
+            name = request.form.get("name", "").strip()
+            if name and not Employer.query.filter_by(name=name).first():
+                e = Employer(name=name)
+                db.session.add(e)
+                db.session.flush()
+                log_audit("create", "employer", e.id,
+                          f"Created employer '{e.name}'")
+                db.session.commit()
+                flash(f"Employer '{name}' added.", "success")
+            elif name:
+                flash("That employer already exists.", "warning")
+            return redirect(url_for("admin_employers"))
+        employers = Employer.query.order_by(Employer.name).all()
+        return render_template("admin/employers.html", employers=employers)
+
+    @app.route("/admin/employers/<int:eid>/delete", methods=["POST"])
+    @author_required
+    def admin_employer_delete(eid):
+        e = db.session.get(Employer, eid) or abort(404)
+        User.query.filter_by(employer_id=e.id).update({"employer_id": None})
+        log_audit("delete", "employer", e.id,
+                  f"Deleted employer '{e.name}'")
+        db.session.delete(e)
+        db.session.commit()
+        flash(f"Employer '{e.name}' deleted.", "success")
+        return redirect(url_for("admin_employers"))
+
     @app.route("/admin/departments", methods=["GET", "POST"])
-    @admin_required
+    @author_required
     def admin_departments():
         if request.method == "POST":
             name = request.form.get("name", "").strip()
@@ -2033,7 +2196,7 @@ def register_routes(app):
         return render_template("admin/departments.html", departments=depts)
 
     @app.route("/admin/departments/<int:did>/delete", methods=["POST"])
-    @admin_required
+    @author_required
     def admin_department_delete(did):
         d = db.session.get(Department, did) or abort(404)
         User.query.filter_by(department_id=d.id).update({"department_id": None})
@@ -2045,7 +2208,7 @@ def register_routes(app):
         return redirect(url_for("admin_departments"))
 
     @app.route("/admin/machines", methods=["GET", "POST"])
-    @admin_required
+    @author_required
     def admin_machines():
         if request.method == "POST":
             name = request.form.get("name", "").strip()
@@ -2064,7 +2227,7 @@ def register_routes(app):
         return render_template("admin/machines.html", machines=machines)
 
     @app.route("/admin/machines/<int:mid>/delete", methods=["POST"])
-    @admin_required
+    @author_required
     def admin_machine_delete(mid):
         m = db.session.get(Machine, mid) or abort(404)
         log_audit("delete", "machine", m.id,

@@ -12,27 +12,41 @@
 <div class="card p-4">
   <form method="post" class="row g-3">
     <div class="col-md-6">
-      <label class="form-label">Name</label>
-      <input name="name" required class="form-control" value="{{ employee.name }}">
+      <label class="form-label">First name <span class="text-danger">*</span></label>
+      <input name="first_name" required class="form-control" value="{{ employee.first_name or '' }}">
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Last name <span class="text-danger">*</span></label>
+      <input name="last_name" required class="form-control" value="{{ employee.last_name or '' }}">
     </div>
     <div class="col-md-6">
       <label class="form-label">Email</label>
       <input class="form-control" value="{{ employee.email }}" disabled>
+      <div class="form-text">Email is the login identifier and can't be changed here.</div>
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Phone <span class="text-danger">*</span></label>
+      <input name="phone" required class="form-control" value="{{ employee.phone or '' }}">
     </div>
 
     <div class="col-md-6">
-      <label class="form-label">Phone</label>
-      <input name="phone" class="form-control" value="{{ employee.phone or '' }}">
-    </div>
-    <div class="col-md-6">
-      <label class="form-label">Department</label>
-      <select name="department_id" class="form-select">
-        <option value="">— None —</option>
+      <label class="form-label">Department <span class="text-danger">*</span></label>
+      <select name="department_id" required class="form-select">
+        <option value="">— Choose a department —</option>
         {% for d in departments %}
           <option value="{{ d.id }}" {% if employee.department_id == d.id %}selected{% endif %}>{{ d.name }}</option>
         {% endfor %}
       </select>
       <div class="form-text">Manage the list on the <a href="{{ url_for('admin_departments') }}">Departments</a> page.</div>
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Employer <span class="text-danger">*</span></label>
+      <input name="employer_name" required class="form-control" list="employers-list-edit"
+             value="{{ employee.employer.name if employee.employer else '' }}">
+      <datalist id="employers-list-edit">
+        {% for emp in employers %}<option value="{{ emp.name }}">{% endfor %}
+      </datalist>
+      <div class="form-text">Free-text — type a new employer name and it'll be created automatically.</div>
     </div>
 
     <div class="col-12">

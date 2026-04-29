@@ -16,12 +16,13 @@
 {% set is_assigns    = ep.startswith('admin_assignment') %}
 {% set is_register   = ep.startswith('admin_register') or ep == 'admin_send_reminders' %}
 {% set is_users      = ep.startswith('admin_employee') %}
+{% set is_employers  = ep.startswith('admin_employer') %}
 {% set is_depts      = ep.startswith('admin_department') %}
 {% set is_machines   = ep.startswith('admin_machine') %}
 {% set is_my         = ep.startswith('my_') %}
 {% set is_pass       = ep == 'change_password' %}
 {% set is_audit      = ep.startswith('admin_audit_logs') %}
-{% set in_user_menu  = is_depts or is_machines or is_audit or is_my or is_pass %}
+{% set in_user_menu  = is_employers or is_depts or is_machines or is_audit or is_my or is_pass %}
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top gb-navbar">
   <div class="container">
     {% if current_user.is_authenticated %}
@@ -65,7 +66,8 @@
               {{ current_user.name }}
             </a>
             <ul class="dropdown-menu dropdown-menu-end gb-user-menu">
-              {% if current_user.is_admin %}
+              {% if current_user.can_author %}
+                <li><a class="dropdown-item {% if is_employers %}active{% endif %}" href="{{ url_for('admin_employers') }}">Employers</a></li>
                 <li><a class="dropdown-item {% if is_depts %}active{% endif %}" href="{{ url_for('admin_departments') }}">Departments</a></li>
                 <li><a class="dropdown-item {% if is_machines %}active{% endif %}" href="{{ url_for('admin_machines') }}">Machines</a></li>
                 <li><hr class="dropdown-divider"></li>
