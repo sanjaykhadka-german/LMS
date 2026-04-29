@@ -826,3 +826,73 @@ hr { border-color: var(--gb-line); opacity: 1; }
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.88rem;
 }
+
+/* ---- Quick start tour ---------------------------------------------------- */
+#gbTourBackdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(27, 27, 27, 0.55);
+  z-index: 1080;
+  display: none;
+}
+.gb-tour-spotlight {
+  position: relative;
+  z-index: 1085;
+  border-radius: 6px;
+  box-shadow:
+    0 0 0 3px var(--gb-brass),
+    0 0 0 7px rgba(176, 138, 62, 0.35),
+    0 0 24px rgba(176, 138, 62, 0.55);
+  transition: box-shadow 0.25s ease;
+}
+#gbTourCard {
+  position: fixed;
+  z-index: 1090;
+  width: 320px;
+  max-width: calc(100vw - 24px);
+  display: none;
+  background: var(--gb-paper);
+  border: 1px solid var(--gb-line);
+  border-radius: var(--gb-radius-lg);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+  padding: 16px 18px 14px;
+  font-size: 0.95rem;
+}
+#gbTourCard .gb-tour-step {
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gb-mute);
+  margin-bottom: 4px;
+}
+#gbTourCard .gb-tour-title {
+  font-family: var(--gb-font-head);
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--gb-burgundy);
+  margin: 0 0 6px 0;
+}
+#gbTourCard .gb-tour-body {
+  color: var(--gb-ink-soft);
+  margin: 0 0 14px 0;
+  line-height: 1.4;
+}
+#gbTourCard .gb-tour-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+#gbTourCard .gb-tour-actions .gb-tour-skip {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--gb-mute);
+  font-size: 0.85rem;
+  cursor: pointer;
+  text-decoration: underline;
+}
+#gbTourCard .gb-tour-actions .gb-tour-nav {
+  display: flex;
+  gap: 6px;
+}

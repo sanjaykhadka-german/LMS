@@ -12,6 +12,7 @@ from flask import (Flask, render_template, redirect, url_for, request,
 from flask_login import (LoginManager, login_user, logout_user,
                          login_required, current_user)
 from werkzeug.utils import secure_filename
+from sqlalchemy import or_
 
 from config import Config
 from models import (db, User, Module, ModuleMedia, ContentItem,
@@ -915,6 +916,52 @@ def register_routes(app):
     def qaqc_dashboard():
         ctx = build_dashboard_context()
         return render_template("qaqc/dashboard.html", **ctx)
+
+    # universal navbar search — jump to a user or module by name
+    @app.route("/admin/search")
+    @author_required
+    def admin_search():
+        q = (request.args.get("q") or "").strip()
+        if len(q) < 2:
+            return jsonify(users=[], modules=[])
+
+        like = f"%{q}%"
+        results = {"users": [], "modules": []}
+
+        modules = (
+            Module.query
+            .filter(Module.title.ilike(like))
+            .order_by(Module.title.asc())
+            .limit(8)
+            .all()
+        )
+        results["modules"] = [
+            {"id": m.id, "title": m.title,
+             "url": url_for("admin_module_ai_studio", module_id=m.id)}
+            for m in modules
+        ]
+
+        if current_user.is_admin:
+            users = (
+                User.query
+                .filter(User.is_active_flag == True)
+                .filter(or_(
+                    User.name.ilike(like),
+                    User.first_name.ilike(like),
+                    User.last_name.ilike(like),
+                    User.email.ilike(like),
+                ))
+                .order_by(User.name.asc())
+                .limit(8)
+                .all()
+            )
+            results["users"] = [
+                {"id": u.id, "name": u.name, "email": u.email,
+                 "url": url_for("admin_employee_detail", uid=u.id)}
+                for u in users
+            ]
+
+        return jsonify(**results)
 
     # modules
     @app.route("/admin/modules")

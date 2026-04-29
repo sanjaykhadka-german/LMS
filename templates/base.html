@@ -42,26 +42,37 @@
       <span class="navbar-toggler-icon"></span>
     </button>
     <div class="collapse navbar-collapse" id="nav">
-      <ul class="navbar-nav mx-lg-auto">
+      <ul class="navbar-nav me-auto">
         {% if current_user.is_authenticated %}
           {% if current_user.is_admin %}
-            <li class="nav-item"><a class="nav-link {% if ep == 'admin_dashboard' %}active{% endif %}" href="{{ url_for('admin_dashboard') }}">Dashboard</a></li>
+            <li class="nav-item"><a data-tour="dashboard" class="nav-link {% if ep == 'admin_dashboard' %}active{% endif %}" href="{{ url_for('admin_dashboard') }}">Dashboard</a></li>
           {% elif current_user.is_qaqc %}
-            <li class="nav-item"><a class="nav-link {% if ep == 'qaqc_dashboard' %}active{% endif %}" href="{{ url_for('qaqc_dashboard') }}">Dashboard</a></li>
+            <li class="nav-item"><a data-tour="dashboard" class="nav-link {% if ep == 'qaqc_dashboard' %}active{% endif %}" href="{{ url_for('qaqc_dashboard') }}">Dashboard</a></li>
           {% endif %}
           {% if current_user.can_author %}
-            <li class="nav-item"><a class="nav-link {% if is_modules %}active{% endif %}" href="{{ url_for('admin_modules') }}">Modules</a></li>
-            <li class="nav-item"><a class="nav-link {% if is_assigns %}active{% endif %}" href="{{ url_for('admin_assignments') }}">Assignments</a></li>
-            <li class="nav-item"><a class="nav-link {% if is_register %}active{% endif %}" href="{{ url_for('admin_register') }}">Register</a></li>
+            <li class="nav-item"><a data-tour="modules" class="nav-link {% if is_modules %}active{% endif %}" href="{{ url_for('admin_modules') }}">Modules</a></li>
+            <li class="nav-item"><a data-tour="assignments" class="nav-link {% if is_assigns %}active{% endif %}" href="{{ url_for('admin_assignments') }}">Assignments</a></li>
+            <li class="nav-item"><a data-tour="register" class="nav-link {% if is_register %}active{% endif %}" href="{{ url_for('admin_register') }}">Register</a></li>
           {% endif %}
           {% if current_user.is_admin %}
-            <li class="nav-item"><a class="nav-link {% if is_users %}active{% endif %}" href="{{ url_for('admin_employees') }}">Users</a></li>
+            <li class="nav-item"><a data-tour="users" class="nav-link {% if is_users %}active{% endif %}" href="{{ url_for('admin_employees') }}">Users</a></li>
           {% endif %}
         {% endif %}
       </ul>
+      {% if current_user.is_authenticated and current_user.can_author %}
+        <div data-tour="search" class="gb-search position-relative me-lg-3 my-2 my-lg-0" style="min-width: 240px;">
+          <input type="search" id="gbSearchInput" class="form-control form-control-sm"
+                 placeholder="Search users or modules…" autocomplete="off"
+                 aria-label="Search users or modules">
+          <div id="gbSearchResults"
+               class="dropdown-menu shadow w-100 p-0"
+               style="display:none; position:absolute; top:100%; left:0; max-height:60vh; overflow-y:auto;">
+          </div>
+        </div>
+      {% endif %}
       <ul class="navbar-nav align-items-lg-center">
         {% if current_user.is_authenticated %}
-          <li class="nav-item dropdown">
+          <li class="nav-item dropdown" data-tour="account">
             <a class="nav-link dropdown-toggle {% if in_user_menu %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
               {{ current_user.name }}
             </a>
@@ -80,6 +91,7 @@
               {% endif %}
               <li><a class="dropdown-item {% if is_profile %}active{% endif %}" href="{{ url_for('profile') }}">Profile</a></li>
               <li><hr class="dropdown-divider"></li>
+              <li><a class="dropdown-item" href="#" id="gbTourReplay">Quick start tour</a></li>
               <li><a class="dropdown-item" href="{{ url_for('logout') }}">Logout</a></li>
             </ul>
           </li>
@@ -90,6 +102,22 @@
     </div>
   </div>
 </nav>
+
+{% if current_user.is_authenticated %}
+<div id="gbTourBackdrop"></div>
+<div id="gbTourCard" role="dialog" aria-modal="true" aria-labelledby="gbTourTitle">
+  <div class="gb-tour-step" id="gbTourStepNum"></div>
+  <h6 class="gb-tour-title" id="gbTourTitle"></h6>
+  <p class="gb-tour-body" id="gbTourBody"></p>
+  <div class="gb-tour-actions">
+    <button type="button" class="gb-tour-skip" id="gbTourSkip">Skip tour</button>
+    <div class="gb-tour-nav">
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="gbTourBack">Back</button>
+      <button type="button" class="btn btn-primary btn-sm" id="gbTourNext">Next</button>
+    </div>
+  </div>
+</div>
+{% endif %}
 
 <main class="gb-main">
 <div class="container py-4">
@@ -140,6 +168,304 @@
     if (sameOrigin) {
       btn.style.display = '';
       btn.addEventListener('click', function () { history.back(); });
+    }
+  })();
+  (function () {
+    var input = document.getElementById('gbSearchInput');
+    var box = document.getElementById('gbSearchResults');
+    if (!input || !box) return;
+
+    var timer = null;
+    var seq = 0;
+    var items = [];
+    var active = -1;
+
+    function close() {
+      box.style.display = 'none';
+      box.innerHTML = '';
+      items = [];
+      active = -1;
+    }
+
+    function highlight(i) {
+      items.forEach(function (el, idx) {
+        if (idx === i) el.classList.add('active');
+        else el.classList.remove('active');
+      });
+      active = i;
+      if (i >= 0 && items[i]) {
+        items[i].scrollIntoView({ block: 'nearest' });
+      }
+    }
+
+    function makeRow(href, primary, secondary) {
+      var a = document.createElement('a');
+      a.className = 'dropdown-item d-flex flex-column py-2';
+      a.href = href;
+      a.style.whiteSpace = 'normal';
+      var p = document.createElement('span');
+      p.style.fontWeight = '600';
+      p.textContent = primary;
+      var s = document.createElement('span');
+      s.className = 'small text-muted';
+      s.textContent = secondary;
+      a.appendChild(p);
+      a.appendChild(s);
+      return a;
+    }
+
+    function render(data) {
+      box.innerHTML = '';
+      items = [];
+
+      var users = data.users || [];
+      var modules = data.modules || [];
+
+      if (!users.length && !modules.length) {
+        var empty = document.createElement('div');
+        empty.className = 'dropdown-item-text text-muted small py-2';
+        empty.textContent = 'No matches';
+        box.appendChild(empty);
+        box.style.display = 'block';
+        return;
+      }
+
+      if (users.length) {
+        var hu = document.createElement('h6');
+        hu.className = 'dropdown-header';
+        hu.textContent = 'Users';
+        box.appendChild(hu);
+        users.forEach(function (u) {
+          var row = makeRow(u.url, u.name || u.email || '(no name)', u.email || '');
+          box.appendChild(row);
+          items.push(row);
+        });
+      }
+
+      if (modules.length) {
+        if (users.length) box.appendChild(document.createElement('hr')).className = 'dropdown-divider my-1';
+        var hm = document.createElement('h6');
+        hm.className = 'dropdown-header';
+        hm.textContent = 'Modules';
+        box.appendChild(hm);
+        modules.forEach(function (m) {
+          var row = makeRow(m.url, m.title || '(untitled)', 'Module');
+          box.appendChild(row);
+          items.push(row);
+        });
+      }
+
+      box.style.display = 'block';
+      active = -1;
+    }
+
+    function run(q) {
+      var mine = ++seq;
+      fetch('{{ url_for("admin_search") }}?q=' + encodeURIComponent(q), {
+        credentials: 'same-origin',
+        headers: { 'Accept': 'application/json' }
+      })
+        .then(function (r) { return r.ok ? r.json() : { users: [], modules: [] }; })
+        .then(function (data) {
+          if (mine !== seq) return; // stale
+          render(data);
+        })
+        .catch(function () { /* swallow */ });
+    }
+
+    input.addEventListener('input', function () {
+      var q = input.value.trim();
+      if (timer) clearTimeout(timer);
+      if (q.length < 2) { close(); return; }
+      timer = setTimeout(function () { run(q); }, 200);
+    });
+
+    input.addEventListener('keydown', function (e) {
+      if (box.style.display === 'none' || !items.length) {
+        if (e.key === 'Escape') input.blur();
+        return;
+      }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        highlight((active + 1) % items.length);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        highlight((active - 1 + items.length) % items.length);
+      } else if (e.key === 'Enter') {
+        if (active >= 0 && items[active]) {
+          e.preventDefault();
+          window.location.href = items[active].href;
+        }
+      } else if (e.key === 'Escape') {
+        close();
+        input.blur();
+      }
+    });
+
+    document.addEventListener('click', function (e) {
+      if (!e.target.closest('.gb-search')) close();
+    });
+  })();
+  (function () {
+    var backdrop = document.getElementById('gbTourBackdrop');
+    var card = document.getElementById('gbTourCard');
+    if (!backdrop || !card) return;
+
+    var stepNumEl = document.getElementById('gbTourStepNum');
+    var titleEl = document.getElementById('gbTourTitle');
+    var bodyEl = document.getElementById('gbTourBody');
+    var skipBtn = document.getElementById('gbTourSkip');
+    var backBtn = document.getElementById('gbTourBack');
+    var nextBtn = document.getElementById('gbTourNext');
+    var replayLink = document.getElementById('gbTourReplay');
+    var SEEN_KEY = 'gb_tour_seen_v1';
+
+    var stepDefs = [
+      { anchor: 'center', title: 'Welcome!', body: "Quick start tour — about 30 seconds. We'll point out the main features in your navbar." },
+      { key: 'dashboard',   title: 'Dashboard',          body: 'Your overview of training stats, recent attempts, and reminders to send.' },
+      { key: 'modules',     title: 'Modules',            body: 'Create and edit training modules — questions, content, AI-assisted authoring.' },
+      { key: 'assignments', title: 'Assignments',        body: 'Assign modules to specific staff and track who has completed what.' },
+      { key: 'register',    title: 'Register',           body: 'Invite new staff via email or upload a CSV bulk list.' },
+      { key: 'users',       title: 'Users',              body: 'Manage all employee accounts — edit details, deactivate, or bulk upload.' },
+      { key: 'search',      title: 'Quick search',       body: 'Type a name or module title to jump straight there. Saves scrolling.' },
+      { key: 'account',     title: 'Your account menu',  body: 'Profile, My Training, audit logs — and you can replay this tour anytime via "Quick start tour".' },
+      { anchor: 'center', title: "You're all set!", body: 'Replay this tour anytime from your account menu.' }
+    ];
+
+    var steps = [];
+    var index = 0;
+    var spotlit = null;
+
+    function buildSteps() {
+      steps = stepDefs.filter(function (s) {
+        if (s.anchor === 'center') return true;
+        return !!document.querySelector('[data-tour="' + s.key + '"]');
+      });
+    }
+
+    function clearSpotlight() {
+      if (spotlit) {
+        spotlit.classList.remove('gb-tour-spotlight');
+        spotlit = null;
+      }
+    }
+
+    function positionCardCenter() {
+      card.style.top = '50%';
+      card.style.left = '50%';
+      card.style.transform = 'translate(-50%, -50%)';
+    }
+
+    function positionCardNear(target) {
+      card.style.transform = 'none';
+      // Render first to measure
+      card.style.top = '0px';
+      card.style.left = '0px';
+      var r = target.getBoundingClientRect();
+      var cw = card.offsetWidth || 320;
+      var ch = card.offsetHeight || 160;
+      var vw = window.innerWidth;
+      var vh = window.innerHeight;
+      var top = r.bottom + 12;
+      var left = r.left + r.width / 2 - cw / 2;
+      if (left < 8) left = 8;
+      if (left + cw > vw - 8) left = vw - cw - 8;
+      if (top + ch > vh - 8) top = Math.max(8, r.top - ch - 12);
+      card.style.top = top + 'px';
+      card.style.left = left + 'px';
+    }
+
+    function render() {
+      var s = steps[index];
+      clearSpotlight();
+      stepNumEl.textContent = 'Step ' + (index + 1) + ' of ' + steps.length;
+      titleEl.textContent = s.title;
+      bodyEl.textContent = s.body;
+      backBtn.disabled = (index === 0);
+      nextBtn.textContent = (index === steps.length - 1) ? 'Done' : 'Next';
+
+      if (s.anchor === 'center') {
+        positionCardCenter();
+      } else {
+        var target = document.querySelector('[data-tour="' + s.key + '"]');
+        if (target) {
+          target.classList.add('gb-tour-spotlight');
+          spotlit = target;
+          positionCardNear(target);
+        } else {
+          positionCardCenter();
+        }
+      }
+    }
+
+    function start() {
+      buildSteps();
+      if (!steps.length) return;
+      index = 0;
+      backdrop.style.display = 'block';
+      card.style.display = 'block';
+      render();
+    }
+
+    function end(markSeen) {
+      clearSpotlight();
+      backdrop.style.display = 'none';
+      card.style.display = 'none';
+      if (markSeen) {
+        try { localStorage.setItem(SEEN_KEY, '1'); } catch (e) {}
+      }
+    }
+
+    nextBtn.addEventListener('click', function () {
+      if (index >= steps.length - 1) { end(true); return; }
+      index += 1;
+      render();
+    });
+    backBtn.addEventListener('click', function () {
+      if (index <= 0) return;
+      index -= 1;
+      render();
+    });
+    skipBtn.addEventListener('click', function () { end(true); });
+
+    document.addEventListener('keydown', function (e) {
+      if (card.style.display === 'none') return;
+      if (e.key === 'Escape') { e.preventDefault(); end(true); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); nextBtn.click(); }
+      else if (e.key === 'ArrowLeft')  { e.preventDefault(); backBtn.click(); }
+    });
+
+    window.addEventListener('resize', function () {
+      if (card.style.display === 'none') return;
+      var s = steps[index];
+      if (s && s.anchor !== 'center') {
+        var target = document.querySelector('[data-tour="' + s.key + '"]');
+        if (target) positionCardNear(target);
+      } else {
+        positionCardCenter();
+      }
+    });
+
+    if (replayLink) {
+      replayLink.addEventListener('click', function (e) {
+        e.preventDefault();
+        // Close any open Bootstrap dropdown so it doesn't overlap the card
+        var openDd = document.querySelector('.dropdown-menu.show');
+        if (openDd && openDd.previousElementSibling) {
+          var ddBtn = openDd.previousElementSibling;
+          if (window.bootstrap && bootstrap.Dropdown) {
+            try { bootstrap.Dropdown.getInstance(ddBtn).hide(); } catch (err) {}
+          }
+        }
+        start();
+      });
+    }
+
+    // Auto-launch on first ever visit (only on wide viewports — navbar is collapsed below lg)
+    var seen = false;
+    try { seen = !!localStorage.getItem(SEEN_KEY); } catch (e) {}
+    if (!seen && window.innerWidth >= 992) {
+      setTimeout(start, 500);
     }
   })();
 </script>
