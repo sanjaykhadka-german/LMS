@@ -17,7 +17,7 @@
 <div class="card p-4">
   <div class="table-responsive">
     <table class="table align-middle module-table">
-      <thead><tr><th>Title</th><th>Content</th><th>Questions</th><th>Created by</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Title</th><th>Content</th><th>Questions</th><th>Created by</th><th>Status</th><th>Version</th><th></th></tr></thead>
       <tbody>
       {% for m in modules %}
         <tr class="module-row"
@@ -31,7 +31,14 @@
             {% if m.is_published %}<span class="badge bg-success">Published</span>
             {% else %}<span class="badge bg-secondary">Draft</span>{% endif %}
           </td>
+          <td>
+            {% set latest = m.versions|first %}
+            {% if latest %}v{{ latest.version_number }}
+            {% else %}<span class="text-muted">—</span>{% endif %}
+          </td>
           <td class="text-end">
+            <a class="btn btn-sm btn-outline-primary"
+               href="{{ url_for('admin_module_ai_studio', module_id=m.id, focus='edit') }}">Edit</a>
             <a class="btn btn-sm btn-outline-secondary" target="_blank"
                href="{{ url_for('admin_module_preview', module_id=m.id) }}">Preview</a>
             <form method="post" action="{{ url_for('admin_module_delete', module_id=m.id) }}"
@@ -41,7 +48,7 @@
           </td>
         </tr>
       {% else %}
-        <tr><td colspan="6" class="text-muted">No modules yet.</td></tr>
+        <tr><td colspan="7" class="text-muted">No modules yet.</td></tr>
       {% endfor %}
       </tbody>
     </table>
