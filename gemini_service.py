@@ -44,11 +44,21 @@ def can_handle(meta):
     return True, None
 
 
+def _read_docx_text(meta):
+    """Load extracted docx text from its sibling .txt file. Falls back to the
+    legacy in-session field for any pre-fix uploads still present."""
+    path = meta.get("text_path")
+    if path and os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            return f.read()
+    return meta.get("extracted_text") or ""
+
+
 def _build_parts_for_file(meta):
     """Convert file metadata → Gemini parts."""
     kind = meta.get("kind")
     if kind == "docx":
-        text = meta.get("extracted_text") or ""
+        text = _read_docx_text(meta)
         return [{"text": f"[Attached .docx: {meta['filename']}]\n{text}"}]
 
     if meta.get("gemini_uri"):

@@ -104,6 +104,16 @@ def _config():
 # Content-block building
 # ------------------------------------------------------------------
 
+def _read_docx_text(meta):
+    """Load extracted docx text from its sibling .txt file. Falls back to the
+    legacy in-session field for any pre-fix uploads still present."""
+    path = meta.get("text_path")
+    if path and os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            return f.read()
+    return meta.get("extracted_text") or ""
+
+
 def can_handle(meta):
     """Return (ok: bool, reason: str|None) — called from file_extract at upload."""
     kind = meta.get("kind")
@@ -136,7 +146,7 @@ def _build_blocks_for_file(meta):
     """Convert file metadata → Anthropic content block(s)."""
     kind = meta.get("kind")
     if kind == "docx":
-        text = meta.get("extracted_text") or ""
+        text = _read_docx_text(meta)
         return [{"type": "text",
                  "text": f"[Attached .docx: {meta['filename']}]\n{text}"}]
 

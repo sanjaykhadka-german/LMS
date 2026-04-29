@@ -112,7 +112,15 @@ def prepare_file(fs, user_id, provider):
                 "This .docx looks empty or has no readable text. "
                 "Try a different file or export to PDF."
             )
-        meta["extracted_text"] = text
+        # Write extracted text to a sibling .txt file rather than storing it in
+        # the Flask session. Flask's default session is a signed cookie capped
+        # at ~4 KB by the browser; multiple docx files would silently push the
+        # cookie past that limit, the browser would drop it, and the next
+        # request would see an empty files_map.
+        text_path = local_path + ".txt"
+        with open(text_path, "w", encoding="utf-8") as f:
+            f.write(text)
+        meta["text_path"] = text_path
 
     # Consult the active provider for kind/size policy
     ok, reason = _provider_can_handle(provider, meta)
@@ -145,12 +153,12 @@ def cleanup_local_files(session_data):
     if not session_data:
         return
     for meta in (session_data.get("files") or {}).values():
-        p = meta.get("local_path")
-        if p and os.path.exists(p):
-            try:
-                os.remove(p)
-            except OSError as e:
-                log.warning("Couldn't delete %s: %s", p, e)
+        for p in (meta.get("local_path"), meta.get("text_path")):
+            if p and os.path.exists(p):
+                try:
+                    os.remove(p)
+                except OSError as e:
+                    log.warning("Couldn't delete %s: %s", p, e)
 
 
 def reap_old_files(user_id, max_age_seconds=7 * 24 * 3600):
