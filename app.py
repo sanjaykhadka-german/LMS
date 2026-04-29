@@ -833,6 +833,25 @@ def register_routes(app):
             return redirect(url_for("my_modules"))
         return redirect(url_for("login"))
 
+    # --- PWA: service worker + manifest served from root scope ---
+    # Render's CDN/proxy will otherwise cache the service worker for hours,
+    # breaking updates. The headers below force a re-fetch each time and
+    # let the SW control the entire site (Service-Worker-Allowed: /).
+    @app.route('/sw.js')
+    def service_worker():
+        response = send_from_directory(app.static_folder, 'sw.js')
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Service-Worker-Allowed'] = '/'
+        response.headers['Content-Type'] = 'application/javascript'
+        return response
+
+    @app.route('/manifest.json')
+    def web_manifest():
+        response = send_from_directory(app.static_folder, 'manifest.json')
+        response.headers['Content-Type'] = 'application/manifest+json'
+        response.headers['Cache-Control'] = 'public, max-age=3600'
+        return response
+
     # --- auth ---
     @app.route("/login", methods=["GET", "POST"])
     def login():

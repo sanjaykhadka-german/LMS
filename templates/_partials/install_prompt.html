@@ -1,0 +1,159 @@
+{# Install-as-PWA prompt. Two states: Android/desktop (beforeinstallprompt) and
+   iOS Safari (manual Share -> Add to Home Screen). Hidden on /login and when
+   already running standalone. Dismissals persist via sessionStorage. #}
+<div id="gbInstallPrompt" class="gb-install-prompt" hidden>
+  <div class="gb-install-prompt__inner">
+    <span class="gb-install-prompt__icon" aria-hidden="true">
+      {# iOS share glyph used for both states; clear visual cue for iOS users. #}
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round"
+           stroke-linejoin="round">
+        <path d="M12 16V4"></path>
+        <path d="M8 8l4-4 4 4"></path>
+        <path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"></path>
+      </svg>
+    </span>
+    <div class="gb-install-prompt__text">
+      <strong class="gb-install-prompt__title">Install GB Training</strong>
+      <span class="gb-install-prompt__body" id="gbInstallBody"></span>
+    </div>
+    <button type="button" id="gbInstallBtn"
+            class="btn btn-sm btn-primary gb-install-prompt__cta" hidden>
+      Install app
+    </button>
+    <button type="button" id="gbInstallClose"
+            class="gb-install-prompt__close" aria-label="Dismiss">&times;</button>
+  </div>
+</div>
+
+<style>
+  .gb-install-prompt {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    z-index: 1070;
+    background: var(--gb-paper, #fff);
+    border: 1px solid var(--gb-line, #E8E1D6);
+    border-radius: var(--gb-radius-lg, 6px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    color: var(--gb-ink, #1B1B1B);
+    font-family: var(--gb-font-body, system-ui, sans-serif);
+  }
+  .gb-install-prompt__inner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+  }
+  .gb-install-prompt__icon {
+    flex: 0 0 auto;
+    color: var(--gb-burgundy, #7C1D1D);
+    display: inline-flex;
+  }
+  .gb-install-prompt__text {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    line-height: 1.3;
+    min-width: 0;
+  }
+  .gb-install-prompt__title {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--gb-ink, #1B1B1B);
+  }
+  .gb-install-prompt__body {
+    font-size: 0.82rem;
+    color: var(--gb-mute, #6B6258);
+  }
+  .gb-install-prompt__cta {
+    flex: 0 0 auto;
+  }
+  .gb-install-prompt__close {
+    flex: 0 0 auto;
+    background: transparent;
+    border: 0;
+    color: var(--gb-mute, #6B6258);
+    font-size: 1.4rem;
+    line-height: 1;
+    padding: 0 4px;
+    cursor: pointer;
+  }
+  .gb-install-prompt__close:hover { color: var(--gb-ink, #1B1B1B); }
+  @media (min-width: 576px) {
+    .gb-install-prompt {
+      left: auto;
+      right: 16px;
+      bottom: 16px;
+      max-width: 420px;
+    }
+  }
+  @media (display-mode: standalone) {
+    .gb-install-prompt { display: none !important; }
+  }
+</style>
+
+<script>
+  (function () {
+    var prompt = document.getElementById('gbInstallPrompt');
+    if (!prompt) return;
+
+    // Already installed / running standalone — bail out.
+    var isStandalone = window.matchMedia('(display-mode: standalone)').matches
+                       || window.navigator.standalone === true;
+    if (isStandalone) return;
+
+    // User dismissed earlier this session — stay hidden.
+    var DISMISS_KEY = 'gb_install_dismissed_v1';
+    try {
+      if (sessionStorage.getItem(DISMISS_KEY) === '1') return;
+    } catch (e) {}
+
+    var bodyEl = document.getElementById('gbInstallBody');
+    var btn = document.getElementById('gbInstallBtn');
+    var closeBtn = document.getElementById('gbInstallClose');
+
+    var ua = window.navigator.userAgent || '';
+    var isIOS = /iPhone|iPad|iPod/.test(ua) && !/CriOS|FxiOS|EdgiOS/.test(ua);
+
+    function show(message, withButton) {
+      bodyEl.textContent = message;
+      btn.hidden = !withButton;
+      prompt.hidden = false;
+    }
+
+    function hide(remember) {
+      prompt.hidden = true;
+      if (remember) {
+        try { sessionStorage.setItem(DISMISS_KEY, '1'); } catch (e) {}
+      }
+    }
+
+    closeBtn.addEventListener('click', function () { hide(true); });
+
+    // --- Android / desktop Chrome / Edge -------------------------------
+    var deferredPrompt = null;
+    window.addEventListener('beforeinstallprompt', function (e) {
+      e.preventDefault();
+      deferredPrompt = e;
+      show('Add this site to your home screen for one-tap access.', true);
+    });
+
+    btn.addEventListener('click', function () {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      deferredPrompt.userChoice.then(function () {
+        deferredPrompt = null;
+        hide(true);
+      });
+    });
+
+    window.addEventListener('appinstalled', function () { hide(true); });
+
+    // --- iOS Safari ----------------------------------------------------
+    if (isIOS) {
+      show('Install on your phone — tap the Share icon, then Add to Home Screen.', false);
+    }
+  })();
+</script>
