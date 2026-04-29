@@ -49,6 +49,18 @@
       <div class="form-text">Free-text — type a new employer name and it'll be created automatically.</div>
     </div>
 
+    <div class="col-md-6">
+      <label class="form-label">Start date</label>
+      <input name="start_date" type="date" class="form-control"
+             value="{{ employee.start_date.isoformat() if employee.start_date else '' }}">
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Termination / Resignation date</label>
+      <input name="termination_date" type="date" class="form-control"
+             value="{{ employee.termination_date.isoformat() if employee.termination_date else '' }}">
+      <div class="form-text">Leave blank if the user is still employed.</div>
+    </div>
+
     <div class="col-12">
       <label class="form-label">Machines</label>
       {% if machines %}

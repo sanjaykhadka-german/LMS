@@ -3,8 +3,21 @@
 {% block content %}
 <div class="gb-pageheader">
   <span class="gb-eyebrow">05 / People</span>
-  <h1>Users</h1>
-  <p class="lede">Staff accounts, departments and machine assignments.</p>
+  <h1>Users
+    <span class="badge bg-primary-subtle text-primary-emphasis align-middle ms-2"
+          style="font-size:0.55em; vertical-align:middle;">
+      {{ total_count }} total
+    </span>
+  </h1>
+  <p class="lede">
+    Staff accounts, departments and machine assignments.
+    {% if total_count %}
+      <span class="text-muted small">
+        ({{ active_count }} active{% if disabled_count %},
+        {{ disabled_count }} disabled{% endif %})
+      </span>
+    {% endif %}
+  </p>
 </div>
 
 <div class="card p-4 mb-4">
@@ -44,7 +57,15 @@
         <option value="admin">Administrator</option>
       </select>
     </div>
-    <div class="col-md-3"><button class="btn btn-primary w-100">Add user</button></div>
+    <div class="col-md-3">
+      <label class="form-label small text-muted mb-1">Start date</label>
+      <input name="start_date" type="date" class="form-control">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label small text-muted mb-1">Termination / Resignation date</label>
+      <input name="termination_date" type="date" class="form-control">
+    </div>
+    <div class="col-md-3"><button class="btn btn-primary w-100 mt-3">Add user</button></div>
   </form>
   <div class="form-text mt-2">
     Fields marked <code>*</code> are required. Employer is free-text — type a new
@@ -73,8 +94,10 @@
     <strong>Required columns:</strong> <code>First Name</code>, <code>Last Name</code>,
     <code>Email</code>, <code>Phone</code>, <code>Department</code>, <code>Employer</code>.
     <strong>Optional:</strong> <code>Role</code>, <code>Machines</code>
-    (comma- or pipe-separated). Missing departments, employers and machines
-    are created automatically. Existing emails are skipped.
+    (comma- or pipe-separated), <code>Start Date</code>, <code>Termination Date</code>.
+    Dates accept <code>YYYY-MM-DD</code> or <code>DD/MM/YYYY</code>.
+    Missing departments, employers and machines are created automatically.
+    Existing emails are skipped.
   </div>
 </div>
 
@@ -83,7 +106,8 @@
     <table class="table align-middle">
       <thead>
         <tr>
-          <th>Name</th><th>Email</th><th>Phone</th><th>Department</th><th>Employer</th><th>Machines</th>
+          <th>First name</th><th>Last name</th><th>Email</th><th>Phone</th>
+          <th>Department</th><th>Employer</th><th>Machines</th>
           <th class="text-end">Actions</th>
         </tr>
       </thead>
@@ -92,12 +116,13 @@
         <tr>
           <td>
             <a href="{{ url_for('admin_employee_detail', uid=e.id) }}"
-               class="text-decoration-none">{{ e.name }}</a>
+               class="text-decoration-none">{{ e.first_name or e.name }}</a>
             {% if e.role == 'admin' %}<span class="badge bg-primary ms-1">Admin</span>
             {% elif e.role == 'qaqc' %}<span class="badge bg-info text-dark ms-1">QA/QC</span>
             {% endif %}
             {% if not e.is_active_flag %}<span class="badge bg-secondary ms-1">Disabled</span>{% endif %}
           </td>
+          <td>{{ e.last_name or '—' }}</td>
           <td>{{ e.email }}</td>
           <td>{{ e.phone or '—' }}</td>
           <td>{{ e.department.name if e.department else '—' }}</td>
@@ -122,7 +147,7 @@
           </td>
         </tr>
       {% else %}
-        <tr><td colspan="7" class="text-muted">No users yet.</td></tr>
+        <tr><td colspan="8" class="text-muted">No users yet.</td></tr>
       {% endfor %}
       </tbody>
     </table>

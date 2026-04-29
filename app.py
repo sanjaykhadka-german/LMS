@@ -12,7 +12,8 @@ from flask import (Flask, render_template, redirect, url_for, request,
 from flask_login import (LoginManager, login_user, logout_user,
                          login_required, current_user)
 from werkzeug.utils import secure_filename
-from sqlalchemy import or_
+from sqlalchemy import or_, func
+from sqlalchemy.exc import IntegrityError
 
 from config import Config
 from models import (db, User, Module, ModuleMedia, ContentItem,
@@ -97,6 +98,12 @@ def ensure_schema_upgrades(app):
         if not col_exists("users", "employer_id") and "employers" in tables:
             upgrades.append(("users.employer_id",
                 "ALTER TABLE users ADD COLUMN employer_id INTEGER REFERENCES employers(id)"))
+        if not col_exists("users", "start_date"):
+            upgrades.append(("users.start_date",
+                "ALTER TABLE users ADD COLUMN start_date DATE"))
+        if not col_exists("users", "termination_date"):
+            upgrades.append(("users.termination_date",
+                "ALTER TABLE users ADD COLUMN termination_date DATE"))
     if "modules" in tables and not col_exists("modules", "created_by_id"):
         upgrades.append(("modules.created_by_id",
             "ALTER TABLE modules ADD COLUMN created_by_id INTEGER REFERENCES users(id)"))
@@ -114,6 +121,20 @@ def ensure_schema_upgrades(app):
             app.logger.warning("Schema upgrade applied: %s", label)
         except Exception as exc:
             app.logger.error("Schema upgrade FAILED for %s: %s", label, exc)
+
+
+def parse_user_date(raw):
+    """Accept blank, YYYY-MM-DD (HTML date input) or DD/MM/YYYY (AU CSV).
+    Returns a date or None. Raises ValueError on a non-blank malformed value."""
+    s = (raw or "").strip()
+    if not s:
+        return None
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            continue
+    raise ValueError(f"unrecognised date: {s!r}")
 
 
 def assignment_due_from(dt):
@@ -1865,9 +1886,14 @@ def register_routes(app):
                      .all())
         departments = Department.query.order_by(Department.name).all()
         employers = Employer.query.order_by(Employer.name).all()
+        active_count = sum(1 for e in employees if e.is_active_flag)
+        disabled_count = len(employees) - active_count
         return render_template("admin/employees.html",
                                employees=employees, departments=departments,
-                               employers=employers)
+                               employers=employers,
+                               total_count=len(employees),
+                               active_count=active_count,
+                               disabled_count=disabled_count)
 
     @app.route("/admin/employees/new", methods=["POST"])
     @admin_required
@@ -1881,6 +1907,14 @@ def register_routes(app):
         role = request.form.get("role", "employee")
         if role not in VALID_ROLES:
             role = "employee"
+
+        try:
+            start_date = parse_user_date(request.form.get("start_date", ""))
+            termination_date = parse_user_date(
+                request.form.get("termination_date", ""))
+        except ValueError as exc:
+            flash(f"Date format wrong: {exc}. Use YYYY-MM-DD.", "danger")
+            return redirect(url_for("admin_employees"))
 
         missing = []
         if not first_name: missing.append("First name")
@@ -1903,7 +1937,9 @@ def register_routes(app):
         u = User(name=full_name, first_name=first_name, last_name=last_name,
                  email=email, phone=phone, role=role,
                  department_id=int(dept_raw),
-                 employer_id=employer.id if employer else None)
+                 employer_id=employer.id if employer else None,
+                 start_date=start_date,
+                 termination_date=termination_date)
         u.set_password(temp_pw)
         db.session.add(u)
         db.session.flush()
@@ -1977,6 +2013,14 @@ def register_routes(app):
             dept_raw = request.form.get("department_id", "").strip()
             employer_name = request.form.get("employer_name", "").strip()
 
+            try:
+                start_date = parse_user_date(request.form.get("start_date", ""))
+                termination_date = parse_user_date(
+                    request.form.get("termination_date", ""))
+            except ValueError as exc:
+                flash(f"Date format wrong: {exc}. Use YYYY-MM-DD.", "danger")
+                return redirect(url_for("admin_employee_edit", uid=u.id))
+
             missing = []
             if not first_name: missing.append("First name")
             if not last_name:  missing.append("Last name")
@@ -1993,6 +2037,8 @@ def register_routes(app):
             u.phone = phone
             u.department_id = int(dept_raw)
             u.employer_id = get_or_create_employer(employer_name).id
+            u.start_date = start_date
+            u.termination_date = termination_date
 
             machine_ids = [int(x) for x in request.form.getlist("machine_ids") if x.isdigit()]
             u.machines = Machine.query.filter(Machine.id.in_(machine_ids)).all() if machine_ids else []
@@ -2082,12 +2128,14 @@ def register_routes(app):
         buf = io.StringIO()
         w = csv.writer(buf)
         w.writerow(["First Name", "Last Name", "Email", "Phone",
-                    "Department", "Role", "Employer", "Machines"])
+                    "Department", "Role", "Employer", "Machines",
+                    "Start Date", "Termination Date"])
         w.writerow(["Jane", "Doe", "jane.doe@example.com", "0400 000 000",
                     "Production", "employee", "German Butchery",
-                    "Mincer; Sausage filler"])
+                    "Mincer; Sausage filler", "2024-03-15", ""])
         w.writerow(["John", "Smith", "john.smith@example.com", "0411 111 111",
-                    "Packing", "employee", "Acme Staffing", ""])
+                    "Packing", "employee", "Acme Staffing", "",
+                    "15/03/2024", ""])
         # UTF-8 BOM so Excel auto-detects encoding when opening the .csv
         body = "﻿" + buf.getvalue()
         return Response(body, mimetype="text/csv",
@@ -2141,6 +2189,7 @@ def register_routes(app):
         created, skipped, invited = 0, 0, 0
         errors = []
         ERROR_CAP = 100
+        seen_emails = set()
 
         # CSV row 1 is the header; data rows start at line 2.
         for row_num, row in enumerate(reader, start=2):
@@ -2157,6 +2206,8 @@ def register_routes(app):
             phone = cell(row, "phone")
             dept_name = cell(row, "department")
             employer_name = cell(row, "employer")
+            start_raw = cell(row, "start date")
+            term_raw = cell(row, "termination date")
 
             def _reject(reason):
                 nonlocal skipped
@@ -2167,28 +2218,40 @@ def register_routes(app):
                                    "reason": reason})
 
             if not email:
-                _reject("missing email")
+                _reject("Email is missing")
                 continue
             if "@" not in email:
-                _reject("invalid email")
+                _reject("Email looks wrong (no @ sign)")
                 continue
             if not first_name:
-                _reject("missing first name")
+                _reject("First Name is missing")
                 continue
             if not last_name:
-                _reject("missing last name")
+                _reject("Last Name is missing")
                 continue
             if not phone:
-                _reject("missing phone")
+                _reject("Phone is missing")
                 continue
             if not dept_name:
-                _reject("missing department")
+                _reject("Department is missing")
                 continue
             if not employer_name:
-                _reject("missing employer")
+                _reject("Employer is missing")
                 continue
-            if User.query.filter_by(email=email).first():
-                _reject("duplicate email (already exists)")
+            if email in seen_emails:
+                _reject("This email appears more than once in the CSV")
+                continue
+            existing = User.query.filter(
+                func.lower(User.email) == email).first()
+            if existing:
+                _reject("This email is already in the system")
+                seen_emails.add(email)
+                continue
+            try:
+                start_date = parse_user_date(start_raw)
+                termination_date = parse_user_date(term_raw)
+            except ValueError as exc:
+                _reject(f"Date format wrong ({exc}). Use YYYY-MM-DD or DD/MM/YYYY.")
                 continue
 
             machines_raw = cell(row, "machines")
@@ -2216,11 +2279,20 @@ def register_routes(app):
             u = User(name=full_name, first_name=first_name, last_name=last_name,
                      email=email, role=role, phone=phone,
                      department_id=dept.id,
-                     employer_id=employer.id)
+                     employer_id=employer.id,
+                     start_date=start_date,
+                     termination_date=termination_date)
             u.set_password(temp_pw)
             u.machines = machine_objs
             db.session.add(u)
-            db.session.commit()
+            try:
+                db.session.commit()
+            except IntegrityError:
+                db.session.rollback()
+                _reject("This email is already in the system")
+                seen_emails.add(email)
+                continue
+            seen_emails.add(email)
             try:
                 notify_invite(u, temp_pw, app.config["APP_BASE_URL"])
                 invited += 1
@@ -2233,6 +2305,24 @@ def register_routes(app):
                       f"Bulk imported {created} user(s) from CSV "
                       f"(skipped {skipped}, invited {invited})")
             db.session.commit()
+
+        # Pop a plain-English banner so the outcome is obvious at a glance,
+        # not buried in the table below.
+        if created and not skipped:
+            flash(f"Added {created} staff member"
+                  f"{'' if created == 1 else 's'}. All good.", "success")
+        elif created and skipped:
+            flash(f"Added {created} staff member"
+                  f"{'' if created == 1 else 's'}, but skipped "
+                  f"{skipped} row{'' if skipped == 1 else 's'} that had "
+                  f"problems. See the list below for what to fix.", "warning")
+        elif skipped:
+            flash(f"Nothing was added. {skipped} row"
+                  f"{' has' if skipped == 1 else 's have'} problems "
+                  f"— see the list below, fix them, and re-upload.",
+                  "danger")
+        else:
+            flash("The CSV had no data rows to import.", "warning")
 
         return render_template("admin/users_bulk_result.html",
                                created_count=created,

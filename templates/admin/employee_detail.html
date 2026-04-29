@@ -46,7 +46,19 @@
       <div class="text-muted small">Phone</div>
       <div>{{ employee.phone or '—' }}</div>
     </div>
-    <div class="col-md-6">
+    <div class="col-md-3">
+      <div class="text-muted small">Start date</div>
+      <div>{{ employee.start_date.strftime('%d %b %Y') if employee.start_date else '—' }}</div>
+    </div>
+    <div class="col-md-3">
+      <div class="text-muted small">Termination / resignation</div>
+      <div>
+        {% if employee.termination_date %}
+          <span class="text-danger">{{ employee.termination_date.strftime('%d %b %Y') }}</span>
+        {% else %}—{% endif %}
+      </div>
+    </div>
+    <div class="col-md-12">
       <div class="text-muted small">Machines</div>
       <div>
         {% if employee.machines %}

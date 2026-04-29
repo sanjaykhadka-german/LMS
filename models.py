@@ -49,6 +49,8 @@ class User(UserMixin, db.Model):
     phone = db.Column(db.String(30), default="")
     department_id = db.Column(db.Integer, db.ForeignKey("departments.id"), nullable=True)
     employer_id = db.Column(db.Integer, db.ForeignKey("employers.id"), nullable=True)
+    start_date = db.Column(db.Date, nullable=True)
+    termination_date = db.Column(db.Date, nullable=True)
 
     assignments = db.relationship("Assignment", backref="user", cascade="all, delete-orphan")
     attempts = db.relationship("Attempt", backref="user", cascade="all, delete-orphan")
