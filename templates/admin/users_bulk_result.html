@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Bulk upload result{% endblock %}
+{% block content %}
+<div class="gb-pageheader">
+  <span class="gb-eyebrow">People / Bulk import</span>
+  <h1>Upload result</h1>
+  <p class="lede">
+    {% if created_count and not skipped_count %}
+      All rows imported successfully.
+    {% elif created_count and skipped_count %}
+      Some rows were imported; others were skipped &mdash; see the details below.
+    {% elif skipped_count %}
+      No rows were imported. Fix the spreadsheet and try again.
+    {% else %}
+      The file contained no data rows.
+    {% endif %}
+  </p>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-4">
+    <div class="gb-stat">
+      <div class="gb-stat-label">Created</div>
+      <div class="gb-stat-value">{{ created_count }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4">
+    <div class="gb-stat">
+      <div class="gb-stat-label">Skipped</div>
+      <div class="gb-stat-value">{{ skipped_count }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4">
+    <div class="gb-stat">
+      <div class="gb-stat-label">Invites sent</div>
+      <div class="gb-stat-value">{{ invited_count }}</div>
+    </div>
+  </div>
+</div>
+
+{% if errors %}
+  <div class="card p-4 mb-4">
+    <h5 class="mb-3">Skipped rows</h5>
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead><tr><th style="width:90px;">Row</th><th>Email</th><th>Reason</th></tr></thead>
+        <tbody>
+        {% for e in errors %}
+          <tr>
+            <td>{{ e.row }}</td>
+            <td>{{ e.email }}</td>
+            <td><span class="badge bg-danger-subtle text-danger-emphasis">{{ e.reason }}</span></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% set extra = skipped_count - errors|length %}
+    {% if extra > 0 %}
+      <div class="form-text mt-2">+{{ extra }} more row{{ '' if extra == 1 else 's' }} had errors (only the first {{ error_cap }} are listed).</div>
+    {% endif %}
+  </div>
+{% endif %}
+
+<div class="d-flex flex-wrap gap-2">
+  <a class="btn btn-primary" href="{{ back_url }}">Upload another file</a>
+  <a class="btn btn-outline-secondary" href="{{ url_for('admin_employees_template') }}">Download template</a>
+</div>
+{% endblock %}

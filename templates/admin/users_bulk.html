@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Bulk add users{% endblock %}
+{% block content %}
+<div class="gb-pageheader">
+  <span class="gb-eyebrow">People / Bulk import</span>
+  <h1>Bulk add users</h1>
+  <p class="lede">Download the template, fill it in Excel, then upload the saved CSV.</p>
+</div>
+
+<div class="card p-4 mb-4">
+  <h5 class="mb-2">Step 1 &middot; Download the template</h5>
+  <p class="text-muted small mb-3">A pre-filled CSV with the right columns and two example rows. Open it in Excel, replace the examples with your users, then save as CSV.</p>
+  <a class="btn btn-outline-primary"
+     href="{{ url_for('admin_employees_template') }}">Download CSV template</a>
+</div>
+
+<div class="card p-4 mb-4">
+  <h5 class="mb-2">Step 2 &middot; Upload the filled file</h5>
+  <form method="post" action="{{ url_for('admin_employees_upload') }}"
+        enctype="multipart/form-data" class="row g-2 align-items-center">
+    <div class="col-md-8">
+      <input type="file" name="csv" accept=".csv,text/csv" required class="form-control">
+    </div>
+    <div class="col-md-4">
+      <button class="btn btn-primary w-100">Upload CSV</button>
+    </div>
+  </form>
+  <div class="form-text mt-2">
+    <strong>Required columns:</strong> <code>email</code>, <code>name</code>, <code>department</code>.
+    <strong>Optional:</strong> <code>phone</code>, <code>role</code>, <code>machines</code>.
+    Missing departments and machines are created automatically. Existing emails are skipped.
+    A temporary password is generated and emailed (if Resend is configured).
+    {% if not current_user.is_admin %}
+      <br><strong>Note:</strong> the <code>role</code> column is ignored for QA/QC uploaders &mdash; all imported users will be created as employees. Ask an admin to promote anyone who needs a different role.
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

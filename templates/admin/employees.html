@@ -33,7 +33,11 @@
 </div>
 
 <div class="card p-4 mb-4">
-  <h5>Bulk upload (CSV)</h5>
+  <div class="d-flex justify-content-between align-items-baseline mb-2">
+    <h5 class="mb-0">Bulk upload (CSV)</h5>
+    <a class="btn btn-sm btn-outline-secondary"
+       href="{{ url_for('admin_employees_template') }}">Download template</a>
+  </div>
   <form method="post" action="{{ url_for('admin_employees_upload') }}"
         enctype="multipart/form-data" class="row g-2 align-items-center">
     <div class="col-md-8">
@@ -44,9 +48,10 @@
     </div>
   </form>
   <div class="form-text mt-2">
-    Header row required. Columns: <code>name, email, phone, department, role, machines</code>
-    — only <code>email</code> is mandatory. <code>machines</code> may be comma- or pipe-separated.
-    Missing departments and machines are created automatically. Existing emails are skipped.
+    <strong>Required columns:</strong> <code>email</code>, <code>name</code>, <code>department</code>.
+    <strong>Optional:</strong> <code>phone</code>, <code>role</code>, <code>machines</code>
+    (comma- or pipe-separated). Missing departments and machines are created
+    automatically. Existing emails are skipped.
   </div>
 </div>
 

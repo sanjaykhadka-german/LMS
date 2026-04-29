@@ -1876,51 +1876,104 @@ def register_routes(app):
                                recent_attempts=recent_attempts,
                                pass_threshold=pass_threshold)
 
+    @app.route("/admin/employees/template.csv")
+    @author_required
+    def admin_employees_template():
+        """Download a CSV template that opens cleanly in Excel."""
+        buf = io.StringIO()
+        w = csv.writer(buf)
+        w.writerow(["name", "email", "phone", "department", "role", "machines"])
+        w.writerow(["Jane Doe", "jane.doe@example.com", "0400 000 000",
+                    "Production", "employee", "Mincer; Sausage filler"])
+        w.writerow(["John Smith", "john.smith@example.com", "",
+                    "Packing", "employee", ""])
+        # UTF-8 BOM so Excel auto-detects encoding when opening the .csv
+        body = "﻿" + buf.getvalue()
+        return Response(body, mimetype="text/csv",
+                        headers={"Content-Disposition":
+                                 "attachment; filename=users_template.csv"})
+
+    @app.route("/admin/employees/bulk", methods=["GET"])
+    @author_required
+    def admin_employees_bulk():
+        """Standalone bulk-upload page so QA/QC has an entry point.
+        Admins can also use the inline form on /admin/employees."""
+        return render_template("admin/users_bulk.html")
+
     @app.route("/admin/employees/upload", methods=["POST"])
-    @admin_required
+    @author_required
     def admin_employees_upload():
+        # QA/QC uploaders may not promote themselves or anyone else; the
+        # role column is honored only for admin uploaders.
+        actor_is_admin = current_user.is_admin
+        back = (url_for("admin_employees") if actor_is_admin
+                else url_for("admin_employees_bulk"))
+
         f = request.files.get("csv")
         if not f or not f.filename:
             flash("No file selected.", "danger")
-            return redirect(url_for("admin_employees"))
+            return redirect(back)
         try:
             text = f.stream.read().decode("utf-8-sig")
         except UnicodeDecodeError:
             flash("CSV must be UTF-8 encoded.", "danger")
-            return redirect(url_for("admin_employees"))
+            return redirect(back)
         reader = csv.DictReader(io.StringIO(text))
         if not reader.fieldnames or "email" not in [h.lower().strip() for h in reader.fieldnames]:
             flash("CSV must have a header row with at least an 'email' column.", "danger")
-            return redirect(url_for("admin_employees"))
+            return redirect(back)
         header_map = {h.lower().strip(): h for h in reader.fieldnames}
 
         def cell(row, key):
             return (row.get(header_map.get(key, ""), "") or "").strip()
 
         created, skipped, invited = 0, 0, 0
-        for row in reader:
+        errors = []
+        ERROR_CAP = 100
+
+        # CSV row 1 is the header; data rows start at line 2.
+        for row_num, row in enumerate(reader, start=2):
             email = cell(row, "email").lower()
-            name = cell(row, "name") or email.split("@")[0]
-            if not email or "@" not in email:
+            name = cell(row, "name")
+            dept_name = cell(row, "department")
+
+            def _reject(reason):
+                nonlocal skipped
                 skipped += 1
+                if len(errors) < ERROR_CAP:
+                    errors.append({"row": row_num,
+                                   "email": email or "(blank)",
+                                   "reason": reason})
+
+            if not email:
+                _reject("missing email")
+                continue
+            if "@" not in email:
+                _reject("invalid email")
+                continue
+            if not name:
+                _reject("missing name")
+                continue
+            if not dept_name:
+                _reject("missing department")
                 continue
             if User.query.filter_by(email=email).first():
-                skipped += 1
+                _reject("duplicate email (already exists)")
                 continue
+
             phone = cell(row, "phone")
-            dept_name = cell(row, "department")
             machines_raw = cell(row, "machines")
             role = cell(row, "role").lower() or "employee"
             if role not in VALID_ROLES:
                 role = "employee"
+            if not actor_is_admin:
+                role = "employee"
 
-            dept = None
-            if dept_name:
-                dept = Department.query.filter_by(name=dept_name).first()
-                if not dept:
-                    dept = Department(name=dept_name)
-                    db.session.add(dept)
-                    db.session.flush()
+            dept = Department.query.filter_by(name=dept_name).first()
+            if not dept:
+                dept = Department(name=dept_name)
+                db.session.add(dept)
+                db.session.flush()
 
             machine_objs = []
             if machines_raw:
@@ -1934,7 +1987,7 @@ def register_routes(app):
 
             temp_pw = secrets.token_urlsafe(9)
             u = User(name=name, email=email, role=role, phone=phone,
-                     department_id=dept.id if dept else None)
+                     department_id=dept.id)
             u.set_password(temp_pw)
             u.machines = machine_objs
             db.session.add(u)
@@ -1951,8 +2004,14 @@ def register_routes(app):
                       f"Bulk imported {created} user(s) from CSV "
                       f"(skipped {skipped}, invited {invited})")
             db.session.commit()
-        flash(f"Imported {created} user(s); skipped {skipped}; invites sent: {invited}.", "success")
-        return redirect(url_for("admin_employees"))
+
+        return render_template("admin/users_bulk_result.html",
+                               created_count=created,
+                               skipped_count=skipped,
+                               invited_count=invited,
+                               errors=errors,
+                               error_cap=ERROR_CAP,
+                               back_url=back)
 
     @app.route("/admin/departments", methods=["GET", "POST"])
     @admin_required
