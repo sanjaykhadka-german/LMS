@@ -1,36 +1,36 @@
 {% extends "base.html" %}
 {% block title %}Org chart{% endblock %}
 
-{% macro render_node(user, children) %}
+{% macro render_pos(pos, children_of, users_by_position) %}
   <li class="gb-org-node">
     <div class="gb-org-card">
-      <div class="gb-org-avatar">
-        {% with user = user, size = 44 %}
-          {% include "_partials/avatar.html" %}
-        {% endwith %}
-      </div>
-      <div class="gb-org-info">
-        <a href="{{ url_for('admin_employee_detail', uid=user.id) }}"
-           class="gb-org-name">{{ user.name }}</a>
-        {% if user.job_title %}
-          <div class="gb-org-title">{{ user.job_title }}</div>
+      <div class="gb-org-header">
+        <div class="gb-org-role">{{ pos.name }}</div>
+        {% if pos.department %}
+          <div class="gb-org-dept">{{ pos.department.name }}</div>
         {% endif %}
-        <div class="gb-org-meta">
-          {% if user.department %}
-            <span class="gb-org-badge">{{ user.department.name }}</span>
-          {% endif %}
-          {% if user.role == 'admin' %}
-            <span class="gb-org-badge gb-org-badge-admin">Admin</span>
-          {% elif user.role == 'qaqc' %}
-            <span class="gb-org-badge gb-org-badge-qaqc">QA/QC</span>
-          {% endif %}
-        </div>
+      </div>
+      <div class="gb-org-body">
+        {% set holders = users_by_position.get(pos.id, []) %}
+        {% if holders %}
+          {% for u in holders %}
+            <div class="gb-org-person">
+              {% with user = u, size = 22 %}
+                {% include "_partials/avatar.html" %}
+              {% endwith %}
+              <a href="{{ url_for('admin_employee_detail', uid=u.id) }}"
+                 class="gb-org-person-name">{{ u.name }}</a>
+            </div>
+          {% endfor %}
+        {% else %}
+          <div class="gb-org-vacant">Vacant</div>
+        {% endif %}
       </div>
     </div>
-    {% if children[user.id] %}
+    {% if children_of[pos.id] %}
       <ul class="gb-org-children">
-        {% for child in children[user.id] %}
-          {{ render_node(child, children) }}
+        {% for child in children_of[pos.id] %}
+          {{ render_pos(child, children_of, users_by_position) }}
         {% endfor %}
       </ul>
     {% endif %}
@@ -40,25 +40,42 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-end flex-wrap gap-3 mb-4">
   <div class="gb-pageheader mb-0">
-    <span class="gb-eyebrow">08 / People</span>
+    <span class="gb-eyebrow">08 / Org structure</span>
     <h1 class="mb-1">Org chart</h1>
-    <p class="lede mb-0">Built from the "Reports to" field on each staff profile. {{ total_users }} active staff.</p>
+    <p class="lede mb-0">Roles arranged by reporting line. Edit positions to change the structure; assign staff via Edit user.</p>
   </div>
   <div class="d-flex gap-2 gb-org-noprint">
-    <a href="{{ url_for('admin_employees') }}" class="btn btn-sm btn-outline-secondary">Edit users</a>
+    <a href="{{ url_for('admin_positions') }}" class="btn btn-sm btn-outline-secondary">Edit positions</a>
     <button type="button" class="btn btn-sm btn-outline-primary" onclick="window.print()">Print / save PDF</button>
   </div>
 </div>
 
 {% if not roots %}
-  <div class="card p-4 text-muted">No active staff yet.</div>
+  <div class="card p-4 text-muted">
+    No positions yet —
+    <a href="{{ url_for('admin_positions') }}">add positions</a>
+    to start building the chart.
+  </div>
 {% else %}
 <div class="card p-3 gb-org-wrap">
   <ul class="gb-org-roots">
-    {% for u in roots %}
-      {{ render_node(u, children) }}
+    {% for p in roots %}
+      {{ render_pos(p, children_of, users_by_position) }}
     {% endfor %}
   </ul>
+</div>
+{% endif %}
+
+{% if unassigned %}
+<div class="card p-4 mt-4">
+  <h6 class="mb-2">Active staff without a position</h6>
+  <p class="text-muted small mb-2">These users don't appear on the chart yet. Assign them to a position via Edit user.</p>
+  <div class="d-flex flex-wrap gap-2">
+    {% for u in unassigned %}
+      <a href="{{ url_for('admin_employee_edit', uid=u.id) }}"
+         class="badge bg-secondary text-decoration-none">{{ u.name }}</a>
+    {% endfor %}
+  </div>
 </div>
 {% endif %}
 {% endblock %}

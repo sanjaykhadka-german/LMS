@@ -57,6 +57,30 @@ class Machine(db.Model):
                               backref="machines")
 
 
+class Position(db.Model):
+    """An org-chart role (e.g. 'Managing Director', 'QA Manager'). Hierarchy
+    is between positions, not between people — when staff turn over, the
+    chart structure stays put. Multiple users can hold the same position."""
+    __tablename__ = "positions"
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=False)
+    parent_id = db.Column(db.Integer,
+                          db.ForeignKey("positions.id", ondelete="SET NULL"),
+                          nullable=True, index=True)
+    department_id = db.Column(db.Integer,
+                              db.ForeignKey("departments.id"),
+                              nullable=True)
+    sort_order = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    parent = db.relationship(
+        "Position", remote_side=[id],
+        backref=db.backref("children", lazy="select",
+                           order_by="Position.sort_order, Position.name"),
+    )
+    department = db.relationship("Department")
+
+
 class DepartmentModulePolicy(db.Model):
     """Modules that staff in a given department should be auto-assigned on
     onboarding (or when their department is changed). One row per
@@ -108,10 +132,18 @@ class User(UserMixin, db.Model):
     manager_id = db.Column(db.Integer,
                            db.ForeignKey("users.id", ondelete="SET NULL"),
                            nullable=True)
+    position_id = db.Column(db.Integer,
+                            db.ForeignKey("positions.id", ondelete="SET NULL"),
+                            nullable=True, index=True)
 
     assignments = db.relationship("Assignment", backref="user", cascade="all, delete-orphan")
     attempts = db.relationship("Attempt", backref="user", cascade="all, delete-orphan")
     machines = db.relationship("Machine", secondary=user_machines, backref="users")
+    position = db.relationship(
+        "Position",
+        backref=db.backref("users", lazy="select",
+                           order_by="User.last_name, User.first_name"),
+    )
     manager = db.relationship(
         "User", remote_side=[id],
         backref=db.backref("direct_reports", lazy="dynamic"),

@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Positions{% endblock %}
+
+{% macro render_pos(p, children_of, headcount, depth=0) %}
+  <tr>
+    <td>
+      <span style="display:inline-block; width: {{ depth * 22 }}px;"></span>
+      {% if depth > 0 %}<span class="text-muted me-1">↳</span>{% endif %}
+      <strong>{{ p.name }}</strong>
+    </td>
+    <td>{{ p.department.name if p.department else '—' }}</td>
+    <td>
+      {% set n = headcount.get(p.id, 0) %}
+      {% if n %}<span class="badge bg-secondary">{{ n }}</span>
+      {% else %}<span class="text-muted small">vacant</span>{% endif %}
+    </td>
+    <td class="text-end">
+      <a href="{{ url_for('admin_position_edit', pid=p.id) }}"
+         class="btn btn-sm btn-outline-primary">Edit</a>
+      <form method="post"
+            action="{{ url_for('admin_position_delete', pid=p.id) }}"
+            class="d-inline"
+            onsubmit="return confirm('Delete position {{ p.name }}? Its children will move up to its parent, and any staff in this role become unassigned.');">
+        <button class="btn btn-sm btn-outline-danger">Delete</button>
+      </form>
+    </td>
+  </tr>
+  {% for child in children_of[p.id] %}
+    {{ render_pos(child, children_of, headcount, depth + 1) }}
+  {% endfor %}
+{% endmacro %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-end flex-wrap gap-3 mb-4">
+  <div class="gb-pageheader mb-0">
+    <span class="gb-eyebrow">08 / Org structure</span>
+    <h1 class="mb-1">Positions</h1>
+    <p class="lede mb-0">Roles in the organisation. Add staff to a position via Edit user. The org chart is built from this hierarchy.</p>
+  </div>
+  <a href="{{ url_for('admin_org_chart') }}" class="btn btn-sm btn-outline-secondary">View org chart →</a>
+</div>
+
+<div class="card p-4 mb-4">
+  <h5>Add position</h5>
+  <form method="post" class="row g-3">
+    <div class="col-md-5">
+      <label class="form-label">Name <span class="text-danger">*</span></label>
+      <input name="name" required class="form-control"
+             placeholder="e.g. Production Manager">
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">Reports to (parent)</label>
+      <select name="parent_id" class="form-select">
+        <option value="">— Top level / no parent —</option>
+        {% for p in positions %}
+          <option value="{{ p.id }}">{{ p.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Department</label>
+      <select name="department_id" class="form-select">
+        <option value="">— None —</option>
+        {% for d in departments %}
+          <option value="{{ d.id }}">{{ d.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-12 d-flex justify-content-end">
+      <button class="btn btn-primary">Add position</button>
+    </div>
+  </form>
+</div>
+
+<div class="card p-0">
+  <div class="table-responsive">
+    <table class="table align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Position</th>
+          <th>Department</th>
+          <th>Headcount</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for r in roots %}
+        {{ render_pos(r, children_of, headcount) }}
+      {% else %}
+        <tr><td colspan="4" class="text-muted p-4">No positions yet — add the first one above.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

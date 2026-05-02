@@ -19,7 +19,7 @@ from config import Config
 from models import (db, User, Module, ModuleMedia, ContentItem,
                     ContentItemMedia, Question, Choice, Assignment, Attempt,
                     Department, Employer, Machine, UploadedFile, ModuleVersion,
-                    AuditLog, DepartmentModulePolicy, WHSRecord)
+                    AuditLog, DepartmentModulePolicy, WHSRecord, Position)
 from email_service import (notify_invite, notify_assignment,
                            notify_attempt, notify_reminder,
                            notify_password_reset, notify_whs_expiry)
@@ -117,6 +117,14 @@ def ensure_schema_upgrades(app):
         if not col_exists("machines", "department_id") and "departments" in tables:
             upgrades.append(("machines.department_id",
                 "ALTER TABLE machines ADD COLUMN department_id INTEGER REFERENCES departments(id)"))
+    # Re-introspect because positions is created by db.create_all() in this
+    # same boot — without a fresh inspect call, get_table_names() would miss
+    # it on the very first run after deploying this change.
+    tables = set(inspect(db.engine).get_table_names())
+    if "users" in tables and "positions" in tables:
+        if not col_exists("users", "position_id"):
+            upgrades.append(("users.position_id",
+                "ALTER TABLE users ADD COLUMN position_id INTEGER REFERENCES positions(id)"))
     if "modules" in tables and not col_exists("modules", "created_by_id"):
         upgrades.append(("modules.created_by_id",
             "ALTER TABLE modules ADD COLUMN created_by_id INTEGER REFERENCES users(id)"))
@@ -1374,25 +1382,138 @@ def register_routes(app):
     @app.route("/admin/org-chart")
     @author_required
     def admin_org_chart():
-        """Render an org chart from User.manager_id self-references.
-        Active staff only. Manager-less users (or users whose manager is
-        disabled / missing) appear as roots."""
-        users = (User.query.filter_by(is_active_flag=True)
-                 .options(db.joinedload(User.department))
-                 .order_by(User.last_name, User.first_name).all())
-        by_id = {u.id: u for u in users}
-        children = {u.id: [] for u in users}
+        """Render the org chart from the Position tree. Each card shows the
+        position name plus the active staff currently filling it."""
+        positions = (Position.query
+                     .options(db.joinedload(Position.department))
+                     .order_by(Position.sort_order, Position.name).all())
+        children_of = {p.id: [] for p in positions}
         roots = []
-        for u in users:
-            if u.manager_id and u.manager_id in by_id:
-                children[u.manager_id].append(u)
+        for p in positions:
+            if p.parent_id and p.parent_id in children_of:
+                children_of[p.parent_id].append(p)
             else:
-                roots.append(u)
-        # Sort each child list — already-sorted parent order keeps siblings
-        # alphabetical (last_name, first_name).
+                roots.append(p)
+
+        # Bulk load active users grouped by position to avoid N+1s.
+        users = (User.query.filter_by(is_active_flag=True)
+                 .filter(User.position_id.isnot(None))
+                 .order_by(User.last_name, User.first_name).all())
+        users_by_position = {}
+        for u in users:
+            users_by_position.setdefault(u.position_id, []).append(u)
+
+        # Active users with no position assigned — shown in a separate
+        # "Unassigned" panel so they don't disappear from the chart.
+        unassigned = (User.query.filter_by(is_active_flag=True,
+                                           position_id=None)
+                      .order_by(User.last_name, User.first_name).all())
+
         return render_template("admin/org_chart.html",
-                               roots=roots, children=children,
-                               total_users=len(users))
+                               roots=roots, children_of=children_of,
+                               users_by_position=users_by_position,
+                               unassigned=unassigned,
+                               total_positions=len(positions))
+
+    @app.route("/admin/positions", methods=["GET", "POST"])
+    @author_required
+    def admin_positions():
+        """List + create page for org-chart positions."""
+        if request.method == "POST":
+            name = request.form.get("name", "").strip()
+            parent_raw = request.form.get("parent_id", "").strip()
+            dept_raw = request.form.get("department_id", "").strip()
+            if not name:
+                flash("Position name is required.", "danger")
+                return redirect(url_for("admin_positions"))
+            parent_id = int(parent_raw) if parent_raw.isdigit() else None
+            dept_id = int(dept_raw) if dept_raw.isdigit() else None
+            p = Position(name=name, parent_id=parent_id,
+                         department_id=dept_id)
+            db.session.add(p)
+            db.session.flush()
+            log_audit("create", "position", p.id,
+                      f"Created position '{p.name}'")
+            db.session.commit()
+            flash(f"Position '{name}' added.", "success")
+            return redirect(url_for("admin_positions"))
+
+        positions = (Position.query
+                     .options(db.joinedload(Position.department))
+                     .order_by(Position.sort_order, Position.name).all())
+        children_of = {p.id: [] for p in positions}
+        roots = []
+        for p in positions:
+            if p.parent_id and p.parent_id in children_of:
+                children_of[p.parent_id].append(p)
+            else:
+                roots.append(p)
+        # Headcount per position for the list display.
+        headcount = {p.id: 0 for p in positions}
+        for u in User.query.filter(User.position_id.isnot(None),
+                                   User.is_active_flag.is_(True)).all():
+            headcount[u.position_id] = headcount.get(u.position_id, 0) + 1
+        departments = Department.query.order_by(Department.name).all()
+        return render_template("admin/positions.html",
+                               positions=positions, roots=roots,
+                               children_of=children_of,
+                               headcount=headcount,
+                               departments=departments)
+
+    @app.route("/admin/positions/<int:pid>/edit", methods=["GET", "POST"])
+    @author_required
+    def admin_position_edit(pid):
+        p = db.session.get(Position, pid) or abort(404)
+        if request.method == "POST":
+            name = request.form.get("name", "").strip()
+            parent_raw = request.form.get("parent_id", "").strip()
+            dept_raw = request.form.get("department_id", "").strip()
+            if not name:
+                flash("Position name is required.", "danger")
+                return redirect(url_for("admin_position_edit", pid=pid))
+            new_parent_id = int(parent_raw) if parent_raw.isdigit() else None
+            # Reject self-as-parent and direct-child-as-parent (1-level
+            # circular check; deeper cycles are unlikely in practice).
+            if new_parent_id == p.id:
+                flash("A position can't be its own parent.", "warning")
+                new_parent_id = p.parent_id
+            elif new_parent_id is not None:
+                candidate = db.session.get(Position, new_parent_id)
+                if candidate is not None and candidate.parent_id == p.id:
+                    flash(f"'{candidate.name}' already reports to "
+                          f"'{p.name}' — choose a different parent.",
+                          "warning")
+                    new_parent_id = p.parent_id
+            p.name = name
+            p.parent_id = new_parent_id
+            p.department_id = int(dept_raw) if dept_raw.isdigit() else None
+            log_audit("update", "position", p.id,
+                      f"Updated position '{p.name}'")
+            db.session.commit()
+            flash(f"Position '{p.name}' updated.", "success")
+            return redirect(url_for("admin_positions"))
+        positions = Position.query.order_by(Position.name).all()
+        departments = Department.query.order_by(Department.name).all()
+        return render_template("admin/position_edit.html",
+                               position=p, positions=positions,
+                               departments=departments)
+
+    @app.route("/admin/positions/<int:pid>/delete", methods=["POST"])
+    @author_required
+    def admin_position_delete(pid):
+        p = db.session.get(Position, pid) or abort(404)
+        # Reparent children to this position's parent so they don't orphan.
+        Position.query.filter_by(parent_id=p.id).update(
+            {"parent_id": p.parent_id})
+        # Users assigned to this position get position_id set to NULL via
+        # the FK ondelete action (they appear in "Unassigned" on the chart).
+        log_audit("delete", "position", p.id,
+                  f"Deleted position '{p.name}'")
+        db.session.delete(p)
+        db.session.commit()
+        flash(f"Position '{p.name}' deleted. Children re-parented; "
+              "any staff assigned to it are now unassigned.", "success")
+        return redirect(url_for("admin_positions"))
 
     @app.route("/admin/matrix")
     @author_required
@@ -2488,11 +2609,12 @@ def register_routes(app):
                      .all())
         departments = Department.query.order_by(Department.name).all()
         employers = Employer.query.order_by(Employer.name).all()
+        positions = Position.query.order_by(Position.name).all()
         active_count = sum(1 for e in employees if e.is_active_flag)
         disabled_count = len(employees) - active_count
         return render_template("admin/employees.html",
                                employees=employees, departments=departments,
-                               employers=employers,
+                               employers=employers, positions=positions,
                                total_count=len(employees),
                                active_count=active_count,
                                disabled_count=disabled_count)
@@ -2540,13 +2662,10 @@ def register_routes(app):
         full_name = f"{first_name} {last_name}".strip()
         temp_pw = secrets.token_urlsafe(9)
         job_title = request.form.get("job_title", "").strip()
-        manager_id_raw = request.form.get("manager_id", "").strip()
-        manager_id = int(manager_id_raw) if manager_id_raw.isdigit() else None
-        # Defensive: only accept manager_id that points to an active user.
-        if manager_id is not None:
-            mgr = db.session.get(User, manager_id)
-            if mgr is None or not mgr.is_active_flag:
-                manager_id = None
+        pos_raw = request.form.get("position_id", "").strip()
+        position_id = int(pos_raw) if pos_raw.isdigit() else None
+        if position_id is not None and db.session.get(Position, position_id) is None:
+            position_id = None
         u = User(name=full_name, first_name=first_name, last_name=last_name,
                  email=email, phone=phone, role=role,
                  department_id=int(dept_raw),
@@ -2554,7 +2673,7 @@ def register_routes(app):
                  start_date=start_date,
                  termination_date=termination_date,
                  job_title=job_title,
-                 manager_id=manager_id)
+                 position_id=position_id)
         u.set_password(temp_pw)
         db.session.add(u)
         db.session.flush()
@@ -2668,22 +2787,11 @@ def register_routes(app):
             u.start_date = start_date
             u.termination_date = termination_date
             u.job_title = request.form.get("job_title", "").strip()
-            mgr_raw = request.form.get("manager_id", "").strip()
-            new_manager_id = int(mgr_raw) if mgr_raw.isdigit() else None
-            # Validation: can't be your own manager, can't be a circular ref
-            # one level deep (covers most accidental cases without recursion).
-            if new_manager_id == u.id:
-                flash("A user can't be their own manager.", "warning")
-                new_manager_id = u.manager_id
-            elif new_manager_id is not None:
-                mgr = db.session.get(User, new_manager_id)
-                if mgr is None or not mgr.is_active_flag:
-                    new_manager_id = None
-                elif mgr.manager_id == u.id:
-                    flash(f"Can't set {mgr.name} as manager — they already "
-                          f"report to {u.name}.", "warning")
-                    new_manager_id = u.manager_id
-            u.manager_id = new_manager_id
+            pos_raw = request.form.get("position_id", "").strip()
+            new_position_id = int(pos_raw) if pos_raw.isdigit() else None
+            if new_position_id is not None and db.session.get(Position, new_position_id) is None:
+                new_position_id = None
+            u.position_id = new_position_id
 
             machine_ids = [int(x) for x in request.form.getlist("machine_ids") if x.isdigit()]
             u.machines = Machine.query.filter(Machine.id.in_(machine_ids)).all() if machine_ids else []
@@ -2720,13 +2828,11 @@ def register_routes(app):
         departments = Department.query.order_by(Department.name).all()
         employers = Employer.query.order_by(Employer.name).all()
         machines = Machine.query.order_by(Machine.name).all()
-        manager_candidates = (User.query
-                              .filter_by(is_active_flag=True)
-                              .order_by(User.last_name, User.first_name).all())
+        positions = Position.query.order_by(Position.name).all()
         return render_template("admin/employee_edit.html",
                                employee=u, departments=departments,
                                employers=employers, machines=machines,
-                               manager_candidates=manager_candidates)
+                               positions=positions)
 
     @app.route("/admin/employees/<int:uid>")
     @author_required
@@ -2803,15 +2909,15 @@ def register_routes(app):
         w.writerow(["First Name", "Last Name", "Email", "Phone",
                     "Department", "Role", "Employer", "Machines",
                     "Start Date", "Termination Date",
-                    "Job Title", "Manager Email"])
+                    "Job Title", "Position"])
         w.writerow(["Jane", "Doe", "jane.doe@example.com", "0400 000 000",
                     "Production", "employee", "German Butchery",
                     "Mincer; Sausage filler", "2024-03-15", "",
-                    "Line Leader", ""])
+                    "Senior Line Leader", "Production Manager"])
         w.writerow(["John", "Smith", "john.smith@example.com", "0411 111 111",
                     "Packing", "employee", "Acme Staffing", "",
                     "15/03/2024", "",
-                    "Packer", "jane.doe@example.com"])
+                    "", "Packer"])
         # UTF-8 BOM so Excel auto-detects encoding when opening the .csv
         body = "﻿" + buf.getvalue()
         return Response(body, mimetype="text/csv",
@@ -2885,7 +2991,7 @@ def register_routes(app):
             start_raw = cell(row, "start date")
             term_raw = cell(row, "termination date")
             job_title = cell(row, "job title")
-            manager_email = cell(row, "manager email").lower()
+            position_name = cell(row, "position")
 
             def _reject(reason):
                 nonlocal skipped
@@ -2954,15 +3060,15 @@ def register_routes(app):
 
             full_name = f"{first_name} {last_name}".strip()
             temp_pw = secrets.token_urlsafe(9)
-            # Resolve manager by email if provided. Missing manager isn't an
-            # error — set null and move on (the manager may simply not be in
-            # the system yet, e.g. uploaded later in the same CSV).
-            manager_id = None
-            if manager_email and "@" in manager_email:
-                mgr = User.query.filter(
-                    func.lower(User.email) == manager_email).first()
-                if mgr is not None:
-                    manager_id = mgr.id
+            # Resolve position by name (case-insensitive). Missing position
+            # isn't an error — leave the user unassigned and let the admin
+            # set it up later via Edit user.
+            position_id = None
+            if position_name:
+                pos = Position.query.filter(
+                    func.lower(Position.name) == position_name.lower()).first()
+                if pos is not None:
+                    position_id = pos.id
             u = User(name=full_name, first_name=first_name, last_name=last_name,
                      email=email, role=role, phone=phone,
                      department_id=dept.id,
@@ -2970,7 +3076,7 @@ def register_routes(app):
                      start_date=start_date,
                      termination_date=termination_date,
                      job_title=job_title,
-                     manager_id=manager_id)
+                     position_id=position_id)
             u.set_password(temp_pw)
             u.machines = machine_objs
             db.session.add(u)

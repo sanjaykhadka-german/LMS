@@ -832,26 +832,30 @@ hr { border-color: var(--gb-line); opacity: 1; }
 .gb-mx-swatch.is-never { background: var(--gb-paper); }
 .gb-mx-swatch.is-na { background: var(--gb-line-soft); }
 
-/* -------- Org chart -------- */
-.gb-org-wrap { padding: 14px 18px; }
+/* -------- Org chart (position-based) -------- */
+.gb-org-wrap {
+  padding: 14px 18px;
+  overflow: auto;       /* horizontal scroll for wide trees */
+  max-width: 100%;
+}
 .gb-org-roots,
 .gb-org-children {
   list-style: none;
-  padding-left: 28px;
+  padding-left: 32px;
   margin: 0;
 }
 .gb-org-roots { padding-left: 0; }
 .gb-org-node {
   position: relative;
-  padding: 4px 0;
+  padding: 6px 0;
 }
-/* Connecting lines between children and their parent. */
+.gb-org-children { position: relative; }
 .gb-org-children > .gb-org-node::before {
   content: "";
   position: absolute;
-  left: -16px;
-  top: 26px;
-  width: 12px;
+  left: -20px;
+  top: 32px;
+  width: 16px;
   border-top: 1px solid var(--gb-line);
 }
 .gb-org-children::before {
@@ -859,77 +863,88 @@ hr { border-color: var(--gb-line); opacity: 1; }
   position: absolute;
   left: 12px;
   top: 0;
-  bottom: 14px;
+  bottom: 18px;
   border-left: 1px solid var(--gb-line);
 }
-.gb-org-children { position: relative; }
+
+/* The card itself — header (burgundy, white text) + body (cream, names). */
 .gb-org-card {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  padding: 8px 12px;
+  display: inline-block;
+  min-width: 220px;
+  max-width: 320px;
   background: var(--gb-paper);
   border: 1px solid var(--gb-line);
   border-radius: var(--gb-radius);
-  transition: border-color .12s ease, background .12s ease;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  vertical-align: top;
 }
-.gb-org-card:hover {
-  border-color: var(--gb-burgundy);
-  background: var(--gb-cream);
-}
-.gb-org-avatar { flex-shrink: 0; }
-.gb-org-info { flex: 1; min-width: 0; }
-.gb-org-name {
-  font-family: var(--gb-font-body);
-  font-weight: 600;
-  color: var(--gb-ink);
-  text-decoration: none;
-  font-size: 0.95rem;
-  display: block;
-}
-.gb-org-name:hover { color: var(--gb-burgundy); text-decoration: underline; }
-.gb-org-title {
-  font-family: var(--gb-font-head);
-  font-style: italic;
-  font-size: 0.82rem;
-  color: var(--gb-mute);
-  margin-top: 2px;
-}
-.gb-org-meta { margin-top: 4px; display: flex; gap: 6px; flex-wrap: wrap; }
-.gb-org-badge {
-  font-family: var(--gb-font-body);
-  font-weight: 600;
-  font-size: 0.66rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--gb-cream-2);
-  color: var(--gb-ink-soft);
-  border: 1px solid var(--gb-line);
-}
-.gb-org-badge-admin {
+.gb-org-header {
   background: var(--gb-burgundy);
   color: #fff;
-  border-color: var(--gb-burgundy);
+  padding: 8px 12px;
 }
-.gb-org-badge-qaqc {
-  background: var(--gb-info-bg);
-  color: var(--gb-brass-d);
-  border-color: rgba(176,138,62,0.4);
+.gb-org-role {
+  font-family: var(--gb-font-body);
+  font-weight: 600;
+  font-size: 0.92rem;
+  line-height: 1.25;
+  letter-spacing: 0.02em;
+}
+.gb-org-dept {
+  font-family: var(--gb-font-body);
+  font-weight: 500;
+  font-size: 0.7rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.78);
+  margin-top: 2px;
+}
+.gb-org-body {
+  background: var(--gb-cream);
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.gb-org-person {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.86rem;
+}
+.gb-org-person-name {
+  color: var(--gb-ink);
+  text-decoration: none;
+  font-weight: 500;
+}
+.gb-org-person-name:hover {
+  color: var(--gb-burgundy);
+  text-decoration: underline;
+}
+.gb-org-vacant {
+  font-style: italic;
+  color: var(--gb-mute);
+  font-size: 0.84rem;
 }
 
-/* Print: hide chrome, expand the chart, drop background colours. */
+/* Print stylesheet: hide chrome, drop colours that don't print well. */
 @media print {
   .navbar, .gb-footer, .gb-org-noprint, #gbTourBackdrop, #gbTourCard,
   .gb-pageheader .gb-eyebrow {
     display: none !important;
   }
   body, .gb-main, .container { background: #fff !important; }
-  .gb-org-wrap { padding: 0; border: none; }
-  .gb-org-card { background: #fff; border-color: #aaa; }
+  .gb-org-wrap { padding: 0; border: none; overflow: visible; }
+  .gb-org-card { box-shadow: none; }
+  .gb-org-header {
+    background: #2C3E5A !important;  /* darker blue prints well in B&W */
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .gb-org-body { background: #f3f3f3 !important; }
   .gb-org-children > .gb-org-node::before,
-  .gb-org-children::before { border-color: #aaa; }
+  .gb-org-children::before { border-color: #888; }
   .card { border: none; box-shadow: none; }
   a { color: #000 !important; text-decoration: none; }
 }

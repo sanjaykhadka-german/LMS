@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Edit position{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-end flex-wrap gap-3 mb-4">
+  <div class="gb-pageheader mb-0">
+    <span class="gb-eyebrow">08 / Org structure</span>
+    <h1 class="mb-0">Edit position</h1>
+  </div>
+  <a href="{{ url_for('admin_positions') }}" class="btn btn-sm btn-outline-secondary">&larr; Back to positions</a>
+</div>
+
+<div class="card p-4 mb-3">
+  <form method="post" class="row g-3">
+    <div class="col-md-12">
+      <label class="form-label">Name <span class="text-danger">*</span></label>
+      <input name="name" required class="form-control" value="{{ position.name }}">
+    </div>
+
+    <div class="col-md-6">
+      <label class="form-label">Reports to (parent)</label>
+      <select name="parent_id" class="form-select">
+        <option value="">— Top level / no parent —</option>
+        {% for p in positions %}
+          {% if p.id != position.id %}
+            <option value="{{ p.id }}"
+              {% if position.parent_id == p.id %}selected{% endif %}>{{ p.name }}</option>
+          {% endif %}
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Department</label>
+      <select name="department_id" class="form-select">
+        <option value="">— None —</option>
+        {% for d in departments %}
+          <option value="{{ d.id }}"
+            {% if position.department_id == d.id %}selected{% endif %}>{{ d.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="col-12 d-flex gap-2 justify-content-end">
+      <a href="{{ url_for('admin_positions') }}" class="btn btn-outline-secondary">Cancel</a>
+      <button class="btn btn-primary gb-arrow">Save</button>
+    </div>
+  </form>
+</div>
+
+{% if position.users %}
+<div class="card p-4">
+  <h6 class="mb-2">Currently filled by</h6>
+  <ul class="mb-0">
+    {% for u in position.users %}
+      <li><a href="{{ url_for('admin_employee_detail', uid=u.id) }}">{{ u.name }}</a>{% if not u.is_active_flag %} <span class="badge bg-secondary">Disabled</span>{% endif %}</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+{% endblock %}
