@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Edit machine{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-end flex-wrap gap-3 mb-4">
+  <div class="gb-pageheader mb-0">
+    <span class="gb-eyebrow">07 / Equipment</span>
+    <h1 class="mb-0">Edit machine</h1>
+  </div>
+  <a href="{{ url_for('admin_machines') }}" class="btn btn-sm btn-outline-secondary">&larr; Back to machines</a>
+</div>
+
+<div class="card p-4">
+  <form method="post" class="row g-3">
+    <div class="col-md-6">
+      <label class="form-label">Machine name <span class="text-danger">*</span></label>
+      <input name="name" required class="form-control" value="{{ machine.name }}">
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Department</label>
+      <select name="department_id" class="form-select">
+        <option value="">— No department —</option>
+        {% for d in departments %}
+          <option value="{{ d.id }}"
+            {% if machine.department_id == d.id %}selected{% endif %}>{{ d.name }}</option>
+        {% endfor %}
+      </select>
+      <div class="form-text">Optional — used to group machines by where they live on the floor.</div>
+    </div>
+
+    <div class="col-12">
+      <label class="form-label mb-2">Required training</label>
+      <div class="form-text mb-2">A staff member is "qualified" on this machine when they've passed every module ticked here. Untick all to make this a competency-free machine.</div>
+      {% if modules %}
+        <div class="row g-2">
+          {% set linked_ids = machine.modules|map(attribute='id')|list %}
+          {% for m in modules %}
+            <div class="col-md-4 col-sm-6">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="module_ids"
+                       id="mod{{ m.id }}" value="{{ m.id }}"
+                       {% if m.id in linked_ids %}checked{% endif %}>
+                <label class="form-check-label" for="mod{{ m.id }}">{{ m.title }}</label>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="text-muted">No published modules yet.</div>
+      {% endif %}
+    </div>
+
+    <div class="col-12 d-flex gap-2 justify-content-end">
+      <a href="{{ url_for('admin_machines') }}" class="btn btn-outline-secondary">Cancel</a>
+      <button class="btn btn-primary gb-arrow">Save</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

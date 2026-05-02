@@ -81,6 +81,60 @@
   </div>
 </div>
 
+{% if competencies %}
+<div class="card p-4 mb-4">
+  <h5>Machine competencies</h5>
+  <p class="text-muted small mb-3">A machine is "qualified" only when every linked module has a current pass.</p>
+  <div class="table-responsive">
+    <table class="table align-middle">
+      <thead>
+        <tr>
+          <th>Machine</th>
+          <th>Department</th>
+          <th>Required modules</th>
+          <th class="text-end">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for c in competencies %}
+        <tr>
+          <td>{{ c.machine.name }}</td>
+          <td>{{ c.machine.department.name if c.machine.department else '—' }}</td>
+          <td>
+            {% if c.modules %}
+              {% for mr in c.modules %}
+                <span class="badge
+                  {% if mr.status == 'current' %}bg-success
+                  {% elif mr.status == 'expiring_soon' %}bg-warning text-dark
+                  {% elif mr.status == 'overdue' %}bg-danger
+                  {% else %}bg-secondary{% endif %}"
+                  title="{% if mr.status == 'never_passed' %}Never passed{% elif mr.last_pass %}Last pass {{ mr.last_pass.strftime('%Y-%m-%d') }}{% endif %}">
+                  {{ mr.module.title }}
+                </span>
+              {% endfor %}
+            {% else %}
+              <span class="text-muted">No training required</span>
+            {% endif %}
+          </td>
+          <td class="text-end">
+            {% if c.overall == 'qualified' %}
+              <span class="badge bg-success">Qualified</span>
+            {% elif c.overall == 'partial' %}
+              <span class="badge bg-warning text-dark">Partial</span>
+            {% elif c.overall == 'pending' %}
+              <span class="badge bg-danger">Pending</span>
+            {% else %}
+              <span class="badge bg-info text-dark">No training required</span>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
 <div class="card p-4 mb-4">
   <h5>Modules</h5>
   {% if rows %}

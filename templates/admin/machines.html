@@ -18,12 +18,28 @@
 <div class="card p-4">
   <div class="table-responsive">
     <table class="table align-middle">
-      <thead><tr><th>Name</th><th class="text-end">Actions</th></tr></thead>
+      <thead><tr>
+        <th>Name</th>
+        <th>Department</th>
+        <th>Required training</th>
+        <th class="text-end">Actions</th>
+      </tr></thead>
       <tbody>
       {% for m in machines %}
         <tr>
           <td>{{ m.name }}</td>
+          <td>{{ m.department.name if m.department else '—' }}</td>
+          <td>
+            {% if m.modules %}
+              <span class="text-muted small">{{ m.modules|length }} module(s):</span>
+              {{ m.modules|map(attribute='title')|join(', ') }}
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
           <td class="text-end">
+            <a href="{{ url_for('admin_machine_edit', mid=m.id) }}"
+               class="btn btn-sm btn-outline-primary">Edit</a>
             <form method="post" action="{{ url_for('admin_machine_delete', mid=m.id) }}"
                   class="d-inline"
                   onsubmit="return confirm('Delete this machine? It will be removed from any employees assigned to it.');">
@@ -32,7 +48,7 @@
           </td>
         </tr>
       {% else %}
-        <tr><td colspan="2" class="text-muted">No machines yet.</td></tr>
+        <tr><td colspan="4" class="text-muted">No machines yet.</td></tr>
       {% endfor %}
       </tbody>
     </table>

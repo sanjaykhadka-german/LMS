@@ -113,6 +113,10 @@ def ensure_schema_upgrades(app):
         if not col_exists("users", "manager_id"):
             upgrades.append(("users.manager_id",
                 "ALTER TABLE users ADD COLUMN manager_id INTEGER REFERENCES users(id)"))
+    if "machines" in tables:
+        if not col_exists("machines", "department_id") and "departments" in tables:
+            upgrades.append(("machines.department_id",
+                "ALTER TABLE machines ADD COLUMN department_id INTEGER REFERENCES departments(id)"))
     if "modules" in tables and not col_exists("modules", "created_by_id"):
         upgrades.append(("modules.created_by_id",
             "ALTER TABLE modules ADD COLUMN created_by_id INTEGER REFERENCES users(id)"))
@@ -190,6 +194,47 @@ def assignment_due_from(dt, module=None):
     days = (module_validity_days(module) if module is not None
             else current_app.config.get("ASSIGNMENT_VALIDITY_DAYS", 180))
     return None if days is None else dt + timedelta(days=days)
+
+
+def user_machine_competencies(user, now=None):
+    """For each machine assigned to the user, summarise whether they're
+    qualified to operate it based on currently-passed module attempts.
+
+    Returns a list of {machine, modules, overall} dicts where overall is
+    one of 'qualified' | 'partial' | 'pending' | 'no_training_required'.
+    Reuses compliance_status_for so the matrix and competency view stay
+    in sync about what counts as 'current'."""
+    if now is None:
+        now = datetime.utcnow()
+    last_pass = {
+        r.module_id: r.ts for r in db.session.query(
+            Attempt.module_id,
+            func.max(Attempt.created_at).label("ts"),
+        ).filter(Attempt.user_id == user.id, Attempt.passed.is_(True))
+         .group_by(Attempt.module_id).all()
+    }
+    out = []
+    for machine in user.machines:
+        per_module = []
+        current_count = 0
+        for m in machine.modules:
+            ts = last_pass.get(m.id)
+            status = compliance_status_for(ts, m, now)
+            per_module.append({"module": m, "status": status,
+                               "last_pass": ts})
+            if status == "current":
+                current_count += 1
+        if not machine.modules:
+            overall = "no_training_required"
+        elif current_count == len(machine.modules):
+            overall = "qualified"
+        elif current_count == 0:
+            overall = "pending"
+        else:
+            overall = "partial"
+        out.append({"machine": machine, "modules": per_module,
+                    "overall": overall})
+    return out
 
 
 def auto_assign_for_department(user, base_url=None, send_email=True):
@@ -2742,10 +2787,12 @@ def register_routes(app):
         rows.sort(key=lambda r: (r["module"].title or "").lower())
         recent_attempts = attempts[:20]
         pass_threshold = app.config.get("PASS_THRESHOLD", 80)
+        competencies = user_machine_competencies(u)
         return render_template("admin/employee_detail.html",
                                employee=u, rows=rows, counts=counts,
                                recent_attempts=recent_attempts,
-                               pass_threshold=pass_threshold)
+                               pass_threshold=pass_threshold,
+                               competencies=competencies)
 
     @app.route("/admin/employees/template.csv")
     @author_required
@@ -3112,8 +3159,45 @@ def register_routes(app):
             elif name:
                 flash("That machine already exists.", "warning")
             return redirect(url_for("admin_machines"))
-        machines = Machine.query.order_by(Machine.name).all()
+        machines = (Machine.query
+                    .options(db.joinedload(Machine.department),
+                             db.selectinload(Machine.modules))
+                    .order_by(Machine.name).all())
         return render_template("admin/machines.html", machines=machines)
+
+    @app.route("/admin/machines/<int:mid>/edit", methods=["GET", "POST"])
+    @author_required
+    def admin_machine_edit(mid):
+        m = db.session.get(Machine, mid) or abort(404)
+        if request.method == "POST":
+            name = request.form.get("name", "").strip()
+            if not name:
+                flash("Machine name is required.", "danger")
+                return redirect(url_for("admin_machine_edit", mid=mid))
+            dupe = Machine.query.filter(Machine.name == name,
+                                        Machine.id != m.id).first()
+            if dupe is not None:
+                flash("Another machine already has that name.", "danger")
+                return redirect(url_for("admin_machine_edit", mid=mid))
+            m.name = name
+            dept_raw = request.form.get("department_id", "").strip()
+            m.department_id = int(dept_raw) if dept_raw.isdigit() else None
+            module_ids = [int(x) for x in request.form.getlist("module_ids")
+                          if x.isdigit()]
+            m.modules = (Module.query.filter(Module.id.in_(module_ids)).all()
+                         if module_ids else [])
+            log_audit("update", "machine", m.id,
+                      f"Updated machine '{m.name}' "
+                      f"({len(m.modules)} module link(s))")
+            db.session.commit()
+            flash(f"Machine '{m.name}' saved.", "success")
+            return redirect(url_for("admin_machines"))
+        departments = Department.query.order_by(Department.name).all()
+        modules = (Module.query.filter_by(is_published=True)
+                   .order_by(Module.title).all())
+        return render_template("admin/machine_edit.html",
+                               machine=m, departments=departments,
+                               modules=modules)
 
     @app.route("/admin/machines/<int:mid>/delete", methods=["POST"])
     @author_required

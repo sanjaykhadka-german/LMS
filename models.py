@@ -13,6 +13,20 @@ user_machines = db.Table(
 )
 
 
+# Machines that completing a module qualifies someone to operate. A staff
+# member is "qualified" on a machine when they've passed every module linked
+# to it (and those passes are still current per Module.valid_for_days).
+machine_modules = db.Table(
+    "machine_modules",
+    db.Column("machine_id", db.Integer,
+              db.ForeignKey("machines.id", ondelete="CASCADE"),
+              primary_key=True),
+    db.Column("module_id", db.Integer,
+              db.ForeignKey("modules.id", ondelete="CASCADE"),
+              primary_key=True),
+)
+
+
 class Department(db.Model):
     __tablename__ = "departments"
     id = db.Column(db.Integer, primary_key=True)
@@ -33,6 +47,14 @@ class Machine(db.Model):
     __tablename__ = "machines"
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
+    department_id = db.Column(db.Integer,
+                              db.ForeignKey("departments.id"), nullable=True)
+
+    department = db.relationship("Department",
+                                 backref=db.backref("machines",
+                                                    lazy="dynamic"))
+    modules = db.relationship("Module", secondary=machine_modules,
+                              backref="machines")
 
 
 class DepartmentModulePolicy(db.Model):
