@@ -285,6 +285,46 @@
 </div>
 {% endif %}
 
+{% if whs_expiring is defined and whs_expiring %}
+<div class="card p-3 mb-4">
+  <div class="d-flex justify-content-between align-items-baseline mb-3">
+    <h6 class="mb-0">WHS expiring soon</h6>
+    <a href="{{ url_for('admin_whs') }}" class="btn btn-sm btn-outline-secondary">Open WHS register</a>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-0">
+      <thead><tr>
+        <th>Type</th>
+        <th>Title</th>
+        <th>Staff</th>
+        <th>Expires</th>
+        <th class="text-end">Status</th>
+      </tr></thead>
+      <tbody>
+      {% for row in whs_expiring %}
+        {% set r = row.record %}
+        <tr>
+          <td>{{ row.kind_label }}</td>
+          <td>{{ r.title }}</td>
+          <td>{{ r.user.name if r.user else '—' }}</td>
+          <td>{{ r.expires_on.strftime('%Y-%m-%d') }}</td>
+          <td class="text-end">
+            {% if row.status == 'overdue' %}
+              <span class="badge bg-danger">{{ -row.days }}d overdue</span>
+            {% elif row.status == 'expiring_soon' %}
+              <span class="badge bg-warning text-dark">{{ row.days }}d</span>
+            {% else %}
+              <span class="badge bg-success">Current</span>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
 <div class="card p-4">
   <div class="d-flex justify-content-between align-items-baseline mb-3">
     <h5 class="mb-0">Recent attempts</h5>

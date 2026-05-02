@@ -274,6 +274,48 @@ class UploadedFile(db.Model):
     uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
+class WHSRecord(db.Model):
+    """Workplace Health & Safety register — high-risk licences, fire wardens,
+    first aiders, and incident/near-miss reports. One table with a `kind`
+    column so admins can extend register types without schema changes."""
+    __tablename__ = "whs_records"
+    id = db.Column(db.Integer, primary_key=True)
+    kind = db.Column(db.String(32), nullable=False, index=True)
+    # 'high_risk_licence' | 'fire_warden' | 'first_aider' | 'incident'
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
+    # Licence class, warden/first-aider role, or incident summary.
+    title = db.Column(db.String(200), nullable=False)
+    issued_on = db.Column(db.Date, nullable=True)
+    expires_on = db.Column(db.Date, nullable=True, index=True)
+    notes = db.Column(db.Text, default="")
+    # Stored UploadedFile.filename — same pattern as User.photo_filename and
+    # Module.cover_path. Survives Render free-tier redeploys (DB-backed).
+    document_filename = db.Column(db.String(500), nullable=True)
+
+    # Reminder dedup — set when notify_reminder is sent so we don't email
+    # the same record more than once every WHS_REMINDER_COOLDOWN_DAYS.
+    last_reminded_at = db.Column(db.DateTime, nullable=True)
+
+    # Incident-only (nullable; used when kind == 'incident').
+    incident_date = db.Column(db.Date, nullable=True)
+    severity = db.Column(db.String(32), nullable=True)
+    # 'low' | 'medium' | 'high' | 'critical'
+    reported_by_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship("User", foreign_keys=[user_id])
+    reported_by = db.relationship("User", foreign_keys=[reported_by_id])
+
+
 class AuditLog(db.Model):
     __tablename__ = "audit_logs"
     id = db.Column(db.Integer, primary_key=True)

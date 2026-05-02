@@ -105,3 +105,20 @@ def notify_reminder(user, outstanding, base_url):
     <p><a href="{base_url}/my/modules">Open your portal</a></p>
     """
     return send_email(user.email, "Reminder: outstanding training", html)
+
+
+def notify_whs_expiry(user, record, kind_label, base_url):
+    """Email a staff member that their WHS record (licence / warden / first
+    aider) expires soon. `kind_label` is a human-readable singular form
+    (e.g. "High-risk licence")."""
+    expires = (record.expires_on.strftime("%d %b %Y")
+               if record.expires_on else "soon")
+    html = f"""
+    <p>Hi {user.name},</p>
+    <p>Your {kind_label.lower()} <b>{record.title}</b> expires on
+    <b>{expires}</b>.</p>
+    <p>Please start renewal now and let your manager know once it's done.</p>
+    """
+    return send_email(user.email,
+                      f"Reminder: {kind_label} expires {expires}",
+                      html)

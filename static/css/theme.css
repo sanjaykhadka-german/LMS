@@ -832,6 +832,53 @@ hr { border-color: var(--gb-line); opacity: 1; }
 .gb-mx-swatch.is-never { background: var(--gb-paper); }
 .gb-mx-swatch.is-na { background: var(--gb-line-soft); }
 
+/* -------- WHS landing cards -------- */
+.gb-whs-card {
+  display: block;
+  background: var(--gb-paper);
+  border: 1px solid var(--gb-line);
+  border-radius: var(--gb-radius-lg);
+  padding: 22px 22px 20px;
+  position: relative;
+  text-decoration: none;
+  color: var(--gb-ink);
+  height: 100%;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.gb-whs-card:hover {
+  border-color: var(--gb-burgundy);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+  text-decoration: none;
+  color: var(--gb-ink);
+}
+.gb-whs-card::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 22px; right: 22px;
+  height: 2px;
+  background: var(--gb-brass);
+}
+.gb-whs-card-label {
+  font-family: var(--gb-font-body);
+  font-weight: 600;
+  font-size: 0.7rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--gb-mute);
+  margin-bottom: 10px;
+}
+.gb-whs-card-total {
+  font-family: var(--gb-font-head);
+  font-weight: 700;
+  font-size: 2.4rem;
+  line-height: 1;
+  color: var(--gb-ink);
+}
+.gb-whs-card-meta {
+  margin-top: 8px;
+  font-size: 0.85rem;
+}
+
 /* -------- Department training policies -------- */
 .gb-policy-table { font-size: 0.9rem; }
 .gb-policy-table thead th {

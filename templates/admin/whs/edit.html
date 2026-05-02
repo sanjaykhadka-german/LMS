@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if record else 'Add' }} {{ kind_singular.lower() }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-end flex-wrap gap-3 mb-4">
+  <div class="gb-pageheader mb-0">
+    <span class="gb-eyebrow">07 / Health & Safety</span>
+    <h1 class="mb-0">{{ 'Edit' if record else 'Add' }} {{ kind_singular.lower() }}</h1>
+  </div>
+  <a href="{{ url_for('admin_whs_list', kind=kind) }}" class="btn btn-sm btn-outline-secondary">&larr; Back to list</a>
+</div>
+
+<div class="card p-4">
+  <form method="post" enctype="multipart/form-data" class="row g-3">
+    <input type="hidden" name="kind" value="{{ kind }}">
+
+    <div class="col-12">
+      <label class="form-label">
+        {% if kind == 'incident' %}Incident summary{% else %}{{ kind_singular }} title / class{% endif %}
+        <span class="text-danger">*</span>
+      </label>
+      <input name="title" required class="form-control"
+             value="{{ record.title if record else '' }}"
+             placeholder="{% if kind == 'high_risk_licence' %}e.g. Forklift Licence (LF){% elif kind == 'fire_warden' %}e.g. Floor 1 fire warden{% elif kind == 'first_aider' %}e.g. Level 2 first aider{% else %}e.g. Slip near walk-in cooler{% endif %}">
+    </div>
+
+    {% if kind != 'incident' %}
+      <div class="col-md-6">
+        <label class="form-label">Staff member <span class="text-danger">*</span></label>
+        <select name="user_id" required class="form-select">
+          <option value="">— Choose —</option>
+          {% for u in users %}
+            <option value="{{ u.id }}"
+              {% if record and record.user_id == u.id %}selected{% endif %}>
+              {{ u.name }}{% if u.department %} ({{ u.department.name }}){% endif %}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Issued on</label>
+        <input type="date" name="issued_on" class="form-control"
+               value="{{ record.issued_on.isoformat() if record and record.issued_on else '' }}">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Expires on</label>
+        <input type="date" name="expires_on" class="form-control"
+               value="{{ record.expires_on.isoformat() if record and record.expires_on else '' }}">
+        <div class="form-text">Reminders email the staff member 30 days out.</div>
+      </div>
+    {% else %}
+      <div class="col-md-3">
+        <label class="form-label">Date of incident</label>
+        <input type="date" name="incident_date" class="form-control"
+               value="{{ record.incident_date.isoformat() if record and record.incident_date else '' }}">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Severity</label>
+        <select name="severity" class="form-select">
+          <option value="">— Choose —</option>
+          {% for s in severities %}
+            <option value="{{ s }}" {% if record and record.severity == s %}selected{% endif %}>{{ s|capitalize }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Staff involved</label>
+        <select name="user_id" class="form-select">
+          <option value="">— None / external —</option>
+          {% for u in users %}
+            <option value="{{ u.id }}"
+              {% if record and record.user_id == u.id %}selected{% endif %}>{{ u.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Reported by</label>
+        <select name="reported_by_id" class="form-select">
+          {% for u in users %}
+            <option value="{{ u.id }}"
+              {% if record and record.reported_by_id == u.id %}selected{% endif %}>{{ u.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    {% endif %}
+
+    <div class="col-12">
+      <label class="form-label">Notes</label>
+      <textarea name="notes" rows="3" class="form-control">{{ record.notes if record else '' }}</textarea>
+    </div>
+
+    <div class="col-12">
+      <label class="form-label">Document (optional)</label>
+      {% if record and record.document_filename %}
+        <div class="mb-2 small">
+          Current:
+          <a href="{{ url_for('uploaded_file', name=record.document_filename) }}"
+             target="_blank" rel="noopener">View existing document</a>
+          <div class="form-check mt-1">
+            <input class="form-check-input" type="checkbox"
+                   name="remove_document" id="removeDoc" value="1">
+            <label class="form-check-label small" for="removeDoc">Remove this document</label>
+          </div>
+        </div>
+      {% endif %}
+      <input type="file" name="document" accept=".pdf,.png,.jpg,.jpeg,.docx,.doc"
+             class="form-control">
+      <div class="form-text">PDF, image, or Word doc. Stored in the database so it survives Render redeploys.</div>
+    </div>
+
+    <div class="col-12 d-flex gap-2 justify-content-end">
+      {% if record %}
+        <form method="post" action="{{ url_for('admin_whs_delete', rid=record.id) }}"
+              class="d-inline" onsubmit="return confirm('Delete this record? This also deletes the attached document.');">
+          <button class="btn btn-outline-danger">Delete</button>
+        </form>
+      {% endif %}
+      <a href="{{ url_for('admin_whs_list', kind=kind) }}" class="btn btn-outline-secondary">Cancel</a>
+      <button class="btn btn-primary gb-arrow">Save</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

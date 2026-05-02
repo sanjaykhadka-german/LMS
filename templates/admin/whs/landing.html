@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}WHS register{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-end flex-wrap gap-3 mb-4">
+  <div class="gb-pageheader mb-0">
+    <span class="gb-eyebrow">07 / Health & Safety</span>
+    <h1 class="mb-1">WHS register</h1>
+    <p class="lede mb-0">High-risk licences, fire wardens, first aiders, and incident / near-miss records — with renewal reminders.</p>
+  </div>
+  <form method="post" action="{{ url_for('admin_whs_run_reminders') }}">
+    <button class="btn btn-outline-primary"
+            onclick="return confirm('Send reminder emails for every WHS record expiring in the next 30 days (only ones not emailed in the last {{ cooldown_days }} days)?');">
+      Send today's reminders now
+    </button>
+  </form>
+</div>
+
+<div class="row g-3 mb-4">
+  {% for kind in kinds %}
+    {% set c = counts[kind] %}
+    <div class="col-md-6 col-xl-3">
+      <a class="gb-whs-card" href="{{ url_for('admin_whs_list', kind=kind) }}">
+        <div class="gb-whs-card-label">{{ kind_label[kind] }}</div>
+        <div class="gb-whs-card-total">{{ c.total }}</div>
+        <div class="gb-whs-card-meta">
+          {% if kind == 'incident' %}
+            {{ c.total }} record{{ '' if c.total == 1 else 's' }}
+          {% else %}
+            {% if c.overdue %}
+              <span class="text-danger">{{ c.overdue }} overdue</span>
+            {% endif %}
+            {% if c.overdue and c.expiring %} · {% endif %}
+            {% if c.expiring %}
+              <span class="text-warning">{{ c.expiring }} expiring soon</span>
+            {% endif %}
+            {% if not c.overdue and not c.expiring %}
+              <span class="text-muted">All current</span>
+            {% endif %}
+          {% endif %}
+        </div>
+      </a>
+    </div>
+  {% endfor %}
+</div>
+
+<div class="row g-3">
+  <div class="col-md-6">
+    <a class="btn btn-primary w-100 gb-arrow"
+       href="{{ url_for('admin_whs_edit', kind='high_risk_licence') }}">
+      Add high-risk licence
+    </a>
+  </div>
+  <div class="col-md-6">
+    <a class="btn btn-outline-primary w-100"
+       href="{{ url_for('admin_whs_edit', kind='incident') }}">
+      Log incident or near-miss
+    </a>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}{{ kind_label }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-end flex-wrap gap-3 mb-4">
+  <div class="gb-pageheader mb-0">
+    <span class="gb-eyebrow">07 / Health & Safety</span>
+    <h1 class="mb-1">{{ kind_label }}</h1>
+    <p class="lede mb-0">
+      {% if kind == 'incident' %}
+        Workplace incidents and near-misses logged by staff and managers.
+      {% else %}
+        Active register with expiry tracking and renewal reminders.
+      {% endif %}
+    </p>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('admin_whs') }}" class="btn btn-sm btn-outline-secondary">&larr; All registers</a>
+    <a href="{{ url_for('admin_whs_edit', kind=kind) }}" class="btn btn-primary gb-arrow">Add {{ kind_singular.lower() }}</a>
+  </div>
+</div>
+
+<div class="card p-0">
+  <div class="table-responsive">
+    <table class="table align-middle mb-0">
+      <thead>
+        <tr>
+          {% if kind == 'incident' %}
+            <th>Date</th>
+            <th>Summary</th>
+            <th>Staff involved</th>
+            <th>Severity</th>
+            <th>Reported by</th>
+            <th>Document</th>
+            <th class="text-end">Actions</th>
+          {% else %}
+            <th>{{ kind_singular }}</th>
+            <th>Staff member</th>
+            <th>Issued</th>
+            <th>Expires</th>
+            <th>Status</th>
+            <th>Document</th>
+            <th class="text-end">Actions</th>
+          {% endif %}
+        </tr>
+      </thead>
+      <tbody>
+      {% for r, status in rows %}
+        <tr>
+          {% if kind == 'incident' %}
+            <td>{{ r.incident_date.strftime('%Y-%m-%d') if r.incident_date else r.created_at.strftime('%Y-%m-%d') }}</td>
+            <td>{{ r.title }}{% if r.notes %}<div class="small text-muted">{{ r.notes|truncate(120) }}</div>{% endif %}</td>
+            <td>{{ r.user.name if r.user else '—' }}</td>
+            <td>
+              {% if r.severity == 'critical' %}<span class="badge bg-danger">Critical</span>
+              {% elif r.severity == 'high' %}<span class="badge bg-warning">High</span>
+              {% elif r.severity == 'medium' %}<span class="badge bg-info text-dark">Medium</span>
+              {% elif r.severity == 'low' %}<span class="badge bg-secondary">Low</span>
+              {% else %}—{% endif %}
+            </td>
+            <td>{{ r.reported_by.name if r.reported_by else '—' }}</td>
+          {% else %}
+            <td>{{ r.title }}</td>
+            <td>{{ r.user.name if r.user else '—' }}</td>
+            <td>{{ r.issued_on.strftime('%Y-%m-%d') if r.issued_on else '—' }}</td>
+            <td>{{ r.expires_on.strftime('%Y-%m-%d') if r.expires_on else '—' }}</td>
+            <td>
+              {% if status == 'current' %}<span class="badge bg-success">Current</span>
+              {% elif status == 'expiring_soon' %}<span class="badge bg-warning">Expiring soon</span>
+              {% elif status == 'overdue' %}<span class="badge bg-danger">Overdue</span>
+              {% else %}<span class="badge bg-secondary">No expiry</span>{% endif %}
+            </td>
+          {% endif %}
+          <td>
+            {% if r.document_filename %}
+              <a href="{{ url_for('uploaded_file', name=r.document_filename) }}"
+                 target="_blank" rel="noopener">View</a>
+            {% else %}—{% endif %}
+          </td>
+          <td class="text-end">
+            <a href="{{ url_for('admin_whs_edit', rid=r.id) }}"
+               class="btn btn-sm btn-outline-primary">Edit</a>
+            <form method="post"
+                  action="{{ url_for('admin_whs_delete', rid=r.id) }}"
+                  class="d-inline"
+                  onsubmit="return confirm('Delete this record?');">
+              <button class="btn btn-sm btn-outline-danger">Delete</button>
+            </form>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="7" class="text-muted p-4 text-center">No records yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

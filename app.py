@@ -19,10 +19,10 @@ from config import Config
 from models import (db, User, Module, ModuleMedia, ContentItem,
                     ContentItemMedia, Question, Choice, Assignment, Attempt,
                     Department, Employer, Machine, UploadedFile, ModuleVersion,
-                    AuditLog, DepartmentModulePolicy)
+                    AuditLog, DepartmentModulePolicy, WHSRecord)
 from email_service import (notify_invite, notify_assignment,
                            notify_attempt, notify_reminder,
-                           notify_password_reset)
+                           notify_password_reset, notify_whs_expiry)
 from ai_service import chat_turn, current_provider
 from file_extract import (prepare_file, cleanup_local_files,
                           reap_old_files)
@@ -304,6 +304,65 @@ def process_expired_completions(base_url):
     return reset
 
 
+def whs_status_for(record, now=None):
+    """Return one of 'current' | 'expiring_soon' | 'overdue' | 'no_expiry'
+    for a WHS record. Incidents always return 'no_expiry'."""
+    if record.kind == "incident" or record.expires_on is None:
+        return "no_expiry"
+    today = (now or datetime.utcnow()).date()
+    days_to_expiry = (record.expires_on - today).days
+    if days_to_expiry < 0:
+        return "overdue"
+    if days_to_expiry <= WHS_REMINDER_LOOKAHEAD_DAYS:
+        return "expiring_soon"
+    return "current"
+
+
+def process_whs_reminders(base_url, force=False):
+    """Send reminder emails for WHS records expiring within
+    WHS_REMINDER_LOOKAHEAD_DAYS that haven't been reminded in the last
+    WHS_REMINDER_COOLDOWN_DAYS. Mirrors process_expired_completions —
+    called lazily on admin dashboard load + manually via the WHS landing
+    'Send today's reminders now' button.
+
+    Returns count sent. `force=True` ignores the cooldown."""
+    today = datetime.utcnow().date()
+    horizon = today + timedelta(days=WHS_REMINDER_LOOKAHEAD_DAYS)
+    cooldown_cutoff = (datetime.utcnow()
+                       - timedelta(days=WHS_REMINDER_COOLDOWN_DAYS))
+
+    q = (WHSRecord.query
+         .filter(WHSRecord.kind != "incident")
+         .filter(WHSRecord.user_id.isnot(None))
+         .filter(WHSRecord.expires_on.isnot(None))
+         .filter(WHSRecord.expires_on <= horizon))
+    if not force:
+        q = q.filter(db.or_(
+            WHSRecord.last_reminded_at.is_(None),
+            WHSRecord.last_reminded_at < cooldown_cutoff,
+        ))
+
+    sent = 0
+    for r in q.all():
+        u = r.user
+        if u is None or not u.is_active_flag:
+            continue
+        try:
+            ok = notify_whs_expiry(u, r,
+                                   WHS_KIND_SINGULAR.get(r.kind, "WHS record"),
+                                   base_url)
+        except Exception:
+            current_app.logger.exception(
+                "WHS reminder email failed for record %s", r.id)
+            ok = False
+        if ok:
+            r.last_reminded_at = datetime.utcnow()
+            sent += 1
+    if sent:
+        db.session.commit()
+    return sent
+
+
 def bootstrap_admin(app):
     """Create a bootstrap admin user the first time the app boots against
     an empty database. Never modifies an existing admin — passwords are
@@ -393,6 +452,29 @@ def qaqc_required(fn):
 
 
 VALID_ROLES = ("admin", "qaqc", "employee")
+
+# WHS register kinds. Each value is also a route segment, so keep these
+# url-safe (lowercase, underscores, no spaces).
+WHS_KINDS = ("high_risk_licence", "fire_warden", "first_aider", "incident")
+WHS_KIND_LABEL = {
+    "high_risk_licence": "High-risk licences",
+    "fire_warden": "Fire wardens",
+    "first_aider": "First aiders",
+    "incident": "Incidents & near-misses",
+}
+WHS_KIND_SINGULAR = {
+    "high_risk_licence": "High-risk licence",
+    "fire_warden": "Fire warden",
+    "first_aider": "First aider",
+    "incident": "Incident / near-miss",
+}
+WHS_SEVERITIES = ("low", "medium", "high", "critical")
+# Don't email the same WHS record more than once every 14 days, even if the
+# admin keeps reloading the dashboard.
+WHS_REMINDER_COOLDOWN_DAYS = 14
+# Send a reminder when the licence/warden/first-aider expires within this
+# many days. Mirrors the module-compliance "expiring_soon" 30-day window.
+WHS_REMINDER_LOOKAHEAD_DAYS = 30
 
 
 def get_or_create_employer(name):
@@ -1219,7 +1301,16 @@ def register_routes(app):
     @app.route("/admin")
     @admin_required
     def admin_dashboard():
+        # Fire WHS reminder emails for licences/wardens/first-aiders expiring
+        # in the next 30 days. Cooldown'd to once per record per 14 days, so
+        # repeated dashboard loads don't spam staff. Same lazy pattern as
+        # process_expired_completions on /admin/assignments.
+        try:
+            process_whs_reminders(app.config.get("APP_BASE_URL", ""))
+        except Exception:
+            current_app.logger.exception("WHS reminder sweep failed")
         ctx = build_dashboard_context()
+        ctx["whs_expiring"] = _whs_expiring_soon_for_dashboard()
         return render_template("admin/dashboard.html", **ctx)
 
     # --- qa/qc ---
@@ -3081,6 +3172,204 @@ def register_routes(app):
                 sent += 1
         flash(f"Reminders sent to {sent} employee(s).", "success")
         return redirect(url_for("index"))
+
+    # --- WHS register ---
+    def _whs_expiring_soon_for_dashboard(limit=8):
+        """Return WHS records expiring in the next 30 days or already overdue,
+        sorted soonest first. Used by the admin dashboard widget."""
+        today = datetime.utcnow().date()
+        soon = today + timedelta(days=WHS_REMINDER_LOOKAHEAD_DAYS)
+        rows = (WHSRecord.query
+                .filter(WHSRecord.kind != "incident")
+                .filter(WHSRecord.expires_on.isnot(None))
+                .filter(WHSRecord.expires_on <= soon)
+                .options(db.joinedload(WHSRecord.user))
+                .order_by(WHSRecord.expires_on.asc())
+                .limit(limit).all())
+        out = []
+        for r in rows:
+            out.append({
+                "record": r,
+                "kind_label": WHS_KIND_SINGULAR.get(r.kind, "WHS record"),
+                "status": whs_status_for(r),
+                "days": (r.expires_on - today).days,
+            })
+        return out
+
+    def _whs_counts():
+        """Return {kind: {total, expiring, overdue}} for the landing cards."""
+        today = datetime.utcnow().date()
+        soon = today + timedelta(days=WHS_REMINDER_LOOKAHEAD_DAYS)
+        out = {k: {"total": 0, "expiring": 0, "overdue": 0} for k in WHS_KINDS}
+        for r in WHSRecord.query.all():
+            if r.kind not in out:
+                continue
+            out[r.kind]["total"] += 1
+            if r.kind == "incident" or r.expires_on is None:
+                continue
+            if r.expires_on < today:
+                out[r.kind]["overdue"] += 1
+            elif r.expires_on <= soon:
+                out[r.kind]["expiring"] += 1
+        return out
+
+    @app.route("/admin/whs")
+    @author_required
+    def admin_whs():
+        return render_template("admin/whs/landing.html",
+                               counts=_whs_counts(),
+                               kinds=WHS_KINDS,
+                               kind_label=WHS_KIND_LABEL,
+                               cooldown_days=WHS_REMINDER_COOLDOWN_DAYS)
+
+    @app.route("/admin/whs/<kind>")
+    @author_required
+    def admin_whs_list(kind):
+        if kind not in WHS_KINDS:
+            abort(404)
+        records = (WHSRecord.query
+                   .filter_by(kind=kind)
+                   .options(db.joinedload(WHSRecord.user),
+                            db.joinedload(WHSRecord.reported_by))
+                   .order_by(WHSRecord.expires_on.asc().nullslast(),
+                             WHSRecord.created_at.desc()).all())
+        rows = [(r, whs_status_for(r)) for r in records]
+        return render_template("admin/whs/list.html",
+                               kind=kind,
+                               kind_label=WHS_KIND_LABEL[kind],
+                               kind_singular=WHS_KIND_SINGULAR[kind],
+                               rows=rows)
+
+    @app.route("/admin/whs/new", methods=["GET", "POST"])
+    @app.route("/admin/whs/<int:rid>/edit", methods=["GET", "POST"])
+    @author_required
+    def admin_whs_edit(rid=None):
+        record = db.session.get(WHSRecord, rid) if rid else None
+        if rid and record is None:
+            abort(404)
+        kind = (request.values.get("kind")
+                or (record.kind if record else "high_risk_licence"))
+        if kind not in WHS_KINDS:
+            abort(404)
+
+        if request.method == "POST":
+            title = request.form.get("title", "").strip()
+            user_id_raw = request.form.get("user_id", "").strip()
+            notes = request.form.get("notes", "").strip()
+            try:
+                issued_on = parse_user_date(request.form.get("issued_on", ""))
+                expires_on = parse_user_date(request.form.get("expires_on", ""))
+                incident_date = parse_user_date(
+                    request.form.get("incident_date", ""))
+            except ValueError as exc:
+                flash(f"Date format wrong: {exc}. Use YYYY-MM-DD.", "danger")
+                return redirect(request.url)
+            severity = (request.form.get("severity", "").strip()
+                        if kind == "incident" else None)
+            reported_by_id_raw = (request.form.get("reported_by_id", "").strip()
+                                  if kind == "incident" else "")
+
+            if not title:
+                flash("Title is required.", "danger")
+                return redirect(request.url)
+            if kind != "incident" and not user_id_raw.isdigit():
+                flash("Pick the staff member this record applies to.",
+                      "danger")
+                return redirect(request.url)
+            if severity and severity not in WHS_SEVERITIES:
+                severity = None
+
+            if record is None:
+                record = WHSRecord(kind=kind)
+                db.session.add(record)
+            record.title = title
+            record.user_id = (int(user_id_raw)
+                              if user_id_raw.isdigit() else None)
+            record.notes = notes
+            record.issued_on = issued_on
+            record.expires_on = expires_on
+            if kind == "incident":
+                record.incident_date = incident_date
+                record.severity = severity
+                record.reported_by_id = (int(reported_by_id_raw)
+                                         if reported_by_id_raw.isdigit()
+                                         else current_user.id)
+            else:
+                record.incident_date = None
+                record.severity = None
+                record.reported_by_id = None
+
+            doc_fs = request.files.get("document")
+            if doc_fs and (doc_fs.filename or "").strip():
+                try:
+                    new_doc = save_upload(doc_fs, prefix="whs_")
+                except ValueError as exc:
+                    db.session.rollback()
+                    flash(f"Document not saved: {exc}", "danger")
+                    return redirect(request.url)
+                old = record.document_filename
+                record.document_filename = new_doc
+                if old and old != new_doc:
+                    prev = db.session.get(UploadedFile, old)
+                    if prev is not None:
+                        db.session.delete(prev)
+            elif request.form.get("remove_document") and record.document_filename:
+                old = record.document_filename
+                record.document_filename = None
+                prev = db.session.get(UploadedFile, old)
+                if prev is not None:
+                    db.session.delete(prev)
+
+            db.session.flush()
+            verb = "create" if rid is None else "update"
+            log_audit(verb, "whs_record", record.id,
+                      f"{verb.title()}d {WHS_KIND_SINGULAR[kind].lower()}: "
+                      f"{record.title}")
+            db.session.commit()
+            flash(f"{WHS_KIND_SINGULAR[kind]} saved.", "success")
+            return redirect(url_for("admin_whs_list", kind=kind))
+
+        users = (User.query
+                 .filter_by(is_active_flag=True)
+                 .order_by(User.last_name, User.first_name).all())
+        return render_template("admin/whs/edit.html",
+                               record=record, kind=kind,
+                               kind_label=WHS_KIND_LABEL[kind],
+                               kind_singular=WHS_KIND_SINGULAR[kind],
+                               users=users,
+                               severities=WHS_SEVERITIES)
+
+    @app.route("/admin/whs/<int:rid>/delete", methods=["POST"])
+    @author_required
+    def admin_whs_delete(rid):
+        r = db.session.get(WHSRecord, rid) or abort(404)
+        kind = r.kind
+        title = r.title
+        # Clean up the uploaded document blob too — same pattern as
+        # set_user_photo / clear_user_photo. Idempotent.
+        if r.document_filename:
+            uf = db.session.get(UploadedFile, r.document_filename)
+            if uf is not None:
+                db.session.delete(uf)
+        log_audit("delete", "whs_record", r.id,
+                  f"Deleted {WHS_KIND_SINGULAR.get(kind, 'WHS record').lower()}: "
+                  f"{title}")
+        db.session.delete(r)
+        db.session.commit()
+        flash(f"{WHS_KIND_SINGULAR.get(kind, 'Record')} deleted.", "success")
+        return redirect(url_for("admin_whs_list", kind=kind))
+
+    @app.route("/admin/whs/run-reminders", methods=["POST"])
+    @author_required
+    def admin_whs_run_reminders():
+        force = bool(request.form.get("force"))
+        sent = process_whs_reminders(app.config.get("APP_BASE_URL", ""),
+                                     force=force)
+        if sent:
+            flash(f"Sent {sent} WHS reminder email(s).", "success")
+        else:
+            flash("No reminders due — nothing sent.", "info")
+        return redirect(url_for("admin_whs"))
 
     # --- employee ---
     @app.route("/my/modules")
