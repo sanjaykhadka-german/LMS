@@ -19,7 +19,7 @@ from config import Config
 from models import (db, User, Module, ModuleMedia, ContentItem,
                     ContentItemMedia, Question, Choice, Assignment, Attempt,
                     Department, Employer, Machine, UploadedFile, ModuleVersion,
-                    AuditLog)
+                    AuditLog, DepartmentModulePolicy)
 from email_service import (notify_invite, notify_assignment,
                            notify_attempt, notify_reminder,
                            notify_password_reset)
@@ -184,6 +184,65 @@ def assignment_due_from(dt, module=None):
     days = (module_validity_days(module) if module is not None
             else current_app.config.get("ASSIGNMENT_VALIDITY_DAYS", 180))
     return None if days is None else dt + timedelta(days=days)
+
+
+def auto_assign_for_department(user, base_url=None, send_email=True):
+    """Create Assignment rows for any DepartmentModulePolicy modules the user
+    isn't already assigned to. Idempotent — relies on uq_user_module to skip
+    duplicates. Commits its own transaction. Returns count of rows created."""
+    if user.department_id is None:
+        return 0
+    policy_module_ids = {
+        r.module_id for r in DepartmentModulePolicy.query
+        .filter_by(department_id=user.department_id).all()
+    }
+    if not policy_module_ids:
+        return 0
+    existing = {
+        a.module_id for a in Assignment.query
+        .filter_by(user_id=user.id).all()
+    }
+    to_create = policy_module_ids - existing
+    if not to_create:
+        return 0
+    now = datetime.utcnow()
+    created = 0
+    new_assignments = []
+    for mid in to_create:
+        m = db.session.get(Module, mid)
+        if m is None or not m.is_published:
+            continue
+        a = Assignment(user_id=user.id, module_id=mid,
+                       assigned_at=now,
+                       due_at=assignment_due_from(now, module=m))
+        db.session.add(a)
+        new_assignments.append((a, m))
+        created += 1
+    if not created:
+        return 0
+    try:
+        db.session.commit()
+    except IntegrityError:
+        # Concurrent insert produced a duplicate via uq_user_module — rare
+        # but possible if two admins act simultaneously. Recover by
+        # rolling back; the row already exists, so the goal is met.
+        db.session.rollback()
+        return 0
+    for a, m in new_assignments:
+        try:
+            log_audit("auto_assign", "assignment", a.id,
+                      f"Auto-assigned '{m.title}' to {user.email} "
+                      f"via department '{user.department.name}'")
+        except Exception:
+            current_app.logger.exception("auto-assign audit log failed")
+        if send_email and base_url:
+            try:
+                notify_assignment(user, m, base_url)
+            except Exception:
+                current_app.logger.exception(
+                    "auto-assign email failed for %s", user.email)
+    db.session.commit()
+    return created
 
 
 def backfill_user_first_last():
@@ -2328,7 +2387,13 @@ def register_routes(app):
                   f"Created user {u.email} ({u.role})")
         db.session.commit()
         notify_invite(u, temp_pw, app.config["APP_BASE_URL"])
-        flash(f"{u.role_label} created. Temporary password: {temp_pw}", "success")
+        auto_count = auto_assign_for_department(u, send_email=False)
+        msg = f"{u.role_label} created. Temporary password: {temp_pw}"
+        if auto_count:
+            msg += (f" — {auto_count} module"
+                    f"{'s' if auto_count != 1 else ''} auto-assigned "
+                    f"from {u.department.name} policy.")
+        flash(msg, "success")
         return redirect(url_for("admin_employees"))
 
     @app.route("/admin/employees/<int:uid>/toggle", methods=["POST"])
@@ -2418,6 +2483,7 @@ def register_routes(app):
                 flash("Missing required field(s): " + ", ".join(missing), "danger")
                 return redirect(url_for("admin_employee_edit", uid=u.id))
 
+            old_department_id = u.department_id
             u.first_name = first_name
             u.last_name = last_name
             u.name = f"{first_name} {last_name}".strip()
@@ -2447,7 +2513,17 @@ def register_routes(app):
             log_audit("update", "user", u.id,
                       f"Edited user {u.email}")
             db.session.commit()
-            flash(f"{u.name} updated.", "success")
+            auto_count = 0
+            if u.department_id != old_department_id:
+                auto_count = auto_assign_for_department(
+                    u, base_url=app.config.get("APP_BASE_URL", ""),
+                    send_email=True)
+            msg = f"{u.name} updated."
+            if auto_count:
+                msg += (f" Auto-assigned {auto_count} module"
+                        f"{'s' if auto_count != 1 else ''} "
+                        f"from new department '{u.department.name}'.")
+            flash(msg, "success")
             return redirect(url_for("admin_employees"))
         departments = Department.query.order_by(Department.name).all()
         employers = Employer.query.order_by(Employer.name).all()
@@ -2697,6 +2773,11 @@ def register_routes(app):
                 invited += 1
             except Exception:
                 pass
+            try:
+                auto_assign_for_department(u, send_email=False)
+            except Exception:
+                current_app.logger.exception(
+                    "bulk-upload auto-assign failed for %s", u.email)
             created += 1
 
         if created:
@@ -2780,6 +2861,61 @@ def register_routes(app):
             return redirect(url_for("admin_departments"))
         depts = Department.query.order_by(Department.name).all()
         return render_template("admin/departments.html", departments=depts)
+
+    @app.route("/admin/departments/policies", methods=["GET", "POST"])
+    @author_required
+    def admin_department_policies():
+        """Pick which modules each department auto-assigns to new staff."""
+        departments = Department.query.order_by(Department.name).all()
+        modules = (Module.query.filter_by(is_published=True)
+                   .order_by(Module.title.asc()).all())
+        if request.method == "POST":
+            # Form posts checkbox `policy_<dept_id>_<module_id>`. Build the
+            # desired set per department, then sync rows.
+            desired = {d.id: set() for d in departments}
+            for key in request.form.keys():
+                if not key.startswith("policy_"):
+                    continue
+                try:
+                    _, did_s, mid_s = key.split("_")
+                    did, mid = int(did_s), int(mid_s)
+                except (ValueError, IndexError):
+                    continue
+                if did in desired:
+                    desired[did].add(mid)
+            existing = DepartmentModulePolicy.query.all()
+            existing_by_dept = {}
+            for r in existing:
+                existing_by_dept.setdefault(r.department_id, {})[r.module_id] = r
+            added = 0
+            removed = 0
+            module_ids = {m.id for m in modules}
+            for d in departments:
+                want = desired.get(d.id, set()) & module_ids
+                have = set(existing_by_dept.get(d.id, {}).keys())
+                for mid in want - have:
+                    db.session.add(DepartmentModulePolicy(
+                        department_id=d.id, module_id=mid))
+                    added += 1
+                for mid in have - want:
+                    db.session.delete(existing_by_dept[d.id][mid])
+                    removed += 1
+            if added or removed:
+                log_audit("update", "department", None,
+                          f"Department-module policies updated: "
+                          f"{added} added, {removed} removed")
+                db.session.commit()
+                flash(f"Saved policies — {added} added, {removed} removed.",
+                      "success")
+            else:
+                flash("No changes.", "info")
+            return redirect(url_for("admin_department_policies"))
+
+        rows = DepartmentModulePolicy.query.all()
+        policy_set = {(r.department_id, r.module_id) for r in rows}
+        return render_template("admin/department_policies.html",
+                               departments=departments, modules=modules,
+                               policy_set=policy_set)
 
     @app.route("/admin/departments/<int:did>/delete", methods=["POST"])
     @author_required

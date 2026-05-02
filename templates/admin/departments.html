@@ -1,10 +1,13 @@
 {% extends "base.html" %}
 {% block title %}Departments{% endblock %}
 {% block content %}
-<div class="gb-pageheader">
-  <span class="gb-eyebrow">06 / Structure</span>
-  <h1>Departments</h1>
-  <p class="lede">Group staff by where they work on the floor.</p>
+<div class="d-flex justify-content-between align-items-end flex-wrap gap-3 mb-4">
+  <div class="gb-pageheader mb-0">
+    <span class="gb-eyebrow">06 / Structure</span>
+    <h1 class="mb-1">Departments</h1>
+    <p class="lede mb-0">Group staff by where they work on the floor.</p>
+  </div>
+  <a href="{{ url_for('admin_department_policies') }}" class="btn btn-outline-primary">Default training per department</a>
 </div>
 
 <div class="card p-4 mb-4">

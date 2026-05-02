@@ -825,6 +825,27 @@ hr { border-color: var(--gb-line); opacity: 1; }
 .gb-mx-swatch.is-never { background: var(--gb-paper); }
 .gb-mx-swatch.is-na { background: var(--gb-line-soft); }
 
+/* -------- Department training policies -------- */
+.gb-policy-table { font-size: 0.9rem; }
+.gb-policy-table thead th {
+  white-space: nowrap;
+  background: var(--gb-cream-2);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+.gb-policy-table .gb-policy-corner,
+.gb-policy-table .gb-policy-mod {
+  position: sticky;
+  left: 0;
+  background: var(--gb-paper);
+  text-align: left;
+  min-width: 220px;
+  border-right: 1px solid var(--gb-line);
+}
+.gb-policy-table thead .gb-policy-corner { background: var(--gb-cream-2); z-index: 2; }
+
 /* -------- Avatar / staff photo -------- */
 .gb-avatar {
   display: inline-block;

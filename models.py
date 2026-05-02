@@ -35,6 +35,35 @@ class Machine(db.Model):
     name = db.Column(db.String(100), unique=True, nullable=False)
 
 
+class DepartmentModulePolicy(db.Model):
+    """Modules that staff in a given department should be auto-assigned on
+    onboarding (or when their department is changed). One row per
+    (department, module) pair."""
+    __tablename__ = "department_module_policies"
+    id = db.Column(db.Integer, primary_key=True)
+    department_id = db.Column(
+        db.Integer,
+        db.ForeignKey("departments.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    module_id = db.Column(
+        db.Integer,
+        db.ForeignKey("modules.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    department = db.relationship("Department",
+                                 backref=db.backref("module_policies",
+                                                    cascade="all, delete-orphan"))
+    module = db.relationship("Module")
+
+    __table_args__ = (
+        db.UniqueConstraint("department_id", "module_id",
+                            name="uq_dept_module_policy"),
+    )
+
+
 class User(UserMixin, db.Model):
     __tablename__ = "users"
     id = db.Column(db.Integer, primary_key=True)
