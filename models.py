@@ -51,6 +51,7 @@ class User(UserMixin, db.Model):
     employer_id = db.Column(db.Integer, db.ForeignKey("employers.id"), nullable=True)
     start_date = db.Column(db.Date, nullable=True)
     termination_date = db.Column(db.Date, nullable=True)
+    photo_filename = db.Column(db.String(500), nullable=True)
 
     assignments = db.relationship("Assignment", backref="user", cascade="all, delete-orphan")
     attempts = db.relationship("Attempt", backref="user", cascade="all, delete-orphan")
@@ -90,6 +91,7 @@ class Module(db.Model):
     is_published = db.Column(db.Boolean, default=True)
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     cover_path = db.Column(db.String(500), default="")
+    valid_for_days = db.Column(db.Integer, nullable=True)
 
     created_by = db.relationship("User", foreign_keys=[created_by_id])
     content_items = db.relationship("ContentItem", backref="module",

@@ -161,11 +161,49 @@ hr { border-color: var(--gb-line); opacity: 1; }
   border-color: var(--gb-line);
 }
 .navbar-toggler {
-  border-color: var(--gb-line);
-  color: var(--gb-ink);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1.5px solid var(--gb-burgundy);
+  color: var(--gb-burgundy);
+  background: var(--gb-paper);
+  padding: 6px 12px;
+  border-radius: var(--gb-radius);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  font-size: 0.9rem;
+}
+.navbar-toggler:hover,
+.navbar-toggler:focus {
+  background: var(--gb-cream-2);
+  color: var(--gb-burgundy-d);
+  box-shadow: 0 0 0 3px rgba(124,29,29,0.18);
 }
 .navbar-toggler-icon {
-  background-image: url("data:image/svg+xml;charset=utf8,%3Csvg viewBox='0 0 30 30' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath stroke='%231B1B1B' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3E%3C/svg%3E");
+  width: 22px;
+  height: 22px;
+  background-image: url("data:image/svg+xml;charset=utf8,%3Csvg viewBox='0 0 30 30' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath stroke='%237C1D1D' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2.4' d='M4 7h22M4 15h22M4 23h22'/%3E%3C/svg%3E");
+}
+.navbar-toggler-label {
+  font-family: var(--gb-font-body);
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 0.78rem;
+}
+
+/* Brand logo image in the navbar — sits beside the wordmark. */
+.gb-brand-logo {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+/* Mobile-only "Signed in as ..." caption above the flat user links. */
+.navbar .gb-mobile-user .nav-link {
+  padding-top: 12px;
+  font-style: italic;
 }
 
 .gb-brand {
@@ -562,6 +600,14 @@ hr { border-color: var(--gb-line); opacity: 1; }
 .gb-login-brand > * { position: relative; z-index: 1; }
 .gb-login-brand .gb-brand-mark { color: #F7EDDC; font-size: 1.05rem; }
 .gb-login-brand .gb-brand-sub { color: rgba(247,237,220,0.75); }
+.gb-login-logo {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  border-radius: 6px;
+  background: #F7EDDC;
+  padding: 4px;
+}
 .gb-login-tagline {
   font-family: var(--gb-font-head);
   font-size: 2.4rem;
@@ -656,6 +702,135 @@ hr { border-color: var(--gb-line); opacity: 1; }
   background: var(--gb-danger-bg);
   color: var(--gb-danger);
   border: 1px solid rgba(138,28,28,0.3);
+}
+
+/* -------- Avatar / staff photo -------- */
+.gb-avatar {
+  display: inline-block;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--gb-line);
+  background: var(--gb-cream-2);
+  vertical-align: middle;
+}
+.gb-avatar-initials {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--gb-font-body);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--gb-burgundy);
+  background: var(--gb-cream-2);
+  text-transform: uppercase;
+  user-select: none;
+}
+.gb-avatar-stack {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+/* -------- Quiz result review -------- */
+.gb-review {
+  max-width: 760px;
+  margin: 0 auto;
+  text-align: left;
+}
+.gb-review-title {
+  font-family: var(--gb-font-head);
+  font-size: 1.4rem;
+  margin-bottom: 6px;
+}
+.gb-review-card {
+  background: var(--gb-paper);
+  border: 1px solid var(--gb-line);
+  border-left-width: 4px;
+  border-radius: var(--gb-radius);
+  padding: 16px 18px;
+  margin-bottom: 12px;
+}
+.gb-review-card.is-right { border-left-color: var(--gb-success); }
+.gb-review-card.is-wrong { border-left-color: var(--gb-danger); }
+.gb-review-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.gb-review-num {
+  font-family: var(--gb-font-body);
+  font-weight: 600;
+  font-size: 0.72rem;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: var(--gb-brass);
+}
+.gb-review-status {
+  font-family: var(--gb-font-body);
+  font-weight: 600;
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  padding: 3px 10px;
+  border-radius: 2px;
+}
+.gb-review-card.is-right .gb-review-status {
+  background: var(--gb-success-bg);
+  color: var(--gb-success);
+}
+.gb-review-card.is-wrong .gb-review-status {
+  background: var(--gb-danger-bg);
+  color: var(--gb-danger);
+}
+.gb-review-prompt {
+  font-family: var(--gb-font-head);
+  font-size: 1.05rem;
+  line-height: 1.4;
+  color: var(--gb-ink);
+  margin-bottom: 12px;
+}
+.gb-review-block { margin-top: 10px; }
+.gb-review-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gb-mute);
+  margin-bottom: 6px;
+}
+.gb-review-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.gb-review-list li {
+  padding: 8px 12px;
+  border-radius: var(--gb-radius);
+  margin-bottom: 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+.gb-review-list li.is-correct {
+  background: var(--gb-success-bg);
+  color: var(--gb-success);
+  border: 1px solid rgba(47,107,74,0.25);
+}
+.gb-review-list li.is-wrong {
+  background: var(--gb-danger-bg);
+  color: var(--gb-danger);
+  border: 1px solid rgba(138,28,28,0.25);
+}
+.gb-review-tick { font-weight: 700; }
+.gb-review-cross { font-weight: 700; }
+.gb-review-empty {
+  color: var(--gb-mute);
+  font-style: italic;
+  padding: 8px 12px;
+  border: 1px dashed var(--gb-line);
+  border-radius: var(--gb-radius);
 }
 
 /* -------- Footer -------- */

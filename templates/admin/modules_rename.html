@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Rename modules{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-end flex-wrap gap-3 mb-4">
+  <div class="gb-pageheader mb-0">
+    <span class="gb-eyebrow">03 / Library</span>
+    <h1 class="mb-1">Rename modules</h1>
+    <p class="lede mb-0">Bulk-edit titles to match the SQF manual. Only titles change here &mdash; content and questions are unaffected.</p>
+  </div>
+  <a href="{{ url_for('admin_modules') }}" class="btn btn-sm btn-outline-secondary">&larr; Back to modules</a>
+</div>
+
+<form method="post">
+  <div class="card p-4 mb-3">
+    <div class="table-responsive">
+      <table class="table align-middle mb-0">
+        <thead>
+          <tr>
+            <th style="width:60%;">Title</th>
+            <th>Sections</th>
+            <th>Questions</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for m in modules %}
+          <tr>
+            <td>
+              <input class="form-control" name="title_{{ m.id }}" value="{{ m.title }}" required>
+            </td>
+            <td class="text-muted">{{ m.content_items|length }}</td>
+            <td class="text-muted">{{ m.questions|length }}</td>
+            <td>
+              {% if m.is_published %}<span class="badge bg-success">Published</span>
+              {% else %}<span class="badge bg-secondary">Draft</span>{% endif %}
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="4" class="text-muted">No modules yet.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="d-flex justify-content-end gap-2">
+    <a href="{{ url_for('admin_modules') }}" class="btn btn-outline-secondary">Cancel</a>
+    <button class="btn btn-primary gb-arrow">Save renames</button>
+  </div>
+</form>
+{% endblock %}

@@ -363,6 +363,21 @@
                   id="modDescription"
                   style="min-height: 140px; resize: vertical;"
                   data-target="module" data-field="description">{{ edit_module.description }}</textarea>
+
+        <label class="form-label small text-muted mb-1 mt-3">
+          Valid for (days)
+        </label>
+        <input type="number" min="0"
+               class="form-control form-control-sm edit-field"
+               id="modValidForDays"
+               style="max-width: 18rem;"
+               value="{{ edit_module.valid_for_days if edit_module.valid_for_days is not none else '' }}"
+               placeholder="Blank = system default ({{ config['ASSIGNMENT_VALIDITY_DAYS'] }} days)"
+               data-target="module" data-field="valid_for_days">
+        <div class="form-text">
+          Blank = system default. <strong>0</strong> = never expires.
+          Otherwise, days a passing attempt remains valid before retraining is required.
+        </div>
       </div>
 
       <!-- Module title-area gallery: legacy cover_path tile + ModuleMedia tiles + drop zone -->

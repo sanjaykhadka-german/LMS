@@ -3,7 +3,11 @@
 {% block content %}
 <div class="gb-login-wrap">
   <div class="gb-login-brand d-none d-md-flex">
-    <div>
+    <div class="d-flex align-items-center gap-3">
+      <img src="{{ url_for('static', filename='icons/gb-logo.jpg') }}"
+           alt="German Butchery" class="gb-login-logo"
+           width="115" height="115"
+           style="width:115px;height:115px;object-fit:contain;">
       <span class="gb-brand">
         <span class="gb-brand-mark">German Butchery</span>
         <span class="gb-brand-sub">Training Portal</span>

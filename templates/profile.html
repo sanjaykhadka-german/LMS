@@ -11,8 +11,25 @@
   <div class="col-lg-7">
     <div class="card p-4">
       <h5 class="mb-3">Your information</h5>
-      <form method="post" class="row g-3">
+      <form method="post" class="row g-3" enctype="multipart/form-data">
         <input type="hidden" name="form_type" value="info">
+
+        <div class="col-12">
+          <label class="form-label">Profile photo</label>
+          <div class="gb-avatar-stack">
+            {% include "_partials/avatar.html" with context %}
+            <div class="flex-grow-1">
+              <input type="file" name="photo" accept="image/png,image/jpeg" class="form-control">
+              <div class="form-text">PNG or JPG, up to ~10 MB. Used on your profile and in HR records.</div>
+              {% if user.photo_filename %}
+                <div class="form-check mt-2">
+                  <input class="form-check-input" type="checkbox" name="remove_photo" id="removePhoto" value="1">
+                  <label class="form-check-label small" for="removePhoto">Remove current photo</label>
+                </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
 
         <div class="col-md-6">
           <label class="form-label">First name <span class="text-danger">*</span></label>

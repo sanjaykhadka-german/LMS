@@ -104,12 +104,18 @@ def ensure_schema_upgrades(app):
         if not col_exists("users", "termination_date"):
             upgrades.append(("users.termination_date",
                 "ALTER TABLE users ADD COLUMN termination_date DATE"))
+        if not col_exists("users", "photo_filename"):
+            upgrades.append(("users.photo_filename",
+                "ALTER TABLE users ADD COLUMN photo_filename VARCHAR(500)"))
     if "modules" in tables and not col_exists("modules", "created_by_id"):
         upgrades.append(("modules.created_by_id",
             "ALTER TABLE modules ADD COLUMN created_by_id INTEGER REFERENCES users(id)"))
     if "modules" in tables and not col_exists("modules", "cover_path"):
         upgrades.append(("modules.cover_path",
             "ALTER TABLE modules ADD COLUMN cover_path VARCHAR(500) DEFAULT ''"))
+    if "modules" in tables and not col_exists("modules", "valid_for_days"):
+        upgrades.append(("modules.valid_for_days",
+            "ALTER TABLE modules ADD COLUMN valid_for_days INTEGER"))
     if "assignments" in tables and not col_exists("assignments", "version_id"):
         upgrades.append(("assignments.version_id",
             "ALTER TABLE assignments ADD COLUMN version_id INTEGER REFERENCES module_versions(id)"))
@@ -137,10 +143,47 @@ def parse_user_date(raw):
     raise ValueError(f"unrecognised date: {s!r}")
 
 
-def assignment_due_from(dt):
-    """Due date for an assignment assigned at `dt` (+ ASSIGNMENT_VALIDITY_DAYS)."""
-    days = current_app.config.get("ASSIGNMENT_VALIDITY_DAYS", 180)
-    return dt + timedelta(days=days)
+def module_validity_days(module):
+    """Effective expiry days for `module`. None = never expires.
+    Module.valid_for_days: NULL → fall back to global ASSIGNMENT_VALIDITY_DAYS;
+    0 → never expires; positive int → use as-is."""
+    v = getattr(module, "valid_for_days", None) if module is not None else None
+    if v is None:
+        return current_app.config.get("ASSIGNMENT_VALIDITY_DAYS", 180)
+    if v == 0:
+        return None
+    return v
+
+
+def module_expiry_for(passed_at, module):
+    """Datetime at which a passing attempt at `passed_at` expires; None = never."""
+    if passed_at is None:
+        return None
+    days = module_validity_days(module)
+    return None if days is None else passed_at + timedelta(days=days)
+
+
+def compliance_status_for(latest_pass_dt, module, now, soon_days=30):
+    """One of: 'never_passed' | 'current' | 'expiring_soon' | 'overdue'."""
+    if latest_pass_dt is None:
+        return "never_passed"
+    expires = module_expiry_for(latest_pass_dt, module)
+    if expires is None:
+        return "current"
+    if expires < now:
+        return "overdue"
+    if expires < now + timedelta(days=soon_days):
+        return "expiring_soon"
+    return "current"
+
+
+def assignment_due_from(dt, module=None):
+    """Due date for an assignment assigned at `dt`. With `module`, uses
+    Module.valid_for_days; otherwise falls back to ASSIGNMENT_VALIDITY_DAYS.
+    Returns None when the module never expires."""
+    days = (module_validity_days(module) if module is not None
+            else current_app.config.get("ASSIGNMENT_VALIDITY_DAYS", 180))
+    return None if days is None else dt + timedelta(days=days)
 
 
 def backfill_user_first_last():
@@ -176,19 +219,21 @@ def backfill_missing_due_at():
 
 
 def process_expired_completions(base_url):
-    """Reset assignments whose completion is older than the validity window.
-    Called lazily from admin_assignments GET. Returns count of rows reset."""
-    days = current_app.config.get("ASSIGNMENT_VALIDITY_DAYS", 180)
-    cutoff = datetime.utcnow() - timedelta(days=days)
-    expired = (Assignment.query
-               .filter(Assignment.completed_at.isnot(None))
-               .filter(Assignment.completed_at < cutoff).all())
+    """Reset assignments whose completion is older than the module's validity
+    window. Called lazily from admin_assignments GET. Returns count reset.
+    Each module's own valid_for_days governs its expiry; modules with
+    valid_for_days=0 never expire."""
+    rows = (Assignment.query
+            .filter(Assignment.completed_at.isnot(None)).all())
     now = datetime.utcnow()
     reset = 0
-    for a in expired:
+    for a in rows:
+        expires = module_expiry_for(a.completed_at, a.module)
+        if expires is None or expires >= now:
+            continue
         a.completed_at = None
         a.assigned_at = now
-        a.due_at = assignment_due_from(now)
+        a.due_at = assignment_due_from(now, module=a.module)
         try:
             notify_assignment(a.user, a.module, base_url)
         except Exception:
@@ -385,6 +430,28 @@ def save_upload(fs, prefix=""):
     return stored
 
 
+def set_user_photo(user, file_storage):
+    """Persist a new profile photo and delete the previous one.
+    Returns the new stored filename. Raises ValueError on bad upload."""
+    new_name = save_upload(file_storage, prefix="photo_")
+    old = user.photo_filename
+    user.photo_filename = new_name
+    if old and old != new_name:
+        prev = db.session.get(UploadedFile, old)
+        if prev is not None:
+            db.session.delete(prev)
+    return new_name
+
+
+def clear_user_photo(user):
+    old = user.photo_filename
+    user.photo_filename = None
+    if old:
+        prev = db.session.get(UploadedFile, old)
+        if prev is not None:
+            db.session.delete(prev)
+
+
 def build_module_snapshot(m):
     """Capture the editable surface of a module as a JSON-friendly dict.
     Used by ModuleVersion to pin a user's training to a specific revision."""
@@ -460,6 +527,30 @@ def score_attempt(module, answers):
             correct += 1
     percent = int(round(correct * 100 / total))
     return correct, total, percent
+
+
+def attempt_review(module, answers):
+    """Per-question review for the result page. Same `answers` shape as
+    score_attempt — {qid_str: [choice_id_str, ...]}. Returns a list of
+    {question, chosen, correct, is_right} for each question in order."""
+    review = []
+    for q in module.questions:
+        raw = answers.get(str(q.id), []) or []
+        try:
+            chosen_ids = {int(c) for c in raw if str(c).strip().isdigit()}
+        except (TypeError, ValueError):
+            chosen_ids = set()
+        chosen_choices = [c for c in q.choices if c.id in chosen_ids]
+        correct_choices = [c for c in q.choices if c.is_correct]
+        correct_ids = {c.id for c in correct_choices}
+        is_right = bool(correct_ids) and chosen_ids == correct_ids
+        review.append({
+            "question": q,
+            "chosen": chosen_choices,
+            "correct": correct_choices,
+            "is_right": is_right,
+        })
+    return review
 
 
 # Rich content block kinds that can live in ContentItem.kind.
@@ -626,6 +717,99 @@ def apply_module_json_to_existing(module, data):
         _add_question_with_choices(module.id, qpos, q)
 
 
+def build_compliance_context(scope_user_ids, scope_module_ids, now=None):
+    """Roll up training compliance for the given user/module scope.
+
+    Two bulk queries (passing attempts + assignments), then group in Python.
+    Returns: by_module list, retrain_users list (top 10), and two KPI scalars.
+    Empty scope returns zeros — the dashboard renders cleanly on a fresh DB."""
+    if not scope_user_ids or not scope_module_ids:
+        return {
+            "by_module": [],
+            "retrain_users": [],
+            "kpi_expiring_30d": 0,
+            "kpi_users_overdue": 0,
+        }
+
+    now = now or datetime.utcnow()
+
+    assignments = (Assignment.query
+                   .filter(Assignment.user_id.in_(scope_user_ids))
+                   .filter(Assignment.module_id.in_(scope_module_ids))
+                   .all())
+    passes = (Attempt.query
+              .filter(Attempt.passed.is_(True))
+              .filter(Attempt.user_id.in_(scope_user_ids))
+              .filter(Attempt.module_id.in_(scope_module_ids))
+              .order_by(Attempt.created_at.desc())
+              .all())
+
+    latest = {}
+    for ap in passes:
+        key = (ap.user_id, ap.module_id)
+        if key not in latest:
+            latest[key] = ap.created_at
+
+    modules_by_id = {m.id: m for m in Module.query
+                     .filter(Module.id.in_(scope_module_ids)).all()}
+
+    per_module = {}
+    per_user = {}
+    for assn in assignments:
+        m = modules_by_id.get(assn.module_id)
+        if m is None:
+            continue
+        status = compliance_status_for(
+            latest.get((assn.user_id, assn.module_id)), m, now)
+        pm = per_module.setdefault(m.id, {
+            "id": m.id, "title": m.title, "total_assigned": 0,
+            "current": 0, "expiring": 0, "overdue": 0, "never_passed": 0,
+        })
+        pm["total_assigned"] += 1
+        if status == "current":
+            pm["current"] += 1
+        elif status == "expiring_soon":
+            pm["expiring"] += 1
+        elif status == "overdue":
+            pm["overdue"] += 1
+        else:
+            pm["never_passed"] += 1
+
+        pu = per_user.setdefault(assn.user_id, {
+            "id": assn.user_id, "overdue_count": 0, "expiring_count": 0,
+        })
+        if status == "overdue":
+            pu["overdue_count"] += 1
+        elif status == "expiring_soon":
+            pu["expiring_count"] += 1
+
+    by_module = sorted(per_module.values(),
+                       key=lambda r: (r["overdue"] + r["expiring"]),
+                       reverse=True)
+    for r in by_module:
+        denom = r["total_assigned"] or 1
+        r["pct_current"] = round(100 * r["current"] / denom)
+
+    user_rows = [u for u in per_user.values()
+                 if u["overdue_count"] or u["expiring_count"]]
+    user_rows.sort(key=lambda u: (u["overdue_count"], u["expiring_count"]),
+                   reverse=True)
+    user_rows = user_rows[:10]
+    if user_rows:
+        names = {u.id: u.name for u in User.query
+                 .filter(User.id.in_([r["id"] for r in user_rows])).all()}
+        for r in user_rows:
+            r["name"] = names.get(r["id"], "—")
+
+    return {
+        "by_module": by_module,
+        "retrain_users": user_rows,
+        "kpi_expiring_30d": sum(r["expiring"] for r in by_module),
+        "kpi_users_overdue": sum(1 for u in per_user.values()
+                                 if u["overdue_count"] > 0),
+    }
+
+
 def build_dashboard_context():
     """Compute the metrics shown on admin and QA/QC dashboards.
 
@@ -787,6 +971,22 @@ def build_dashboard_context():
     recent = (Attempt.query.order_by(Attempt.created_at.desc())
               .limit(10).all())
 
+    # Compliance scope: active employees only (no ex-staff), narrowed by the
+    # current dept filter; modules narrowed by the module filter if present.
+    user_scope_q = User.query.filter(User.role == "employee",
+                                     User.is_active_flag.is_(True),
+                                     User.termination_date.is_(None))
+    if dept_id:
+        user_scope_q = user_scope_q.filter(User.department_id == dept_id)
+    scope_user_ids = [u.id for u in user_scope_q.with_entities(User.id).all()]
+
+    module_scope_q = Module.query
+    if module_id:
+        module_scope_q = module_scope_q.filter(Module.id == module_id)
+    scope_module_ids = [m.id for m in module_scope_q.with_entities(Module.id).all()]
+
+    compliance = build_compliance_context(scope_user_ids, scope_module_ids, now)
+
     stats = {
         "modules": Module.query.count(),
         "employees": User.query.filter_by(role="employee").count(),
@@ -798,6 +998,8 @@ def build_dashboard_context():
         "active_learners": active_learners,
         "overdue": statuses["overdue"],
         "completion_rate": round(completion_rate, 1),
+        "expiring_30d": compliance["kpi_expiring_30d"],
+        "users_overdue": compliance["kpi_users_overdue"],
     }
 
     chart_data = {
@@ -839,6 +1041,7 @@ def build_dashboard_context():
         },
         "departments": Department.query.order_by(Department.name).all(),
         "all_modules": Module.query.order_by(Module.title).all(),
+        "compliance": compliance,
     }
 
 
@@ -912,6 +1115,16 @@ def register_routes(app):
                     u.last_name = last
                     u.name = f"{first} {last}".strip()
                     u.phone = phone
+                    photo_fs = request.files.get("photo")
+                    if photo_fs and (photo_fs.filename or "").strip():
+                        try:
+                            set_user_photo(u, photo_fs)
+                        except ValueError as exc:
+                            db.session.rollback()
+                            flash(f"Photo not saved: {exc}", "danger")
+                            return redirect(url_for("profile"))
+                    elif request.form.get("remove_photo"):
+                        clear_user_photo(u)
                     log_audit("update", "user", u.id,
                               f"Self-edited profile for {u.email}")
                     db.session.commit()
@@ -1009,6 +1222,37 @@ def register_routes(app):
     def admin_modules():
         modules = Module.query.order_by(Module.created_at.desc()).all()
         return render_template("admin/modules.html", modules=modules)
+
+    @app.route("/admin/modules/rename", methods=["GET", "POST"])
+    @author_required
+    def admin_modules_rename():
+        """Bulk title editor — useful for the SQF-aligned rename pass."""
+        modules = Module.query.order_by(Module.title.asc()).all()
+        if request.method == "POST":
+            changed = 0
+            errors = 0
+            for m in modules:
+                key = f"title_{m.id}"
+                if key not in request.form:
+                    continue
+                new_title = request.form[key].strip()
+                if not new_title:
+                    errors += 1
+                    continue
+                if new_title != m.title:
+                    log_audit("update", "module", m.id,
+                              f"Renamed module from '{m.title}' to '{new_title}'")
+                    m.title = new_title
+                    changed += 1
+            if changed:
+                db.session.commit()
+                flash(f"Renamed {changed} module(s).", "success")
+            elif errors:
+                flash("Some titles were blank — skipped those rows.", "warning")
+            else:
+                flash("No changes.", "info")
+            return redirect(url_for("admin_modules_rename"))
+        return render_template("admin/modules_rename.html", modules=modules)
 
     @app.route("/admin/modules/import", methods=["GET", "POST"])
     @author_required
@@ -1173,7 +1417,8 @@ def register_routes(app):
 
     # -------- inline module / content-item editing (used by AI studio edit pane) --------
 
-    MODULE_EDITABLE_FIELDS = {"title", "description", "is_published"}
+    MODULE_EDITABLE_FIELDS = {"title", "description", "is_published",
+                              "valid_for_days"}
     CONTENT_EDITABLE_FIELDS = {"title", "body"}
 
     @app.route("/admin/modules/<int:mid>/update", methods=["POST"])
@@ -1192,6 +1437,19 @@ def register_routes(app):
             m.title = v
         elif field == "is_published":
             m.is_published = bool(value)
+        elif field == "valid_for_days":
+            raw = (str(value) if value is not None else "").strip()
+            if raw == "":
+                m.valid_for_days = None
+            else:
+                try:
+                    n = int(raw)
+                    if n < 0:
+                        raise ValueError
+                except ValueError:
+                    return jsonify(error="Validity must be a non-negative whole number, "
+                                         "or blank for the system default."), 400
+                m.valid_for_days = n
         else:
             m.description = value or ""
         log_audit("update", "module", m.id,
@@ -1375,13 +1633,34 @@ def register_routes(app):
         db.session.commit()
         return jsonify(ok=True)
 
+    def _parse_valid_for_days(raw):
+        """Returns (value_or_None, error_msg). Empty = None (use global default),
+        '0' = 0 (never expires), positive int = N days. Negative or non-numeric
+        returns an error message."""
+        s = (raw or "").strip()
+        if s == "":
+            return None, None
+        try:
+            n = int(s)
+            if n < 0:
+                raise ValueError
+        except ValueError:
+            return None, ("Validity period must be a non-negative whole number, "
+                          "or blank for the system default.")
+        return n, None
+
     @app.route("/admin/modules/new", methods=["GET", "POST"])
     @author_required
     def admin_module_new():
         if request.method == "POST":
+            vfd, err = _parse_valid_for_days(request.form.get("valid_for_days"))
+            if err:
+                flash(err, "danger")
+                return redirect(request.url)
             m = Module(title=request.form["title"].strip(),
                        description=request.form.get("description", ""),
-                       created_by_id=current_user.id)
+                       created_by_id=current_user.id,
+                       valid_for_days=vfd)
             db.session.add(m)
             db.session.flush()
             log_audit("create", "module", m.id,
@@ -1398,9 +1677,14 @@ def register_routes(app):
         # Keep the route so existing links keep working — redirect to studio.
         m = db.session.get(Module, module_id) or abort(404)
         if request.method == "POST":
+            vfd, err = _parse_valid_for_days(request.form.get("valid_for_days"))
+            if err:
+                flash(err, "danger")
+                return redirect(request.url)
             m.title = request.form["title"].strip()
             m.description = request.form.get("description", "")
             m.is_published = bool(request.form.get("is_published"))
+            m.valid_for_days = vfd
             log_audit("update", "module", m.id,
                       f"Updated module '{m.title}'")
             db.session.commit()
@@ -1441,7 +1725,8 @@ def register_routes(app):
             return render_template("employee/result.html",
                                    attempt=attempt, module=m,
                                    threshold=threshold,
-                                   preview=True, preview_back=back)
+                                   preview=True, preview_back=back,
+                                   review=attempt_review(m, answers))
         return render_template("employee/quiz.html",
                                module=m, preview=True, preview_back=back)
 
@@ -1876,7 +2161,7 @@ def register_routes(app):
 
     # users (employees + admins)
     @app.route("/admin/employees")
-    @admin_required
+    @author_required
     def admin_employees():
         employees = (User.query
                      .options(db.joinedload(User.department),
@@ -1896,7 +2181,7 @@ def register_routes(app):
                                disabled_count=disabled_count)
 
     @app.route("/admin/employees/new", methods=["POST"])
-    @admin_required
+    @author_required
     def admin_employee_new():
         first_name = request.form.get("first_name", "").strip()
         last_name = request.form.get("last_name", "").strip()
@@ -1907,6 +2192,9 @@ def register_routes(app):
         role = request.form.get("role", "employee")
         if role not in VALID_ROLES:
             role = "employee"
+        if role == "admin" and not current_user.is_admin:
+            flash("Only administrators can create admin accounts — set to QA/QC instead.", "warning")
+            role = "qaqc"
 
         try:
             start_date = parse_user_date(request.form.get("start_date", ""))
@@ -1951,12 +2239,14 @@ def register_routes(app):
         return redirect(url_for("admin_employees"))
 
     @app.route("/admin/employees/<int:uid>/toggle", methods=["POST"])
-    @admin_required
+    @author_required
     def admin_employee_toggle(uid):
         u = db.session.get(User, uid) or abort(404)
         if u.id == current_user.id:
             flash("You cannot disable your own account.", "danger")
             return redirect(url_for("admin_employees"))
+        if u.is_admin and not current_user.is_admin:
+            abort(403)
         u.is_active_flag = not u.is_active_flag
         log_audit("toggle_active", "user", u.id,
                   f"{'Activated' if u.is_active_flag else 'Deactivated'} {u.email}")
@@ -1981,9 +2271,11 @@ def register_routes(app):
         return redirect(url_for("admin_employees"))
 
     @app.route("/admin/employees/<int:uid>/reset-password", methods=["POST"])
-    @admin_required
+    @author_required
     def admin_employee_reset_password(uid):
         u = db.session.get(User, uid) or abort(404)
+        if u.is_admin and not current_user.is_admin:
+            abort(403)
         temp_pw = secrets.token_urlsafe(9)
         u.set_password(temp_pw)
         log_audit("password_reset", "user", u.id,
@@ -2003,9 +2295,11 @@ def register_routes(app):
         return redirect(url_for("admin_employee_edit", uid=u.id))
 
     @app.route("/admin/employees/<int:uid>/edit", methods=["GET", "POST"])
-    @admin_required
+    @author_required
     def admin_employee_edit(uid):
         u = db.session.get(User, uid) or abort(404)
+        if u.is_admin and not current_user.is_admin:
+            abort(403)
         if request.method == "POST":
             first_name = request.form.get("first_name", u.first_name or "").strip()
             last_name = request.form.get("last_name", u.last_name or "").strip()
@@ -2042,7 +2336,19 @@ def register_routes(app):
 
             machine_ids = [int(x) for x in request.form.getlist("machine_ids") if x.isdigit()]
             u.machines = Machine.query.filter(Machine.id.in_(machine_ids)).all() if machine_ids else []
+            photo_fs = request.files.get("photo")
+            if photo_fs and (photo_fs.filename or "").strip():
+                try:
+                    set_user_photo(u, photo_fs)
+                except ValueError as exc:
+                    db.session.rollback()
+                    flash(f"Photo not saved: {exc}", "danger")
+                    return redirect(url_for("admin_employee_edit", uid=u.id))
+            elif request.form.get("remove_photo"):
+                clear_user_photo(u)
             new_role = request.form.get("role", u.role)
+            if new_role == "admin" and not current_user.is_admin:
+                new_role = u.role
             if new_role in VALID_ROLES and u.id != current_user.id:
                 u.role = new_role
             log_audit("update", "user", u.id,
@@ -2058,7 +2364,7 @@ def register_routes(app):
                                employers=employers, machines=machines)
 
     @app.route("/admin/employees/<int:uid>")
-    @admin_required
+    @author_required
     def admin_employee_detail(uid):
         u = db.session.get(User, uid) or abort(404)
 
@@ -2675,8 +2981,14 @@ def register_routes(app):
             abort(403)
         module = db.session.get(Module, a.module_id)
         threshold = app.config.get("PASS_THRESHOLD", 80)
+        try:
+            answers = json.loads(a.answers_json or "{}")
+        except (ValueError, TypeError):
+            answers = {}
+        review = attempt_review(module, answers) if module is not None else []
         return render_template("employee/result.html",
-                               attempt=a, module=module, threshold=threshold)
+                               attempt=a, module=module, threshold=threshold,
+                               review=review)
 
     # file serving (uploaded content) — DB-backed first, disk fallback for
     # legacy pre-migration files. DB-backed survives Render redeploys.

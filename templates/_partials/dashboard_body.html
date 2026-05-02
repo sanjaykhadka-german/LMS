@@ -75,6 +75,23 @@
   </div>
 </div>
 
+{% if stats.expiring_30d is defined %}
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="gb-stat">
+      <div class="gb-stat-label">Expiring in 30d</div>
+      <div class="gb-stat-value">{{ stats.expiring_30d }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="gb-stat">
+      <div class="gb-stat-label">Users with overdue training</div>
+      <div class="gb-stat-value">{{ stats.users_overdue }}</div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <div class="row g-3 mb-2">
   <div class="col-12 col-md-2">
     <div class="text-muted small">Lifetime</div>
@@ -190,6 +207,83 @@
     </div>
   </div>
 </div>
+
+{% if compliance %}
+<div class="row g-3 mb-4">
+  <div class="col-12 col-lg-7">
+    <div class="card p-3 h-100">
+      <h6 class="mb-3">Compliance by module</h6>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead><tr>
+            <th>Module</th>
+            <th class="text-end">Assigned</th>
+            <th class="text-end">Current</th>
+            <th class="text-end">Expiring 30d</th>
+            <th class="text-end">Overdue</th>
+            <th class="text-end">% current</th>
+          </tr></thead>
+          <tbody>
+          {% for m in compliance.by_module %}
+            <tr>
+              <td>{{ m.title }}</td>
+              <td class="text-end">{{ m.total_assigned }}</td>
+              <td class="text-end">{{ m.current }}</td>
+              <td class="text-end">{{ m.expiring }}</td>
+              <td class="text-end">{{ m.overdue }}</td>
+              <td class="text-end">
+                {% if m.pct_current >= 90 %}
+                  <span class="badge bg-success">{{ m.pct_current }}%</span>
+                {% elif m.pct_current >= 70 %}
+                  <span class="badge bg-warning text-dark">{{ m.pct_current }}%</span>
+                {% else %}
+                  <span class="badge bg-danger">{{ m.pct_current }}%</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% else %}
+            <tr><td colspan="6" class="text-muted">Nothing assigned in scope.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-lg-5">
+    <div class="card p-3 h-100">
+      <h6 class="mb-3">Users needing retrain</h6>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead><tr>
+            <th>Employee</th>
+            <th class="text-end">Overdue</th>
+            <th class="text-end">Expiring</th>
+          </tr></thead>
+          <tbody>
+          {% for u in compliance.retrain_users %}
+            <tr>
+              {% if current_user.is_admin %}
+                <td><a href="{{ url_for('admin_employee_detail', uid=u.id) }}">{{ u.name }}</a></td>
+              {% else %}
+                <td>{{ u.name }}</td>
+              {% endif %}
+              <td class="text-end">
+                {% if u.overdue_count %}<span class="badge bg-danger">{{ u.overdue_count }}</span>{% else %}0{% endif %}
+              </td>
+              <td class="text-end">
+                {% if u.expiring_count %}<span class="badge bg-warning text-dark">{{ u.expiring_count }}</span>{% else %}0{% endif %}
+              </td>
+            </tr>
+          {% else %}
+            <tr><td colspan="3" class="text-muted">No retraining needed.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
 
 <div class="card p-4">
   <div class="d-flex justify-content-between align-items-baseline mb-3">

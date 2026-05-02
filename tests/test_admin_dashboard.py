@@ -54,3 +54,14 @@ def test_dashboard_blocks_employee(employee_client):
     resp = employee_client.get("/admin", follow_redirects=False)
     # @admin_required should 403 (or redirect) for non-admins
     assert resp.status_code in (302, 303, 403)
+
+
+def test_dashboard_renders_compliance_sections(auth_client):
+    """The compliance roll-up sections live on the same admin dashboard."""
+    resp = auth_client.get("/admin")
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    assert "Compliance by module" in body
+    assert "Users needing retrain" in body
+    assert "Expiring in 30d" in body
+    assert "Users with overdue training" in body

@@ -22,50 +22,63 @@
 
 <div class="card p-4 mb-4">
   <h5>Add user</h5>
-  <form method="post" action="{{ url_for('admin_employee_new') }}" class="row g-2">
+  <form method="post" action="{{ url_for('admin_employee_new') }}" class="row g-3">
     <div class="col-md-3">
-      <input name="first_name" required class="form-control" placeholder="First name *">
+      <label class="form-label">First name <span class="text-danger">*</span></label>
+      <input name="first_name" required class="form-control">
     </div>
     <div class="col-md-3">
-      <input name="last_name" required class="form-control" placeholder="Last name *">
+      <label class="form-label">Last name <span class="text-danger">*</span></label>
+      <input name="last_name" required class="form-control">
     </div>
     <div class="col-md-3">
-      <input name="email" type="email" required class="form-control" placeholder="Email *">
+      <label class="form-label">Email <span class="text-danger">*</span></label>
+      <input name="email" type="email" required class="form-control">
     </div>
     <div class="col-md-3">
-      <input name="phone" required class="form-control" placeholder="Phone *">
+      <label class="form-label">Phone <span class="text-danger">*</span></label>
+      <input name="phone" required class="form-control">
     </div>
-    <div class="col-md-3">
+
+    <div class="col-md-4">
+      <label class="form-label">Department <span class="text-danger">*</span></label>
       <select name="department_id" required class="form-select">
-        <option value="">Department * — choose…</option>
+        <option value="">— Choose —</option>
         {% for d in departments %}
           <option value="{{ d.id }}">{{ d.name }}</option>
         {% endfor %}
       </select>
     </div>
-    <div class="col-md-3">
+    <div class="col-md-4">
+      <label class="form-label">Employer <span class="text-danger">*</span></label>
       <input name="employer_name" required class="form-control" list="employers-list"
-             placeholder="Employer * (type or pick)">
+             placeholder="Type or pick">
       <datalist id="employers-list">
         {% for e in employers %}<option value="{{ e.name }}">{% endfor %}
       </datalist>
     </div>
-    <div class="col-md-3">
+    <div class="col-md-4">
+      <label class="form-label">Role</label>
       <select name="role" class="form-select">
         <option value="employee">Employee</option>
         <option value="qaqc">QA/QC</option>
-        <option value="admin">Administrator</option>
+        {% if current_user.is_admin %}<option value="admin">Administrator</option>{% endif %}
       </select>
     </div>
-    <div class="col-md-3">
-      <label class="form-label small text-muted mb-1">Start date</label>
+
+    <div class="col-md-6">
+      <label class="form-label">Start date</label>
       <input name="start_date" type="date" class="form-control">
     </div>
-    <div class="col-md-3">
-      <label class="form-label small text-muted mb-1">Termination / Resignation date</label>
+    <div class="col-md-6">
+      <label class="form-label">Termination / Resignation date</label>
       <input name="termination_date" type="date" class="form-control">
+      <div class="form-text">Leave blank if the user is still employed.</div>
     </div>
-    <div class="col-md-3"><button class="btn btn-primary w-100 mt-3">Add user</button></div>
+
+    <div class="col-12 d-flex justify-content-end">
+      <button class="btn btn-primary px-4 gb-arrow">Add user</button>
+    </div>
   </form>
   <div class="form-text mt-2">
     Fields marked <code>*</code> are required. Employer is free-text — type a new
@@ -115,12 +128,19 @@
       {% for e in employees %}
         <tr>
           <td>
-            <a href="{{ url_for('admin_employee_detail', uid=e.id) }}"
-               class="text-decoration-none">{{ e.first_name or e.name }}</a>
-            {% if e.role == 'admin' %}<span class="badge bg-primary ms-1">Admin</span>
-            {% elif e.role == 'qaqc' %}<span class="badge bg-info text-dark ms-1">QA/QC</span>
-            {% endif %}
-            {% if not e.is_active_flag %}<span class="badge bg-secondary ms-1">Disabled</span>{% endif %}
+            <div class="d-flex align-items-center gap-2">
+              {% with user = e, size = 32 %}
+                {% include "_partials/avatar.html" %}
+              {% endwith %}
+              <div>
+                <a href="{{ url_for('admin_employee_detail', uid=e.id) }}"
+                   class="text-decoration-none">{{ e.first_name or e.name }}</a>
+                {% if e.role == 'admin' %}<span class="badge bg-primary ms-1">Admin</span>
+                {% elif e.role == 'qaqc' %}<span class="badge bg-info text-dark ms-1">QA/QC</span>
+                {% endif %}
+                {% if not e.is_active_flag %}<span class="badge bg-secondary ms-1">Disabled</span>{% endif %}
+              </div>
+            </div>
           </td>
           <td>{{ e.last_name or '—' }}</td>
           <td>{{ e.email }}</td>
@@ -133,14 +153,18 @@
             {% else %}—{% endif %}
           </td>
           <td class="text-end">
-            <a href="{{ url_for('admin_employee_edit', uid=e.id) }}"
-               class="btn btn-sm btn-outline-primary">Edit</a>
+            {% if not e.is_admin or current_user.is_admin %}
+              <a href="{{ url_for('admin_employee_edit', uid=e.id) }}"
+                 class="btn btn-sm btn-outline-primary">Edit</a>
+            {% endif %}
             {% if e.id != current_user.id %}
-              <form method="post" action="{{ url_for('admin_employee_toggle', uid=e.id) }}" class="d-inline">
-                <button class="btn btn-sm btn-outline-secondary">
-                  {{ 'Disable' if e.is_active_flag else 'Enable' }}
-                </button>
-              </form>
+              {% if not e.is_admin or current_user.is_admin %}
+                <form method="post" action="{{ url_for('admin_employee_toggle', uid=e.id) }}" class="d-inline">
+                  <button class="btn btn-sm btn-outline-secondary">
+                    {{ 'Disable' if e.is_active_flag else 'Enable' }}
+                  </button>
+                </form>
+              {% endif %}
             {% else %}
               <span class="text-muted small ms-1">you</span>
             {% endif %}

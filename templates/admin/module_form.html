@@ -38,6 +38,16 @@
       <label class="form-check-label" for="pub">Published</label>
     </div>
     {% endif %}
+    <div class="mb-3">
+      <label class="form-label">Valid for (days)</label>
+      <input type="number" name="valid_for_days" min="0" class="form-control"
+             value="{{ module.valid_for_days if module and module.valid_for_days is not none else '' }}"
+             placeholder="Leave blank for system default ({{ config['ASSIGNMENT_VALIDITY_DAYS'] }} days)">
+      <div class="form-text">
+        Blank = use system default. <strong>0</strong> = never expires.
+        Otherwise, the number of days a passing attempt remains valid before retraining is required.
+      </div>
+    </div>
     <button class="btn btn-primary">Save</button>
   </form>
 </div>

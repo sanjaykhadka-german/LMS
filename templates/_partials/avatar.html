@@ -1,0 +1,14 @@
+{# Render a staff photo or an initials placeholder.
+   Caller passes `user` and an optional `size` in pixels (default 40). #}
+{% set _size = size or 40 %}
+{% if user.photo_filename %}
+  <img src="{{ url_for('uploaded_file', name=user.photo_filename) }}"
+       alt="{{ user.name }}"
+       class="gb-avatar"
+       style="width:{{ _size }}px; height:{{ _size }}px;">
+{% else %}
+  {% set _ini = ((user.first_name or '')[:1] + (user.last_name or '')[:1])|upper %}
+  {% if not _ini %}{% set _ini = (user.name or 'U')[:1]|upper %}{% endif %}
+  <span class="gb-avatar gb-avatar-initials"
+        style="width:{{ _size }}px; height:{{ _size }}px; font-size:{{ ((_size|int) * 0.42)|round(0, 'common')|int }}px;">{{ _ini }}</span>
+{% endif %}

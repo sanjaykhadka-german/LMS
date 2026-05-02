@@ -10,7 +10,26 @@
 </div>
 
 <div class="card p-4">
-  <form method="post" class="row g-3">
+  <form method="post" class="row g-3" enctype="multipart/form-data">
+    <div class="col-12">
+      <label class="form-label">Profile photo</label>
+      <div class="gb-avatar-stack">
+        {% with user = employee, size = 64 %}
+          {% include "_partials/avatar.html" %}
+        {% endwith %}
+        <div class="flex-grow-1">
+          <input type="file" name="photo" accept="image/png,image/jpeg" class="form-control">
+          <div class="form-text">PNG or JPG. Used on the user's profile and HR records.</div>
+          {% if employee.photo_filename %}
+            <div class="form-check mt-2">
+              <input class="form-check-input" type="checkbox" name="remove_photo" id="removePhoto" value="1">
+              <label class="form-check-label small" for="removePhoto">Remove current photo</label>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
     <div class="col-md-6">
       <label class="form-label">First name <span class="text-danger">*</span></label>
       <input name="first_name" required class="form-control" value="{{ employee.first_name or '' }}">
@@ -87,7 +106,9 @@
       <select name="role" class="form-select" {% if employee.id == current_user.id %}disabled{% endif %}>
         <option value="employee" {% if employee.role == 'employee' %}selected{% endif %}>Employee</option>
         <option value="qaqc"     {% if employee.role == 'qaqc' %}selected{% endif %}>QA/QC</option>
-        <option value="admin"    {% if employee.role == 'admin' %}selected{% endif %}>Administrator</option>
+        {% if current_user.is_admin %}
+          <option value="admin"    {% if employee.role == 'admin' %}selected{% endif %}>Administrator</option>
+        {% endif %}
       </select>
       {% if employee.id == current_user.id %}
         <div class="form-text">You can't change your own role.</div>

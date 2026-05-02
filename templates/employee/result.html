@@ -37,4 +37,53 @@
     </div>
   {% endif %}
 </div>
+
+{% if review %}
+<div class="gb-review mt-4">
+  <h3 class="gb-review-title">Review your answers</h3>
+  <p class="text-muted small">Green = correct. Red = the answer you chose was wrong; the correct answer is highlighted below it.</p>
+
+  {% for r in review %}
+    <div class="gb-review-card {% if r.is_right %}is-right{% else %}is-wrong{% endif %}">
+      <div class="gb-review-head">
+        <span class="gb-review-num">Q{{ loop.index }}</span>
+        <span class="gb-review-status">
+          {% if r.is_right %}Correct{% else %}Incorrect{% endif %}
+        </span>
+      </div>
+      <div class="gb-review-prompt">{{ r.question.prompt }}</div>
+
+      {% if r.chosen %}
+        <div class="gb-review-block">
+          <div class="gb-review-label">Your answer</div>
+          <ul class="gb-review-list">
+            {% for c in r.chosen %}
+              <li class="{% if c.is_correct %}is-correct{% else %}is-wrong{% endif %}">
+                {{ c.text }}
+                {% if c.is_correct %}<span class="gb-review-tick">&check;</span>{% else %}<span class="gb-review-cross">&times;</span>{% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% else %}
+        <div class="gb-review-block">
+          <div class="gb-review-label">Your answer</div>
+          <div class="gb-review-empty">No answer selected.</div>
+        </div>
+      {% endif %}
+
+      {% if not r.is_right and r.correct %}
+        <div class="gb-review-block">
+          <div class="gb-review-label">Correct answer</div>
+          <ul class="gb-review-list">
+            {% for c in r.correct %}
+              <li class="is-correct">{{ c.text }} <span class="gb-review-tick">&check;</span></li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+    </div>
+  {% endfor %}
+</div>
+{% endif %}
 {% endblock %}
