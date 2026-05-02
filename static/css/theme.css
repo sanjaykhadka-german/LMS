@@ -100,8 +100,9 @@ hr { border-color: var(--gb-line); opacity: 1; }
   color: var(--gb-ink-soft);
   font-weight: 500;
   font-size: 0.92rem;
-  padding: 6px 14px;
+  padding: 6px 12px;
   border-radius: 2px;
+  white-space: nowrap;
 }
 .navbar.bg-dark .navbar-nav .nav-link:hover,
 .navbar.navbar-dark .navbar-nav .nav-link:hover { color: var(--gb-burgundy); }
