@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Org chart{% endblock %}
+
+{% macro render_node(user, children) %}
+  <li class="gb-org-node">
+    <div class="gb-org-card">
+      <div class="gb-org-avatar">
+        {% with user = user, size = 44 %}
+          {% include "_partials/avatar.html" %}
+        {% endwith %}
+      </div>
+      <div class="gb-org-info">
+        <a href="{{ url_for('admin_employee_detail', uid=user.id) }}"
+           class="gb-org-name">{{ user.name }}</a>
+        {% if user.job_title %}
+          <div class="gb-org-title">{{ user.job_title }}</div>
+        {% endif %}
+        <div class="gb-org-meta">
+          {% if user.department %}
+            <span class="gb-org-badge">{{ user.department.name }}</span>
+          {% endif %}
+          {% if user.role == 'admin' %}
+            <span class="gb-org-badge gb-org-badge-admin">Admin</span>
+          {% elif user.role == 'qaqc' %}
+            <span class="gb-org-badge gb-org-badge-qaqc">QA/QC</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% if children[user.id] %}
+      <ul class="gb-org-children">
+        {% for child in children[user.id] %}
+          {{ render_node(child, children) }}
+        {% endfor %}
+      </ul>
+    {% endif %}
+  </li>
+{% endmacro %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-end flex-wrap gap-3 mb-4">
+  <div class="gb-pageheader mb-0">
+    <span class="gb-eyebrow">08 / People</span>
+    <h1 class="mb-1">Org chart</h1>
+    <p class="lede mb-0">Built from the "Reports to" field on each staff profile. {{ total_users }} active staff.</p>
+  </div>
+  <div class="d-flex gap-2 gb-org-noprint">
+    <a href="{{ url_for('admin_employees') }}" class="btn btn-sm btn-outline-secondary">Edit users</a>
+    <button type="button" class="btn btn-sm btn-outline-primary" onclick="window.print()">Print / save PDF</button>
+  </div>
+</div>
+
+{% if not roots %}
+  <div class="card p-4 text-muted">No active staff yet.</div>
+{% else %}
+<div class="card p-3 gb-org-wrap">
+  <ul class="gb-org-roots">
+    {% for u in roots %}
+      {{ render_node(u, children) }}
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+{% endblock %}

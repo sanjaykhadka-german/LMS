@@ -107,6 +107,12 @@ def ensure_schema_upgrades(app):
         if not col_exists("users", "photo_filename"):
             upgrades.append(("users.photo_filename",
                 "ALTER TABLE users ADD COLUMN photo_filename VARCHAR(500)"))
+        if not col_exists("users", "job_title"):
+            upgrades.append(("users.job_title",
+                "ALTER TABLE users ADD COLUMN job_title VARCHAR(120) DEFAULT ''"))
+        if not col_exists("users", "manager_id"):
+            upgrades.append(("users.manager_id",
+                "ALTER TABLE users ADD COLUMN manager_id INTEGER REFERENCES users(id)"))
     if "modules" in tables and not col_exists("modules", "created_by_id"):
         upgrades.append(("modules.created_by_id",
             "ALTER TABLE modules ADD COLUMN created_by_id INTEGER REFERENCES users(id)"))
@@ -1320,6 +1326,29 @@ def register_routes(app):
         ctx = build_dashboard_context()
         return render_template("qaqc/dashboard.html", **ctx)
 
+    @app.route("/admin/org-chart")
+    @author_required
+    def admin_org_chart():
+        """Render an org chart from User.manager_id self-references.
+        Active staff only. Manager-less users (or users whose manager is
+        disabled / missing) appear as roots."""
+        users = (User.query.filter_by(is_active_flag=True)
+                 .options(db.joinedload(User.department))
+                 .order_by(User.last_name, User.first_name).all())
+        by_id = {u.id: u for u in users}
+        children = {u.id: [] for u in users}
+        roots = []
+        for u in users:
+            if u.manager_id and u.manager_id in by_id:
+                children[u.manager_id].append(u)
+            else:
+                roots.append(u)
+        # Sort each child list — already-sorted parent order keeps siblings
+        # alphabetical (last_name, first_name).
+        return render_template("admin/org_chart.html",
+                               roots=roots, children=children,
+                               total_users=len(users))
+
     @app.route("/admin/matrix")
     @author_required
     def admin_training_matrix():
@@ -2465,12 +2494,22 @@ def register_routes(app):
         employer = get_or_create_employer(employer_name)
         full_name = f"{first_name} {last_name}".strip()
         temp_pw = secrets.token_urlsafe(9)
+        job_title = request.form.get("job_title", "").strip()
+        manager_id_raw = request.form.get("manager_id", "").strip()
+        manager_id = int(manager_id_raw) if manager_id_raw.isdigit() else None
+        # Defensive: only accept manager_id that points to an active user.
+        if manager_id is not None:
+            mgr = db.session.get(User, manager_id)
+            if mgr is None or not mgr.is_active_flag:
+                manager_id = None
         u = User(name=full_name, first_name=first_name, last_name=last_name,
                  email=email, phone=phone, role=role,
                  department_id=int(dept_raw),
                  employer_id=employer.id if employer else None,
                  start_date=start_date,
-                 termination_date=termination_date)
+                 termination_date=termination_date,
+                 job_title=job_title,
+                 manager_id=manager_id)
         u.set_password(temp_pw)
         db.session.add(u)
         db.session.flush()
@@ -2583,6 +2622,23 @@ def register_routes(app):
             u.employer_id = get_or_create_employer(employer_name).id
             u.start_date = start_date
             u.termination_date = termination_date
+            u.job_title = request.form.get("job_title", "").strip()
+            mgr_raw = request.form.get("manager_id", "").strip()
+            new_manager_id = int(mgr_raw) if mgr_raw.isdigit() else None
+            # Validation: can't be your own manager, can't be a circular ref
+            # one level deep (covers most accidental cases without recursion).
+            if new_manager_id == u.id:
+                flash("A user can't be their own manager.", "warning")
+                new_manager_id = u.manager_id
+            elif new_manager_id is not None:
+                mgr = db.session.get(User, new_manager_id)
+                if mgr is None or not mgr.is_active_flag:
+                    new_manager_id = None
+                elif mgr.manager_id == u.id:
+                    flash(f"Can't set {mgr.name} as manager — they already "
+                          f"report to {u.name}.", "warning")
+                    new_manager_id = u.manager_id
+            u.manager_id = new_manager_id
 
             machine_ids = [int(x) for x in request.form.getlist("machine_ids") if x.isdigit()]
             u.machines = Machine.query.filter(Machine.id.in_(machine_ids)).all() if machine_ids else []
@@ -2619,9 +2675,13 @@ def register_routes(app):
         departments = Department.query.order_by(Department.name).all()
         employers = Employer.query.order_by(Employer.name).all()
         machines = Machine.query.order_by(Machine.name).all()
+        manager_candidates = (User.query
+                              .filter_by(is_active_flag=True)
+                              .order_by(User.last_name, User.first_name).all())
         return render_template("admin/employee_edit.html",
                                employee=u, departments=departments,
-                               employers=employers, machines=machines)
+                               employers=employers, machines=machines,
+                               manager_candidates=manager_candidates)
 
     @app.route("/admin/employees/<int:uid>")
     @author_required
@@ -2695,13 +2755,16 @@ def register_routes(app):
         w = csv.writer(buf)
         w.writerow(["First Name", "Last Name", "Email", "Phone",
                     "Department", "Role", "Employer", "Machines",
-                    "Start Date", "Termination Date"])
+                    "Start Date", "Termination Date",
+                    "Job Title", "Manager Email"])
         w.writerow(["Jane", "Doe", "jane.doe@example.com", "0400 000 000",
                     "Production", "employee", "German Butchery",
-                    "Mincer; Sausage filler", "2024-03-15", ""])
+                    "Mincer; Sausage filler", "2024-03-15", "",
+                    "Line Leader", ""])
         w.writerow(["John", "Smith", "john.smith@example.com", "0411 111 111",
                     "Packing", "employee", "Acme Staffing", "",
-                    "15/03/2024", ""])
+                    "15/03/2024", "",
+                    "Packer", "jane.doe@example.com"])
         # UTF-8 BOM so Excel auto-detects encoding when opening the .csv
         body = "﻿" + buf.getvalue()
         return Response(body, mimetype="text/csv",
@@ -2774,6 +2837,8 @@ def register_routes(app):
             employer_name = cell(row, "employer")
             start_raw = cell(row, "start date")
             term_raw = cell(row, "termination date")
+            job_title = cell(row, "job title")
+            manager_email = cell(row, "manager email").lower()
 
             def _reject(reason):
                 nonlocal skipped
@@ -2842,12 +2907,23 @@ def register_routes(app):
 
             full_name = f"{first_name} {last_name}".strip()
             temp_pw = secrets.token_urlsafe(9)
+            # Resolve manager by email if provided. Missing manager isn't an
+            # error — set null and move on (the manager may simply not be in
+            # the system yet, e.g. uploaded later in the same CSV).
+            manager_id = None
+            if manager_email and "@" in manager_email:
+                mgr = User.query.filter(
+                    func.lower(User.email) == manager_email).first()
+                if mgr is not None:
+                    manager_id = mgr.id
             u = User(name=full_name, first_name=first_name, last_name=last_name,
                      email=email, role=role, phone=phone,
                      department_id=dept.id,
                      employer_id=employer.id,
                      start_date=start_date,
-                     termination_date=termination_date)
+                     termination_date=termination_date,
+                     job_title=job_title,
+                     manager_id=manager_id)
             u.set_password(temp_pw)
             u.machines = machine_objs
             db.session.add(u)

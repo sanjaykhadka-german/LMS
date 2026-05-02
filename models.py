@@ -81,10 +81,20 @@ class User(UserMixin, db.Model):
     start_date = db.Column(db.Date, nullable=True)
     termination_date = db.Column(db.Date, nullable=True)
     photo_filename = db.Column(db.String(500), nullable=True)
+    job_title = db.Column(db.String(120), default="")
+    # SET NULL on delete: a manager leaving doesn't cascade-delete their reports.
+    manager_id = db.Column(db.Integer,
+                           db.ForeignKey("users.id", ondelete="SET NULL"),
+                           nullable=True)
 
     assignments = db.relationship("Assignment", backref="user", cascade="all, delete-orphan")
     attempts = db.relationship("Attempt", backref="user", cascade="all, delete-orphan")
     machines = db.relationship("Machine", secondary=user_machines, backref="users")
+    manager = db.relationship(
+        "User", remote_side=[id],
+        backref=db.backref("direct_reports", lazy="dynamic"),
+        foreign_keys=[manager_id],
+    )
 
     def set_password(self, raw):
         self.password_hash = generate_password_hash(raw)

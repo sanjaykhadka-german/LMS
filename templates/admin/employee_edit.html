@@ -69,6 +69,28 @@
     </div>
 
     <div class="col-md-6">
+      <label class="form-label">Job title</label>
+      <input name="job_title" class="form-control"
+             value="{{ employee.job_title or '' }}"
+             placeholder="e.g. Line Leader">
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Reports to (manager)</label>
+      <select name="manager_id" class="form-select">
+        <option value="">— No manager —</option>
+        {% for c in manager_candidates %}
+          {% if c.id != employee.id %}
+            <option value="{{ c.id }}"
+              {% if employee.manager_id == c.id %}selected{% endif %}>
+              {{ c.name }}{% if c.job_title %} — {{ c.job_title }}{% endif %}
+            </option>
+          {% endif %}
+        {% endfor %}
+      </select>
+      <div class="form-text">Used to render the org chart at <a href="{{ url_for('admin_org_chart') if 'admin_org_chart' in (request.endpoint or '') else '#' }}">Org chart</a>.</div>
+    </div>
+
+    <div class="col-md-6">
       <label class="form-label">Start date</label>
       <input name="start_date" type="date" class="form-control"
              value="{{ employee.start_date.isoformat() if employee.start_date else '' }}">

@@ -832,6 +832,108 @@ hr { border-color: var(--gb-line); opacity: 1; }
 .gb-mx-swatch.is-never { background: var(--gb-paper); }
 .gb-mx-swatch.is-na { background: var(--gb-line-soft); }
 
+/* -------- Org chart -------- */
+.gb-org-wrap { padding: 14px 18px; }
+.gb-org-roots,
+.gb-org-children {
+  list-style: none;
+  padding-left: 28px;
+  margin: 0;
+}
+.gb-org-roots { padding-left: 0; }
+.gb-org-node {
+  position: relative;
+  padding: 4px 0;
+}
+/* Connecting lines between children and their parent. */
+.gb-org-children > .gb-org-node::before {
+  content: "";
+  position: absolute;
+  left: -16px;
+  top: 26px;
+  width: 12px;
+  border-top: 1px solid var(--gb-line);
+}
+.gb-org-children::before {
+  content: "";
+  position: absolute;
+  left: 12px;
+  top: 0;
+  bottom: 14px;
+  border-left: 1px solid var(--gb-line);
+}
+.gb-org-children { position: relative; }
+.gb-org-card {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--gb-paper);
+  border: 1px solid var(--gb-line);
+  border-radius: var(--gb-radius);
+  transition: border-color .12s ease, background .12s ease;
+}
+.gb-org-card:hover {
+  border-color: var(--gb-burgundy);
+  background: var(--gb-cream);
+}
+.gb-org-avatar { flex-shrink: 0; }
+.gb-org-info { flex: 1; min-width: 0; }
+.gb-org-name {
+  font-family: var(--gb-font-body);
+  font-weight: 600;
+  color: var(--gb-ink);
+  text-decoration: none;
+  font-size: 0.95rem;
+  display: block;
+}
+.gb-org-name:hover { color: var(--gb-burgundy); text-decoration: underline; }
+.gb-org-title {
+  font-family: var(--gb-font-head);
+  font-style: italic;
+  font-size: 0.82rem;
+  color: var(--gb-mute);
+  margin-top: 2px;
+}
+.gb-org-meta { margin-top: 4px; display: flex; gap: 6px; flex-wrap: wrap; }
+.gb-org-badge {
+  font-family: var(--gb-font-body);
+  font-weight: 600;
+  font-size: 0.66rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--gb-cream-2);
+  color: var(--gb-ink-soft);
+  border: 1px solid var(--gb-line);
+}
+.gb-org-badge-admin {
+  background: var(--gb-burgundy);
+  color: #fff;
+  border-color: var(--gb-burgundy);
+}
+.gb-org-badge-qaqc {
+  background: var(--gb-info-bg);
+  color: var(--gb-brass-d);
+  border-color: rgba(176,138,62,0.4);
+}
+
+/* Print: hide chrome, expand the chart, drop background colours. */
+@media print {
+  .navbar, .gb-footer, .gb-org-noprint, #gbTourBackdrop, #gbTourCard,
+  .gb-pageheader .gb-eyebrow {
+    display: none !important;
+  }
+  body, .gb-main, .container { background: #fff !important; }
+  .gb-org-wrap { padding: 0; border: none; }
+  .gb-org-card { background: #fff; border-color: #aaa; }
+  .gb-org-children > .gb-org-node::before,
+  .gb-org-children::before { border-color: #aaa; }
+  .card { border: none; box-shadow: none; }
+  a { color: #000 !important; text-decoration: none; }
+}
+
 /* -------- WHS landing cards -------- */
 .gb-whs-card {
   display: block;

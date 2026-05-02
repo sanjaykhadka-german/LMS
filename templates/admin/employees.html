@@ -67,6 +67,22 @@
     </div>
 
     <div class="col-md-6">
+      <label class="form-label">Job title</label>
+      <input name="job_title" class="form-control" placeholder="e.g. Line Leader">
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Reports to (manager)</label>
+      <select name="manager_id" class="form-select">
+        <option value="">— No manager —</option>
+        {% for c in employees %}
+          {% if c.is_active_flag %}
+            <option value="{{ c.id }}">{{ c.name }}{% if c.job_title %} — {{ c.job_title }}{% endif %}</option>
+          {% endif %}
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="col-md-6">
       <label class="form-label">Start date</label>
       <input name="start_date" type="date" class="form-control">
     </div>
@@ -107,7 +123,8 @@
     <strong>Required columns:</strong> <code>First Name</code>, <code>Last Name</code>,
     <code>Email</code>, <code>Phone</code>, <code>Department</code>, <code>Employer</code>.
     <strong>Optional:</strong> <code>Role</code>, <code>Machines</code>
-    (comma- or pipe-separated), <code>Start Date</code>, <code>Termination Date</code>.
+    (comma- or pipe-separated), <code>Start Date</code>, <code>Termination Date</code>,
+    <code>Job Title</code>, <code>Manager Email</code>.
     Dates accept <code>YYYY-MM-DD</code> or <code>DD/MM/YYYY</code>.
     Missing departments, employers and machines are created automatically.
     Existing emails are skipped.
