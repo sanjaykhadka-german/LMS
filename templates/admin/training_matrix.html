@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Training matrix{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-end flex-wrap gap-3 mb-4">
+  <div class="gb-pageheader mb-0">
+    <span class="gb-eyebrow">06 / Compliance</span>
+    <h1 class="mb-1">Training matrix</h1>
+    <p class="lede mb-0">All active staff vs every published module. Cells show the next renewal date and current compliance status.</p>
+  </div>
+  <a class="btn btn-outline-primary"
+     href="{{ url_for('admin_training_matrix', format='csv',
+                      dept_id=filter_dept_id, employer_id=filter_employer_id) }}">
+    Export CSV
+  </a>
+</div>
+
+<form method="get" class="card p-3 mb-3">
+  <div class="row g-2 align-items-end">
+    <div class="col-md-4">
+      <label class="form-label small text-muted mb-1">Department</label>
+      <select name="dept_id" class="form-select form-select-sm">
+        <option value="">All departments</option>
+        {% for d in departments %}
+          <option value="{{ d.id }}" {% if filter_dept_id == d.id %}selected{% endif %}>{{ d.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label small text-muted mb-1">Employer</label>
+      <select name="employer_id" class="form-select form-select-sm">
+        <option value="">All employers</option>
+        {% for e in employers %}
+          <option value="{{ e.id }}" {% if filter_employer_id == e.id %}selected{% endif %}>{{ e.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-4 d-flex gap-2">
+      <button class="btn btn-sm btn-primary">Apply</button>
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin_training_matrix') }}">Reset</a>
+    </div>
+  </div>
+</form>
+
+<div class="card p-0 mb-3">
+  <div class="d-flex flex-wrap gap-3 px-3 py-2 small text-muted">
+    <span><span class="gb-mx-swatch is-current"></span> Current</span>
+    <span><span class="gb-mx-swatch is-expiring"></span> Expiring within 30 days</span>
+    <span><span class="gb-mx-swatch is-overdue"></span> Overdue</span>
+    <span><span class="gb-mx-swatch is-never"></span> Assigned, not yet passed</span>
+    <span><span class="gb-mx-swatch is-na"></span> Not assigned</span>
+  </div>
+</div>
+
+<div class="gb-matrix-wrap">
+  {% if not users %}
+    <div class="card p-4 text-muted">No active users match your filters.</div>
+  {% elif not modules %}
+    <div class="card p-4 text-muted">No published modules yet.</div>
+  {% else %}
+  <table class="gb-matrix">
+    <thead>
+      <tr>
+        <th class="gb-mx-corner">User</th>
+        {% for m in modules %}
+          <th class="gb-mx-mod" title="{{ m.title }}"><span>{{ m.title }}</span></th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in users %}
+        <tr>
+          <th class="gb-mx-user">
+            <div class="gb-mx-name">{{ u.name }}</div>
+            <div class="gb-mx-meta">
+              {{ u.department.name if u.department else '—' }}
+              {% if u.employer %}<span class="text-muted"> · {{ u.employer.name }}</span>{% endif %}
+            </div>
+          </th>
+          {% for m in modules %}
+            {% set cell = matrix[(u.id, m.id)] %}
+            <td class="gb-mx-cell cell-{{ cell.status }}">
+              {% if cell.status == 'not_assigned' %}
+                —
+              {% elif cell.status == 'never_passed' %}
+                Not yet
+              {% elif cell.expires is none %}
+                Current
+              {% else %}
+                {{ cell.expires.strftime('%Y-%m-%d') }}
+              {% endif %}
+            </td>
+          {% endfor %}
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>
+{% endblock %}

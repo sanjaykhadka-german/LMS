@@ -1170,6 +1170,99 @@ def register_routes(app):
         ctx = build_dashboard_context()
         return render_template("qaqc/dashboard.html", **ctx)
 
+    @app.route("/admin/matrix")
+    @author_required
+    def admin_training_matrix():
+        """Compliance matrix: rows=users, cols=modules, cells coloured by
+        compliance_status_for. Filterable by department/employer; CSV-exportable."""
+        dept_id = request.args.get("dept_id", type=int)
+        employer_id = request.args.get("employer_id", type=int)
+        fmt = (request.args.get("format") or "").lower()
+
+        users_q = (User.query
+                   .filter(User.is_active_flag == True)  # noqa: E712
+                   .options(db.joinedload(User.department),
+                            db.joinedload(User.employer)))
+        if dept_id:
+            users_q = users_q.filter(User.department_id == dept_id)
+        if employer_id:
+            users_q = users_q.filter(User.employer_id == employer_id)
+        users = users_q.order_by(User.department_id.asc().nullslast(),
+                                 User.employer_id.asc().nullslast(),
+                                 User.last_name.asc(),
+                                 User.first_name.asc()).all()
+
+        modules = (Module.query
+                   .filter_by(is_published=True)
+                   .order_by(Module.title.asc()).all())
+
+        # Latest passing attempt per (user, module) — single query.
+        last_pass_rows = (db.session.query(
+            Attempt.user_id, Attempt.module_id,
+            func.max(Attempt.created_at).label("ts"))
+            .filter(Attempt.passed.is_(True))
+            .group_by(Attempt.user_id, Attempt.module_id).all())
+        last_pass = {(r.user_id, r.module_id): r.ts for r in last_pass_rows}
+
+        # Assignment lookup: (user_id, module_id) -> True
+        assign_rows = (db.session.query(Assignment.user_id,
+                                        Assignment.module_id).all())
+        assigned = {(r.user_id, r.module_id) for r in assign_rows}
+
+        now = datetime.utcnow()
+        modules_by_id = {m.id: m for m in modules}
+        matrix = {}
+        for u in users:
+            for m in modules:
+                ts = last_pass.get((u.id, m.id))
+                is_assigned = (u.id, m.id) in assigned
+                if ts is None and not is_assigned:
+                    status = "not_assigned"
+                else:
+                    status = compliance_status_for(ts, m, now)
+                expires = module_expiry_for(ts, m) if ts else None
+                matrix[(u.id, m.id)] = {
+                    "status": status,
+                    "last_pass": ts,
+                    "expires": expires,
+                }
+
+        if fmt == "csv":
+            buf = io.StringIO()
+            w = csv.writer(buf)
+            w.writerow(["User", "Department", "Employer"]
+                       + [m.title for m in modules])
+            for u in users:
+                row = [u.name,
+                       u.department.name if u.department else "",
+                       u.employer.name if u.employer else ""]
+                for m in modules:
+                    cell = matrix[(u.id, m.id)]
+                    if cell["status"] == "not_assigned":
+                        row.append("")
+                    elif cell["status"] == "never_passed":
+                        row.append("Not yet")
+                    elif cell["expires"] is None:
+                        row.append("Current")
+                    else:
+                        row.append(cell["expires"].strftime("%Y-%m-%d"))
+                w.writerow(row)
+            csv_text = buf.getvalue()
+            resp = Response(csv_text, mimetype="text/csv")
+            stamp = now.strftime("%Y%m%d-%H%M")
+            resp.headers["Content-Disposition"] = (
+                f'attachment; filename="training-matrix-{stamp}.csv"')
+            return resp
+
+        departments = Department.query.order_by(Department.name).all()
+        employers = Employer.query.order_by(Employer.name).all()
+        return render_template("admin/training_matrix.html",
+                               users=users, modules=modules,
+                               matrix=matrix, departments=departments,
+                               employers=employers,
+                               filter_dept_id=dept_id,
+                               filter_employer_id=employer_id)
+
     # universal navbar search — jump to a user or module by name
     @app.route("/admin/search")
     @author_required
