@@ -730,17 +730,19 @@ hr { border-color: var(--gb-line); opacity: 1; }
   font-size: 0.7rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  border-bottom: 1px solid var(--gb-line);
+  border-bottom: 2px solid var(--gb-line);
+  border-right: 1px solid var(--gb-line);
   padding: 8px 10px;
   text-align: left;
 }
+.gb-matrix thead th:last-child { border-right: none; }
 .gb-matrix tbody th {
   position: sticky;
   left: 0;
   background: var(--gb-paper);
   z-index: 1;
-  border-right: 1px solid var(--gb-line);
-  border-bottom: 1px solid var(--gb-line-soft);
+  border-right: 2px solid var(--gb-line);
+  border-bottom: 1px solid var(--gb-line);
   text-align: left;
   padding: 10px 14px;
   min-width: 200px;
@@ -750,6 +752,7 @@ hr { border-color: var(--gb-line); opacity: 1; }
   left: 0;
   z-index: 3;
   min-width: 200px;
+  border-right: 2px solid var(--gb-line);
 }
 .gb-matrix .gb-mx-mod {
   min-width: 110px;
@@ -781,13 +784,17 @@ hr { border-color: var(--gb-line); opacity: 1; }
   color: var(--gb-mute);
 }
 .gb-matrix .gb-mx-cell {
-  border-bottom: 1px solid var(--gb-line-soft);
+  border-bottom: 1px solid var(--gb-line);
+  border-right: 1px solid var(--gb-line);
   padding: 8px 10px;
   text-align: center;
   font-size: 0.82rem;
   white-space: nowrap;
   min-width: 110px;
 }
+.gb-matrix tbody tr td:last-child { border-right: none; }
+.gb-matrix tbody tr:last-child td,
+.gb-matrix tbody tr:last-child th { border-bottom: none; }
 .gb-matrix .cell-current {
   background: var(--gb-success-bg);
   color: var(--gb-success);
