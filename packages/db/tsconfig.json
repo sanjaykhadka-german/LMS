@@ -1,0 +1,9 @@
+{
+  "extends": "@tracey/config/tsconfig.base",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "noEmit": true
+  },
+  "include": ["src/**/*", "drizzle.config.ts"]
+}
