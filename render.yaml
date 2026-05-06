@@ -51,6 +51,12 @@ services:
         sync: false
       - key: AUTH_TRUST_HOST
         value: "true"
+      - key: RESEND_API_KEY
+        sync: false
+      - key: MAIL_FROM
+        value: training@germanbutchery.com.au
+      - key: MAIL_FROM_NAME
+        value: German Butchery Training
       - key: STRIPE_SECRET_KEY
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
@@ -75,7 +81,7 @@ services:
     runtime: node
     plan: free
     schedule: "0 3 * * *"
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter lms-web build
+    buildCommand: corepack enable && pnpm install --frozen-lockfile
     startCommand: pnpm --filter lms-web run reconcile:stripe
     envVars:
       - key: DATABASE_URL
