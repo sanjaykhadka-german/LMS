@@ -17,3 +17,13 @@ static/uploads/
 .pytest_cache/
 playwright-report/
 test-results/
+
+# Node / Next.js / monorepo (Tracey)
+node_modules/
+.next/
+.turbo/
+dist/
+*.tsbuildinfo
+.env.local
+.env.*.local
+coverage/

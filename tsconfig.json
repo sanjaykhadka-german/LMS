@@ -1,0 +1,12 @@
+{
+  "extends": "@tracey/config/tsconfig.base",
+  "files": [],
+  "references": [
+    { "path": "packages/config" },
+    { "path": "packages/db" },
+    { "path": "packages/auth" },
+    { "path": "packages/ui" },
+    { "path": "packages/types" },
+    { "path": "apps/lms-web" }
+  ]
+}
