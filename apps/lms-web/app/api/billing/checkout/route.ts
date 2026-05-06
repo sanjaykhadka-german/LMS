@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { currentTenant } from "@tracey/auth";
 import { stripe } from "~/lib/stripe";
-import { siteConfig, priceIdFor } from "~/lib/site-config";
+import { siteConfig, priceIdFor, type Billing } from "~/lib/site-config";
 import type { Plan } from "@tracey/types";
 
 export async function POST(req: NextRequest) {
@@ -22,11 +22,13 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
+  const billingRaw = form.get("billing");
+  const billing: Billing = billingRaw === "annual" ? "annual" : "monthly";
   const plan = planRaw as Plan;
-  const priceId = priceIdFor(plan);
+  const priceId = priceIdFor(plan, billing);
   if (!priceId) {
     return NextResponse.json(
-      { error: `No Stripe price configured for ${plan}` },
+      { error: `No Stripe price configured for ${plan}/${billing}` },
       { status: 500 },
     );
   }
@@ -41,8 +43,8 @@ export async function POST(req: NextRequest) {
     customer: tenant.stripeCustomerId ?? undefined,
     customer_email: tenant.stripeCustomerId ? undefined : customerEmail,
     subscription_data: {
-      trial_period_days: 14,
-      metadata: { tenant_id: tenant.id, plan },
+      trial_period_days: siteConfig.trialDays,
+      metadata: { tenant_id: tenant.id, plan, billing },
     },
     allow_promotion_codes: true,
     success_url: `${siteConfig.url}/app?checkout=success`,

@@ -1,5 +1,9 @@
 import type { Plan } from "@tracey/types";
 
+export type Billing = "monthly" | "annual";
+
+export const ANNUAL_DISCOUNT = 0.2; // 20% off when billed annually
+
 export const siteConfig = {
   name: "Tracey",
   tagline: "Staff training that doesn't get in the way of the work.",
@@ -7,6 +11,7 @@ export const siteConfig = {
     "Tracey is the multi-tenant staff-training platform for operations teams. " +
     "Quizzes, qualifications, and audit trails — without the LMS bloat.",
   url: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
+  trialDays: 24,
   contact: {
     sales: "sanjay.khadka@germanbutchery.com.au",
   },
@@ -15,39 +20,47 @@ export const siteConfig = {
   },
 } as const;
 
+interface PriceSlot {
+  /** Display amount in USD per seat per month. For annual, this is the
+   *  effective monthly rate after the 20% discount. */
+  perSeatPerMonth: number;
+  priceEnvVar:
+    | "STRIPE_PRICE_STARTER_MONTHLY"
+    | "STRIPE_PRICE_STARTER_ANNUAL"
+    | "STRIPE_PRICE_PRO_MONTHLY"
+    | "STRIPE_PRICE_PRO_ANNUAL";
+}
+
 export interface PricingTier {
   id: Plan;
   name: string;
-  priceLabel: string;
-  priceSubLabel: string;
   description: string;
   features: string[];
+  prices?: { monthly: PriceSlot; annual: PriceSlot };
   cta: { kind: "signup" | "contact"; href: string; label: string };
   featured?: boolean;
-  priceEnvVar?: "STRIPE_PRICE_STARTER" | "STRIPE_PRICE_PRO";
 }
 
 export const pricingTiers: readonly PricingTier[] = [
   {
     id: "starter",
     name: "Starter",
-    priceLabel: "$TBD",
-    priceSubLabel: "/seat / month",
     description: "For small teams getting their training programme off the ground.",
     features: [
       "Up to 25 seats",
       "Unlimited modules and quizzes",
       "Email support",
-      "14-day free trial — no card required",
+      "24-day free trial — no card required",
     ],
+    prices: {
+      monthly: { perSeatPerMonth: 19, priceEnvVar: "STRIPE_PRICE_STARTER_MONTHLY" },
+      annual: { perSeatPerMonth: 15.2, priceEnvVar: "STRIPE_PRICE_STARTER_ANNUAL" },
+    },
     cta: { kind: "signup", href: "/sign-up?plan=starter", label: "Start free trial" },
-    priceEnvVar: "STRIPE_PRICE_STARTER",
   },
   {
     id: "pro",
     name: "Pro",
-    priceLabel: "$TBD",
-    priceSubLabel: "/seat / month",
     description: "For growing operations that need AI-generated quizzes and branding.",
     features: [
       "Everything in Starter",
@@ -56,15 +69,16 @@ export const pricingTiers: readonly PricingTier[] = [
       "Custom branding",
       "Priority support",
     ],
+    prices: {
+      monthly: { perSeatPerMonth: 39, priceEnvVar: "STRIPE_PRICE_PRO_MONTHLY" },
+      annual: { perSeatPerMonth: 31.2, priceEnvVar: "STRIPE_PRICE_PRO_ANNUAL" },
+    },
     cta: { kind: "signup", href: "/sign-up?plan=pro", label: "Start free trial" },
     featured: true,
-    priceEnvVar: "STRIPE_PRICE_PRO",
   },
   {
     id: "enterprise",
     name: "Enterprise",
-    priceLabel: "Contact sales",
-    priceSubLabel: "",
     description: "For large operations with SSO, SLAs, and dedicated success.",
     features: [
       "Everything in Pro",
@@ -83,8 +97,17 @@ export const pricingTiers: readonly PricingTier[] = [
   },
 ] as const;
 
-export function priceIdFor(plan: Plan): string | null {
-  if (plan === "starter") return process.env.STRIPE_PRICE_STARTER ?? null;
-  if (plan === "pro") return process.env.STRIPE_PRICE_PRO ?? null;
-  return null;
+/** Look up the configured Stripe price ID for a given plan + billing cadence. */
+export function priceIdFor(plan: Plan, billing: Billing): string | null {
+  const tier = pricingTiers.find((t) => t.id === plan);
+  const slot = tier?.prices?.[billing];
+  if (!slot) return null;
+  return process.env[slot.priceEnvVar] ?? null;
+}
+
+export function formatPrice(perSeatPerMonth: number): string {
+  // Drop the trailing .0 for whole dollar amounts (e.g. $19, not $19.00),
+  // but keep two decimals when the discounted annual rate has cents.
+  const isWhole = Math.abs(perSeatPerMonth - Math.round(perSeatPerMonth)) < 0.01;
+  return `$${isWhole ? perSeatPerMonth.toFixed(0) : perSeatPerMonth.toFixed(2)}`;
 }

@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS "app"."tenants" (
 	"name" text NOT NULL,
 	"plan" text DEFAULT 'free' NOT NULL,
 	"status" text DEFAULT 'trialing' NOT NULL,
-	"trial_ends_at" timestamp with time zone DEFAULT (now() + interval '14 days') NOT NULL,
+	"trial_ends_at" timestamp with time zone DEFAULT (now() + interval '24 days') NOT NULL,
 	"current_period_end" timestamp with time zone,
 	"stripe_customer_id" text,
 	"stripe_subscription_id" text,

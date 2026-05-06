@@ -112,7 +112,7 @@ function BillingPortalButton() {
 
 function SubscribeButtons() {
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <p className="text-sm text-[color:var(--muted-foreground)]">
         Pick a paid plan to continue after your trial.
       </p>
@@ -122,12 +122,13 @@ function SubscribeButtons() {
           .map((tier) => (
             <form key={tier.id} action="/api/billing/checkout" method="post">
               <input type="hidden" name="plan" value={tier.id} />
+              <input type="hidden" name="billing" value="monthly" />
               <Button
                 type="submit"
                 variant={tier.featured ? "default" : "outline"}
                 size="sm"
               >
-                {tier.name}
+                Subscribe — {tier.name}
               </Button>
             </form>
           ))}
@@ -135,6 +136,9 @@ function SubscribeButtons() {
           <Link href="/#pricing">Compare plans</Link>
         </Button>
       </div>
+      <p className="text-xs text-[color:var(--muted-foreground)]">
+        Annual billing (save 20%) available from Manage billing after upgrade.
+      </p>
     </div>
   );
 }

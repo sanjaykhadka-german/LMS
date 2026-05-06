@@ -16,7 +16,7 @@ export function Hero() {
         </p>
         <div className="mt-10 flex items-center justify-center gap-3">
           <Button asChild size="lg">
-            <Link href="/sign-up">Start 14-day free trial</Link>
+            <Link href="/sign-up">Start 24-day free trial</Link>
           </Button>
           <Button asChild variant="outline" size="lg">
             <Link href="#pricing">See pricing</Link>

@@ -22,7 +22,7 @@ export const tenants = appSchema.table(
     status: text("status").notNull().default("trialing"),
     trialEndsAt: timestamp("trial_ends_at", { withTimezone: true })
       .notNull()
-      .default(sql`now() + interval '14 days'`),
+      .default(sql`now() + interval '24 days'`),
     currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
     stripeCustomerId: text("stripe_customer_id"),
     stripeSubscriptionId: text("stripe_subscription_id"),

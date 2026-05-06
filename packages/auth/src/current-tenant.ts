@@ -10,7 +10,7 @@ import { db, tenants, type Tenant } from "@tracey/db";
  * - Returns null if the user is not signed in or has no active organisation.
  * - Otherwise looks up the tenant row keyed on Clerk's `orgId`.
  * - If the row does not exist (first sight of this Clerk org), creates one
- *   with sensible defaults (free plan, 14-day trial) using the Clerk
+ *   with sensible defaults (free plan, 24-day trial) using the Clerk
  *   organisation's `name` and `slug`.
  *
  * Safe to call from Server Components, Route Handlers, and Server Actions.

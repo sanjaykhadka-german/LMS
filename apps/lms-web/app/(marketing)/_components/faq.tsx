@@ -8,7 +8,7 @@ import {
 const faqs = [
   {
     q: "How long is the free trial?",
-    a: "14 days. We don't ask for a card to start, and we'll email you twice before the trial ends so nothing gets billed by surprise.",
+    a: "24 days. We don't ask for a card to start, and we'll email you twice before the trial ends so nothing gets billed by surprise.",
   },
   {
     q: "Can I bring my own training content?",

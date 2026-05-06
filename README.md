@@ -167,10 +167,17 @@ For Stripe webhooks during local development:
 stripe listen --forward-to localhost:3000/api/webhooks/stripe
 ```
 
-Set the printed `whsec_…` as `STRIPE_WEBHOOK_SECRET` in `.env`. Create
-two products in the Stripe dashboard with `metadata.plan = starter` and
-`metadata.plan = pro`; copy their price IDs into `STRIPE_PRICE_STARTER`
-and `STRIPE_PRICE_PRO`.
+Set the printed `whsec_…` as `STRIPE_WEBHOOK_SECRET` in `.env`. Then in
+the Stripe dashboard create one **product** for Starter and one for Pro.
+Each product needs **two prices**:
+
+- Starter: `$19` recurring monthly, `$182.40` recurring yearly (20% off)
+- Pro: `$39` recurring monthly, `$374.40` recurring yearly (20% off)
+
+Set `metadata.plan = starter` (or `pro`) on every price — the webhook
+handler reads it to update the tenant row. Copy the four price IDs into
+`STRIPE_PRICE_STARTER_MONTHLY`, `STRIPE_PRICE_STARTER_ANNUAL`,
+`STRIPE_PRICE_PRO_MONTHLY`, `STRIPE_PRICE_PRO_ANNUAL`.
 
 ## Tests
 
