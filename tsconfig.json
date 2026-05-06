@@ -1,5 +1,5 @@
 {
-  "extends": "@tracey/config/tsconfig.base",
+  "extends": "./packages/config/tsconfig.base.json",
   "files": [],
   "references": [
     { "path": "packages/config" },
