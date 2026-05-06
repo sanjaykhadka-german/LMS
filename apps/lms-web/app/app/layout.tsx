@@ -18,7 +18,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <Image
                 src="/tracey-logo.png"
                 alt={siteConfig.name}
-                width={1242}
+                width={1323}
                 height={605}
                 priority
                 className="h-7 w-auto"

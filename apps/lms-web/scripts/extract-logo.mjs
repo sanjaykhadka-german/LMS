@@ -27,16 +27,17 @@ const img = sharp(source);
 const meta = await img.metadata();
 console.log(`source: ${meta.width}x${meta.height}`);
 
-// Coordinates assume the 2700x1680 layout. If the user later swaps in a
-// pre-cropped file we still trim cleanly.
-const left = Math.round(meta.width * 0.27);
-const top = Math.round(meta.height * 0.34);
-const width = Math.round(meta.width * 0.46);
-const height = Math.round(meta.height * 0.36);
+// Coordinates measured directly from the 2700x1680 spec sheet to capture
+// the "tracey" wordmark plus its audio-bars sub-mark with minimal padding.
+// (sharp.trim() proved unreliable on this asset — threshold tuning didn't
+// shave the dead space, so we go with measured bounds instead.)
+const left = Math.round(meta.width * 0.26); // ~702 — just before the "t"
+const top = Math.round(meta.height * 0.36); // ~605 — top of "t"
+const width = Math.round(meta.width * 0.49); // ~1323 — through the "y" tail
+const height = Math.round(meta.height * 0.36); // ~605 — bottom of audio bars
 
 await sharp(source)
   .extract({ left, top, width, height })
-  .trim({ background: "white", threshold: 5 })
   .png({ compressionLevel: 9 })
   .toFile(out);
 
