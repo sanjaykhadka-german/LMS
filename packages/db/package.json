@@ -13,6 +13,7 @@
   "scripts": {
     "generate": "drizzle-kit generate",
     "migrate": "tsx src/migrate.ts",
+    "reset": "tsx src/reset.ts",
     "studio": "drizzle-kit studio",
     "typecheck": "tsc --noEmit"
   },
