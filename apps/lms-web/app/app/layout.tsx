@@ -1,13 +1,28 @@
 import Link from "next/link";
 import Image from "next/image";
 import { redirect } from "next/navigation";
-import { OrganizationSwitcher, UserButton } from "@clerk/nextjs";
-import { currentTenant } from "@tracey/auth";
+import {
+  currentMembership,
+  currentUser,
+  listUserTenants,
+} from "~/lib/auth/current";
 import { siteConfig } from "~/lib/site-config";
+import { UserMenu } from "./_components/user-menu";
+import { TenantSwitcher } from "./_components/tenant-switcher";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const tenant = await currentTenant();
-  if (!tenant) redirect("/onboarding");
+  const user = await currentUser();
+  if (!user) redirect("/sign-in?returnTo=/app");
+
+  const membership = await currentMembership();
+  if (!membership) redirect("/onboarding");
+
+  const tenants = await listUserTenants();
+  const switcherOptions = tenants.map((m) => ({
+    id: m.tenant.id,
+    name: m.tenant.name,
+    role: m.role,
+  }));
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -24,13 +39,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 className="h-9 w-auto"
               />
             </Link>
-            <OrganizationSwitcher
-              afterCreateOrganizationUrl="/app"
-              afterSelectOrganizationUrl="/app"
-              hidePersonal
+            <TenantSwitcher
+              active={{
+                id: membership.tenant.id,
+                name: membership.tenant.name,
+                role: membership.role,
+              }}
+              options={switcherOptions}
             />
           </div>
-          <UserButton />
+          <UserMenu name={user.name} email={user.email} />
         </div>
       </header>
       <main className="flex-1">{children}</main>
