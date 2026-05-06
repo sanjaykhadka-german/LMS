@@ -11,7 +11,7 @@ const globalForStripe = globalThis as unknown as { __traceyStripe?: Stripe };
 export const stripe =
   globalForStripe.__traceyStripe ??
   new Stripe(secretKey, {
-    apiVersion: "2024-12-18.acacia",
+    apiVersion: "2025-02-24.acacia",
     typescript: true,
     appInfo: { name: "tracey-lms-web", version: "0.0.0" },
   });

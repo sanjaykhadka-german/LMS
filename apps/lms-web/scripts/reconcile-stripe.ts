@@ -26,7 +26,7 @@ loadEnv({ path: path.resolve(here, "../../../.env") });
 async function main() {
   const secretKey = process.env.STRIPE_SECRET_KEY;
   if (!secretKey) throw new Error("STRIPE_SECRET_KEY is required");
-  const stripe = new Stripe(secretKey, { apiVersion: "2024-12-18.acacia" });
+  const stripe = new Stripe(secretKey, { apiVersion: "2025-02-24.acacia" });
 
   const rows = await db
     .select({
