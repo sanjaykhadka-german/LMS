@@ -10,7 +10,7 @@ export function Header() {
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
         <Link href="/" className="flex items-center" aria-label={siteConfig.name}>
           <Image
-            src="/tracey-logo.png"
+            src="/tracey-wordmark.png"
             alt={siteConfig.name}
             width={1323}
             height={605}

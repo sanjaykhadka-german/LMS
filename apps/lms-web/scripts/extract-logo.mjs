@@ -17,7 +17,7 @@ if (!source) {
   process.exit(2);
 }
 
-const out = resolve(publicDir, "tracey-logo.png");
+const out = resolve(publicDir, "tracey-wordmark.png");
 
 // Source spec sheet is 2700x1680. The wordmark + audio-bars sub-mark sits
 // roughly centred around y=830, between x=750 and x=1950. Extract a bounding

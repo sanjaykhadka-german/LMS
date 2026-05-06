@@ -16,7 +16,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <div className="flex items-center gap-4">
             <Link href="/app" className="flex items-center" aria-label={siteConfig.name}>
               <Image
-                src="/tracey-logo.png"
+                src="/tracey-wordmark.png"
                 alt={siteConfig.name}
                 width={1323}
                 height={605}
