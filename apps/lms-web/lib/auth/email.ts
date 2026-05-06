@@ -22,10 +22,11 @@ export async function sendVerificationEmail(opts: {
   to: string;
   token: string;
   name?: string | null;
+  returnTo?: string;
 }): Promise<void> {
-  const verifyUrl = `${siteConfig.url}/verify-email?token=${encodeURIComponent(
-    opts.token,
-  )}&email=${encodeURIComponent(opts.to)}`;
+  const params = new URLSearchParams({ token: opts.token, email: opts.to });
+  if (opts.returnTo) params.set("returnTo", opts.returnTo);
+  const verifyUrl = `${siteConfig.url}/verify-email?${params.toString()}`;
   const greeting = opts.name ? `Hi ${opts.name},` : "Hi,";
 
   await client().emails.send({

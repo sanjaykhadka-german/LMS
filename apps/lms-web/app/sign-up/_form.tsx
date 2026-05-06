@@ -8,12 +8,21 @@ import { signUpAction, type SignUpState } from "./actions";
 
 const initial: SignUpState = { status: "idle" };
 
-export function SignUpForm({ plan }: { plan?: string }) {
+export function SignUpForm({
+  plan,
+  email,
+  returnTo,
+}: {
+  plan?: string;
+  email?: string;
+  returnTo?: string;
+}) {
   const [state, action, pending] = useActionState(signUpAction, initial);
 
   return (
     <form action={action} className="space-y-4">
       {plan && <input type="hidden" name="plan" value={plan} />}
+      {returnTo && <input type="hidden" name="returnTo" value={returnTo} />}
       <Field
         name="name"
         label="Full name"
@@ -26,6 +35,8 @@ export function SignUpForm({ plan }: { plan?: string }) {
         label="Work email"
         type="email"
         autoComplete="email"
+        defaultValue={email}
+        readOnly={!!email}
         errors={state.status === "error" ? state.fieldErrors?.email : undefined}
       />
       <Field
@@ -55,6 +66,8 @@ function Field({
   autoComplete,
   hint,
   errors,
+  defaultValue,
+  readOnly,
 }: {
   name: string;
   label: string;
@@ -62,6 +75,8 @@ function Field({
   autoComplete?: string;
   hint?: string;
   errors?: string[];
+  defaultValue?: string;
+  readOnly?: boolean;
 }) {
   return (
     <div className="space-y-1.5">
@@ -71,6 +86,8 @@ function Field({
         name={name}
         type={type}
         autoComplete={autoComplete}
+        defaultValue={defaultValue}
+        readOnly={readOnly}
         required
         aria-invalid={errors ? true : undefined}
       />

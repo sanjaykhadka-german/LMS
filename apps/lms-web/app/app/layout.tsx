@@ -47,6 +47,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               }}
               options={switcherOptions}
             />
+            <nav className="hidden items-center gap-1 sm:flex">
+              <Link
+                href="/app/members"
+                className="rounded-md px-3 py-1.5 text-sm font-medium text-[color:var(--muted-foreground)] transition-colors hover:bg-[color:var(--secondary)] hover:text-[color:var(--foreground)]"
+              >
+                Team
+              </Link>
+            </nav>
           </div>
           <UserMenu name={user.name} email={user.email} />
         </div>

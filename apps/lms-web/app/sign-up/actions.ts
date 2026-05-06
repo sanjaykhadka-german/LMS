@@ -15,6 +15,7 @@ const schema = z.object({
     .string()
     .min(8, "Password must be at least 8 characters")
     .max(200, "Password is too long"),
+  returnTo: z.string().optional(),
 });
 
 export type SignUpState =
@@ -29,6 +30,7 @@ export async function signUpAction(
     name: formData.get("name"),
     email: formData.get("email"),
     password: formData.get("password"),
+    returnTo: formData.get("returnTo") ?? undefined,
   });
   if (!parsed.success) {
     return {
@@ -37,7 +39,8 @@ export async function signUpAction(
       fieldErrors: parsed.error.flatten().fieldErrors,
     };
   }
-  const { name, email, password } = parsed.data;
+  const { name, email, password, returnTo } = parsed.data;
+  const safeReturnTo = returnTo && returnTo.startsWith("/") ? returnTo : undefined;
 
   const [existing] = await db
     .select({ id: users.id, emailVerified: users.emailVerified })
@@ -77,7 +80,7 @@ export async function signUpAction(
   });
 
   try {
-    await sendVerificationEmail({ to: email, token, name });
+    await sendVerificationEmail({ to: email, token, name, returnTo: safeReturnTo });
   } catch (err) {
     console.error("[sign-up] failed to send verification email:", err);
     return {
@@ -87,5 +90,7 @@ export async function signUpAction(
     };
   }
 
-  redirect(`/verify-email?email=${encodeURIComponent(email)}&sent=1`);
+  const sentParams = new URLSearchParams({ email, sent: "1" });
+  if (safeReturnTo) sentParams.set("returnTo", safeReturnTo);
+  redirect(`/verify-email?${sentParams.toString()}`);
 }

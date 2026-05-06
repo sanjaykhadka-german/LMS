@@ -6,6 +6,7 @@ interface SearchParams {
   token?: string;
   email?: string;
   sent?: string;
+  returnTo?: string;
 }
 
 async function consumeToken(email: string, token: string): Promise<"ok" | "expired" | "invalid"> {
@@ -47,7 +48,8 @@ export default async function VerifyEmailPage({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
-  const { token, email, sent } = await searchParams;
+  const { token, email, sent, returnTo } = await searchParams;
+  const safeReturnTo = returnTo && returnTo.startsWith("/") ? returnTo : undefined;
 
   // Mode 1: arrived from sign-up — nothing to verify yet, just tell them to check inbox.
   if (sent && email && !token) {
@@ -80,7 +82,11 @@ export default async function VerifyEmailPage({
             Your email <strong>{email}</strong> is confirmed. You can now sign in.
           </p>
           <Link
-            href={`/sign-in?email=${encodeURIComponent(email)}`}
+            href={(() => {
+              const p = new URLSearchParams({ email });
+              if (safeReturnTo) p.set("returnTo", safeReturnTo);
+              return `/sign-in?${p.toString()}`;
+            })()}
             className="mt-6 inline-flex items-center justify-center rounded-md bg-[color:var(--primary)] px-4 py-2 text-sm font-medium text-[color:var(--primary-foreground)] shadow"
           >
             Sign in
