@@ -1,6 +1,6 @@
 "use client";
 
-import { LogOut, User } from "lucide-react";
+import { LogOut } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,18 +34,17 @@ export function UserMenu({ name, email }: { name: string | null; email: string }
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem disabled>
-          <User className="mr-2 h-4 w-4" />
-          Profile
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
-          <form action={signOutAction}>
-            <button type="submit" className="flex w-full items-center text-left">
-              <LogOut className="mr-2 h-4 w-4" />
-              Sign out
-            </button>
-          </form>
+        <DropdownMenuItem
+          onSelect={(e) => {
+            // Prevent Radix from closing the menu *before* the action runs;
+            // signOut() redirects, so the menu vanishes anyway.
+            e.preventDefault();
+            void signOutAction();
+          }}
+          className="cursor-pointer"
+        >
+          <LogOut className="mr-2 h-4 w-4" />
+          Sign out
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
