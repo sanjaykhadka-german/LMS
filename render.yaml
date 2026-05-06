@@ -45,10 +45,12 @@ services:
           property: connectionString
       - key: NODE_VERSION
         value: "20.18.0"
-      - key: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: AUTH_URL
         sync: false
-      - key: CLERK_SECRET_KEY
-        sync: false
+      - key: AUTH_TRUST_HOST
+        value: "true"
       - key: STRIPE_SECRET_KEY
         sync: false
       - key: STRIPE_WEBHOOK_SECRET

@@ -145,7 +145,7 @@ does not create their directories.
 - Node ≥ 20.11
 - pnpm 9 (`corepack enable && corepack prepare pnpm@9.15.0 --activate`)
 - Postgres (Render's `lms-db` for shared dev or a local Postgres 14+)
-- A Clerk project (free tier, <https://dashboard.clerk.com>)
+- An `AUTH_SECRET` (generate with `npx auth secret`)
 - A Stripe account in test mode (<https://dashboard.stripe.com>)
 
 ## Local setup
@@ -157,8 +157,11 @@ pnpm db:migrate                             # creates app schema + tenants
 pnpm dev                                     # boots lms-web on :3000
 ```
 
-The marketing site is at <http://localhost:4000>. `/sign-up` → create org →
-`/app` shows the tenant dashboard. `/api/health` returns
+The marketing site is at <http://localhost:4000>. `/sign-up` →
+verify email → `/sign-in` → `/onboarding` (create workspace) →
+`/app` shows the tenant dashboard. Verification email is sent
+via Resend (uses `RESEND_API_KEY`, `MAIL_FROM`, `MAIL_FROM_NAME`
+already in your Flask `.env`). `/api/health` returns
 `{ ok: true, db: "up" }`.
 
 For Stripe webhooks during local development:
