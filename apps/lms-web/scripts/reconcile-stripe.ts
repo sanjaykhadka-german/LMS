@@ -9,11 +9,19 @@
  *
  * Run locally with:  pnpm --filter lms-web run reconcile:stripe
  */
-import "dotenv/config";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { config as loadEnv } from "dotenv";
 import Stripe from "stripe";
 import { eq, isNotNull } from "drizzle-orm";
 import { db, tenants } from "@tracey/db";
 import { planFromPrice, statusFromStripe } from "../lib/billing/plan";
+
+// Load the workspace-root .env when run locally (cwd = apps/lms-web/).
+// Production (Render cron) gets env vars from the platform — readFile failure
+// is fine.
+const here = path.dirname(fileURLToPath(import.meta.url));
+loadEnv({ path: path.resolve(here, "../../../.env") });
 
 async function main() {
   const secretKey = process.env.STRIPE_SECRET_KEY;

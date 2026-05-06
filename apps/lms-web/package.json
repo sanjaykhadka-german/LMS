@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev --turbopack -p 3000",
-    "build": "next build",
-    "start": "next start -p ${PORT:-3000}",
+    "dev": "node scripts/with-env.mjs dev --turbopack -p 3000",
+    "build": "node scripts/with-env.mjs build",
+    "start": "node scripts/with-env.mjs start -p ${PORT:-3000}",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
