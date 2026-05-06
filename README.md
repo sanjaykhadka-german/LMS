@@ -157,14 +157,14 @@ pnpm db:migrate                             # creates app schema + tenants
 pnpm dev                                     # boots lms-web on :3000
 ```
 
-The marketing site is at <http://localhost:3000>. `/sign-up` → create org →
+The marketing site is at <http://localhost:4000>. `/sign-up` → create org →
 `/app` shows the tenant dashboard. `/api/health` returns
 `{ ok: true, db: "up" }`.
 
 For Stripe webhooks during local development:
 
 ```bash
-stripe listen --forward-to localhost:3000/api/webhooks/stripe
+stripe listen --forward-to localhost:4000/api/webhooks/stripe
 ```
 
 Set the printed `whsec_…` as `STRIPE_WEBHOOK_SECRET` in `.env`. Then in
