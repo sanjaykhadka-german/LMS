@@ -44,7 +44,7 @@ services:
           name: lms-db
           property: connectionString
       - key: NODE_VERSION
-        value: "20.18.0"
+        value: "22.13.0"
       - key: AUTH_SECRET
         generateValue: true
       - key: AUTH_URL
@@ -89,7 +89,7 @@ services:
           name: lms-db
           property: connectionString
       - key: NODE_VERSION
-        value: "20.18.0"
+        value: "22.13.0"
       - key: STRIPE_SECRET_KEY
         sync: false
 
