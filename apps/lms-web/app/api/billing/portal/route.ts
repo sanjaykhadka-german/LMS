@@ -1,16 +1,15 @@
 import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
-import { currentTenant } from "@tracey/auth";
+import { currentUser, currentTenant } from "~/lib/auth/current";
 import { stripe } from "~/lib/stripe";
 import { siteConfig } from "~/lib/site-config";
 
 export async function POST() {
-  const { userId } = await auth();
-  if (!userId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const user = await currentUser();
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const tenant = await currentTenant();
   if (!tenant) {
-    return NextResponse.json({ error: "no active organisation" }, { status: 400 });
+    return NextResponse.json({ error: "no active workspace" }, { status: 400 });
   }
   if (!tenant.stripeCustomerId) {
     return NextResponse.json(

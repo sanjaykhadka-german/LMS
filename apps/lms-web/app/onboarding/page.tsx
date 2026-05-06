@@ -1,22 +1,27 @@
 import { redirect } from "next/navigation";
-import { auth } from "@clerk/nextjs/server";
-import { CreateOrganization } from "@clerk/nextjs";
+import { requireUser, currentMembership } from "~/lib/auth/current";
+import { OnboardingForm } from "./_form";
 
 export default async function OnboardingPage() {
-  const { userId, orgId } = await auth();
-  if (!userId) redirect("/sign-in");
-  if (orgId) redirect("/app");
+  await requireUser();
+  // If they already have a membership, /app is the right place.
+  const existing = await currentMembership();
+  if (existing) redirect("/app");
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center px-4 py-12">
-      <div className="mb-8 max-w-md text-center">
-        <h1 className="text-2xl font-semibold tracking-tight">Create your workspace</h1>
-        <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
-          One workspace per company. You can invite teammates and switch between
-          workspaces later.
-        </p>
+    <div className="flex min-h-screen items-center justify-center px-4 py-12">
+      <div className="w-full max-w-md space-y-6">
+        <div className="space-y-1.5 text-center">
+          <h1 className="text-2xl font-semibold tracking-tight">
+            Create your workspace
+          </h1>
+          <p className="text-sm text-[color:var(--muted-foreground)]">
+            One workspace per company. You'll be able to invite teammates once it's
+            set up.
+          </p>
+        </div>
+        <OnboardingForm />
       </div>
-      <CreateOrganization afterCreateOrganizationUrl="/app" skipInvitationScreen={false} />
     </div>
   );
 }

@@ -1,17 +1,16 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { auth, currentUser } from "@clerk/nextjs/server";
-import { currentTenant } from "@tracey/auth";
+import { currentUser, currentTenant } from "~/lib/auth/current";
 import { stripe } from "~/lib/stripe";
 import { siteConfig, priceIdFor, type Billing } from "~/lib/site-config";
 import type { Plan } from "@tracey/types";
 
 export async function POST(req: NextRequest) {
-  const { userId } = await auth();
-  if (!userId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const user = await currentUser();
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const tenant = await currentTenant();
   if (!tenant) {
-    return NextResponse.json({ error: "no active organisation" }, { status: 400 });
+    return NextResponse.json({ error: "no active workspace" }, { status: 400 });
   }
 
   const form = await req.formData();
@@ -33,8 +32,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const user = await currentUser();
-  const customerEmail = user?.primaryEmailAddress?.emailAddress;
+  const customerEmail = user.email;
 
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",

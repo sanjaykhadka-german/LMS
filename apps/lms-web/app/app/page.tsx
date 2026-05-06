@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ExternalLink } from "lucide-react";
-import { currentTenant } from "@tracey/auth";
+import { currentTenant } from "~/lib/auth/current";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import {

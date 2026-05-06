@@ -1,10 +1,13 @@
 import Link from "next/link";
 import Image from "next/image";
-import { SignedIn, SignedOut } from "@clerk/nextjs";
+import { auth } from "~/../auth";
 import { Button } from "~/components/ui/button";
 import { siteConfig } from "~/lib/site-config";
 
-export function Header() {
+export async function Header() {
+  const session = await auth();
+  const signedIn = !!session?.user;
+
   return (
     <header className="sticky top-0 z-40 w-full border-b border-[color:var(--border)] bg-[color:var(--background)]/80 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
@@ -37,19 +40,20 @@ export function Header() {
           >
             FAQ
           </Link>
-          <SignedOut>
-            <Button asChild variant="ghost" size="sm">
-              <Link href="/sign-in">Sign in</Link>
-            </Button>
-            <Button asChild size="sm">
-              <Link href="/sign-up">Get started</Link>
-            </Button>
-          </SignedOut>
-          <SignedIn>
+          {signedIn ? (
             <Button asChild size="sm">
               <Link href="/app">Open app</Link>
             </Button>
-          </SignedIn>
+          ) : (
+            <>
+              <Button asChild variant="ghost" size="sm">
+                <Link href="/sign-in">Sign in</Link>
+              </Button>
+              <Button asChild size="sm">
+                <Link href="/sign-up">Get started</Link>
+              </Button>
+            </>
+          )}
         </nav>
       </div>
     </header>
