@@ -32,7 +32,6 @@ export const tenants = appSchema.table(
   },
   (t) => [
     uniqueIndex("tenants_clerk_org_id_uq").on(t.clerkOrgId),
-    uniqueIndex("tenants_slug_uq").on(t.slug),
     uniqueIndex("tenants_stripe_customer_id_uq").on(t.stripeCustomerId),
     uniqueIndex("tenants_stripe_subscription_id_uq").on(t.stripeSubscriptionId),
     check("tenants_plan_chk", sql`${t.plan} in ('free','starter','pro','enterprise')`),

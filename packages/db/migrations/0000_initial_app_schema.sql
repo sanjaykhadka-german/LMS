@@ -22,8 +22,6 @@ CREATE TABLE IF NOT EXISTS "app"."tenants" (
 --> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "tenants_clerk_org_id_uq" ON "app"."tenants" USING btree ("clerk_org_id");
 --> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "tenants_slug_uq" ON "app"."tenants" USING btree ("slug");
---> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "tenants_stripe_customer_id_uq" ON "app"."tenants" USING btree ("stripe_customer_id");
 --> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "tenants_stripe_subscription_id_uq" ON "app"."tenants" USING btree ("stripe_subscription_id");
