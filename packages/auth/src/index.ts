@@ -1,2 +1,2 @@
-export { currentTenant } from "./current-tenant.js";
-export { requireRole, type Role } from "./require-role.js";
+export { currentTenant } from "./current-tenant";
+export { requireRole, type Role } from "./require-role";

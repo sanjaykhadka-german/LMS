@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import * as schema from "./schema.js";
+import * as schema from "./schema";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
@@ -26,4 +26,4 @@ if (process.env.NODE_ENV !== "production") {
 
 export const db = drizzle(sql, { schema, logger: process.env.NODE_ENV === "development" });
 export { sql as pg };
-export * from "./schema.js";
+export * from "./schema";
