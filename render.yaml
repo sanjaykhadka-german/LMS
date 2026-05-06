@@ -28,6 +28,16 @@ services:
         sync: false
       - key: CLAUDE_API_KEY
         sync: false
+      # ─── Phase 2 SSO bridge ───
+      # LMS_SSO_SECRET is generated on the lms-web service (below) and must
+      # be copied here manually — Render doesn't have a "syncFromService"
+      # mechanism, so this is a dashboard step.
+      - key: LMS_SSO_SECRET
+        sync: false
+      # The single Tracey tenant (workspace) UUID allowed to SSO into Flask.
+      # Phase 3+ may relax this when Flask becomes multi-tenant.
+      - key: LMS_ALLOWED_TENANT_ID
+        sync: false
 
   # ─── Tracey monorepo (added Phase 1) ───
   - type: web

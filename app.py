@@ -6,6 +6,8 @@ import secrets
 from datetime import datetime, timedelta
 from functools import wraps
 
+import jwt
+
 from flask import (Flask, render_template, redirect, url_for, request,
                    flash, abort, send_from_directory, Response, session,
                    jsonify, current_app)
@@ -113,6 +115,15 @@ def ensure_schema_upgrades(app):
         if not col_exists("users", "manager_id"):
             upgrades.append(("users.manager_id",
                 "ALTER TABLE users ADD COLUMN manager_id INTEGER REFERENCES users(id)"))
+        if not col_exists("users", "tracey_user_id"):
+            upgrades.append(("users.tracey_user_id",
+                "ALTER TABLE users ADD COLUMN tracey_user_id VARCHAR(36)"))
+            upgrades.append(("users.tracey_user_id_uq",
+                "CREATE UNIQUE INDEX IF NOT EXISTS users_tracey_user_id_uq "
+                "ON users(tracey_user_id) WHERE tracey_user_id IS NOT NULL"))
+        if not col_exists("users", "tracey_tenant_id"):
+            upgrades.append(("users.tracey_tenant_id",
+                "ALTER TABLE users ADD COLUMN tracey_tenant_id VARCHAR(36)"))
     if "machines" in tables:
         if not col_exists("machines", "department_id") and "departments" in tables:
             upgrades.append(("machines.department_id",
@@ -1288,6 +1299,102 @@ def register_routes(app):
                 return redirect(url_for("index"))
             flash("Invalid email or password.", "danger")
         return render_template("login.html")
+
+    @app.route("/sso/callback", methods=["POST"])
+    def sso_callback():
+        """Phase 2 SSO bridge. Consumes an HS256 JWT minted by Tracey
+        (apps/lms-web/app/api/sso/launch/route.ts) and signs the user into
+        Flask. Replay defence is intentionally minimal — 60s expiry +
+        audience binding + signature is sufficient for a transitional
+        bridge that exists only until Flask is retired."""
+        secret = app.config.get("LMS_SSO_SECRET", "")
+        allowed_tenant = app.config.get("LMS_ALLOWED_TENANT_ID", "")
+        if not secret or not allowed_tenant:
+            app.logger.error("SSO callback hit but LMS_SSO_SECRET or "
+                             "LMS_ALLOWED_TENANT_ID is unset")
+            abort(503)
+
+        token = request.form.get("token", "").strip()
+        if not token:
+            abort(400)
+
+        def fail(message, log_reason):
+            app.logger.warning("SSO rejected: %s", log_reason)
+            flash(message, "danger")
+            return redirect(url_for("login"))
+
+        try:
+            claims = jwt.decode(
+                token, secret,
+                algorithms=["HS256"],
+                audience="flask-lms",
+                issuer="tracey",
+                leeway=30,
+            )
+        except jwt.ExpiredSignatureError:
+            return fail("Sign-in link expired. Please try again.",
+                        "token expired")
+        except jwt.InvalidAudienceError:
+            return fail("Sign-in failed. Please try again.", "bad audience")
+        except jwt.InvalidIssuerError:
+            return fail("Sign-in failed. Please try again.", "bad issuer")
+        except jwt.InvalidSignatureError:
+            return fail("Sign-in failed. Please try again.", "bad signature")
+        except jwt.PyJWTError as exc:
+            return fail("Sign-in failed. Please try again.",
+                        f"decode error: {exc}")
+
+        if claims.get("tenant_id") != allowed_tenant:
+            return fail("This workspace isn't authorised for training.",
+                        f"tenant {claims.get('tenant_id')!r} not allow-listed")
+        if claims.get("tenant_status") == "canceled":
+            return fail("Subscription canceled. Contact your admin.",
+                        "tenant subscription canceled")
+
+        email = (claims.get("email") or "").strip().lower()
+        name = (claims.get("name") or email or "").strip()
+        sub = claims.get("sub")
+        tenant_id = claims.get("tenant_id")
+        if not email or not sub:
+            return fail("Sign-in failed. Please try again.",
+                        "missing email or sub claim")
+
+        user = User.query.filter_by(tracey_user_id=sub).first()
+        if user is None:
+            user = User.query.filter_by(email=email).first()
+            if user is not None:
+                user.tracey_user_id = sub
+                user.tracey_tenant_id = tenant_id
+                db.session.commit()
+
+        if user is None:
+            first, _, last = name.partition(" ")
+            user = User(
+                email=email, name=name,
+                first_name=first, last_name=last,
+                role="employee", is_active_flag=True,
+                tracey_user_id=sub, tracey_tenant_id=tenant_id,
+            )
+            user.set_password(secrets.token_urlsafe(32))
+            db.session.add(user)
+            try:
+                db.session.commit()
+            except IntegrityError:
+                # Race: another concurrent SSO created the row first. Refetch.
+                db.session.rollback()
+                user = User.query.filter_by(email=email).first()
+                if user is None:
+                    return fail("Sign-in failed. Please try again.",
+                                "auto-provision race lost and refetch failed")
+            else:
+                app.logger.info("SSO auto-provisioned new user: %s", email)
+
+        if not user.is_active_flag:
+            return fail("Your account is disabled. Contact your admin.",
+                        f"user {email} is_active_flag=False")
+
+        login_user(user, remember=True)
+        return redirect(url_for("index"))
 
     @app.route("/logout")
     @login_required

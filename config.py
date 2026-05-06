@@ -49,3 +49,8 @@ class Config:
                       or os.environ.get("ANTHROPIC_API_KEY") or "")
     CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-6")
     AI_PROVIDER = os.environ.get("AI_PROVIDER", "")  # "", "claude", or "gemini"
+
+    # Phase 2 SSO bridge: shared HS256 secret with Tracey's lms-web service,
+    # plus the single Tracey tenant (workspace) UUID allowed to SSO in.
+    LMS_SSO_SECRET = os.environ.get("LMS_SSO_SECRET", "")
+    LMS_ALLOWED_TENANT_ID = os.environ.get("LMS_ALLOWED_TENANT_ID", "")

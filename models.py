@@ -135,6 +135,10 @@ class User(UserMixin, db.Model):
     position_id = db.Column(db.Integer,
                             db.ForeignKey("positions.id", ondelete="SET NULL"),
                             nullable=True, index=True)
+    # Tracey SSO link. Populated on first /sso/callback hit; nullable so
+    # Flask-only users (admin-CSV-imported staff who never SSO'd) coexist.
+    tracey_user_id = db.Column(db.String(36), unique=True, nullable=True, index=True)
+    tracey_tenant_id = db.Column(db.String(36), nullable=True, index=True)
 
     assignments = db.relationship("Assignment", backref="user", cascade="all, delete-orphan")
     attempts = db.relationship("Attempt", backref="user", cascade="all, delete-orphan")

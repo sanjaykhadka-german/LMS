@@ -11,7 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "~/components/ui/card";
-import { siteConfig, pricingTiers } from "~/lib/site-config";
+import { pricingTiers } from "~/lib/site-config";
 
 const statusVariant = {
   trialing: "warning",
@@ -42,7 +42,7 @@ export default async function DashboardPage() {
   const planName =
     pricingTiers.find((t) => t.id === tenant.plan)?.name ??
     tenant.plan.charAt(0).toUpperCase() + tenant.plan.slice(1);
-  const flaskHref = `${siteConfig.links.flask}/?from=lms-web`;
+  const flaskHref = "/api/sso/launch";
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
@@ -83,8 +83,8 @@ export default async function DashboardPage() {
           <CardHeader>
             <CardTitle className="text-lg">Training</CardTitle>
             <CardDescription>
-              Open the existing training portal. Phase 2 will sign you in
-              automatically; for now you may need to log in there.
+              Open the training portal. You&rsquo;ll be signed in
+              automatically.
             </CardDescription>
           </CardHeader>
           <CardFooter>
