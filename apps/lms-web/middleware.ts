@@ -1,15 +1,15 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import NextAuth from "next-auth";
+import { authConfig } from "./auth.config";
 
-const isProtectedRoute = createRouteMatcher([
-  "/app(.*)",
-  "/onboarding(.*)",
-  "/api/billing(.*)",
-]);
+// Edge-safe Auth.js instance — uses `authConfig` only (no Credentials
+// provider, no DB adapter). The `authorized` callback in authConfig handles
+// the redirect logic for protected routes.
+export const { auth: middleware } = NextAuth(authConfig);
 
-export default clerkMiddleware(async (auth, req) => {
-  if (isProtectedRoute(req)) {
-    await auth.protect();
-  }
+export default middleware((_req) => {
+  // The `authorized` callback already handled redirects; reaching here means
+  // the request is allowed.
+  return undefined;
 });
 
 export const config = {
