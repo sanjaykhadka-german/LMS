@@ -1,8 +1,9 @@
 "use server";
 
+import { randomBytes } from "node:crypto";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { db, tenants, members } from "@tracey/db";
+import { db, tenants, members, type Tenant } from "@tracey/db";
 import { requireUser, setActiveTenant } from "~/lib/auth/current";
 
 const schema = z.object({
@@ -27,12 +28,26 @@ export async function createTenantAction(
     };
   }
   const { name } = parsed.data;
-  const slug = slugify(name);
 
-  const [created] = await db
-    .insert(tenants)
-    .values({ ownerUserId: user.id, name, slug })
-    .returning();
+  let created: Tenant | undefined;
+  // Slug is unique-indexed (tenants_slug_uq). Two people from the same
+  // company often type variants of the same workspace name; we silently
+  // suffix on collision rather than rejecting their submission. After 3
+  // attempts something is genuinely wrong, so surface the error.
+  const baseSlug = slugify(name);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const slug = attempt === 0 ? baseSlug : `${baseSlug}-${randomBytes(2).toString("hex")}`;
+    try {
+      [created] = await db
+        .insert(tenants)
+        .values({ ownerUserId: user.id, name, slug })
+        .returning();
+      break;
+    } catch (err) {
+      if (isUniqueViolation(err) && attempt < 2) continue;
+      throw err;
+    }
+  }
   if (!created) {
     return { status: "error", message: "Failed to create workspace. Please try again." };
   }
@@ -55,5 +70,14 @@ function slugify(input: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 60);
-  return base || `workspace-${Math.random().toString(36).slice(2, 8)}`;
+  return base || `workspace-${randomBytes(3).toString("hex")}`;
+}
+
+function isUniqueViolation(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code: string }).code === "23505"
+  );
 }

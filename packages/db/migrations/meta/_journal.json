@@ -8,6 +8,13 @@
       "when": 1714780800000,
       "tag": "0000_initial_app_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1778105231756,
+      "tag": "0001_remarkable_harpoon",
+      "breakpoints": true
     }
   ]
 }

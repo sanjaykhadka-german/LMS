@@ -90,6 +90,7 @@ export const tenants = appSchema.table(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    uniqueIndex("tenants_slug_uq").on(t.slug),
     uniqueIndex("tenants_stripe_customer_id_uq").on(t.stripeCustomerId),
     uniqueIndex("tenants_stripe_subscription_id_uq").on(t.stripeSubscriptionId),
     check("tenants_plan_chk", sql`${t.plan} in ('free','starter','pro','enterprise')`),
