@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { redirect } from "next/navigation";
 import { OrganizationSwitcher, UserButton } from "@clerk/nextjs";
 import { currentTenant } from "@tracey/auth";
@@ -13,8 +14,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <header className="sticky top-0 z-40 w-full border-b border-[color:var(--border)] bg-[color:var(--background)]/80 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
           <div className="flex items-center gap-4">
-            <Link href="/app" className="text-sm font-semibold">
-              {siteConfig.name}
+            <Link href="/app" className="flex items-center" aria-label={siteConfig.name}>
+              <Image
+                src="/tracey-logo.png"
+                alt={siteConfig.name}
+                width={1242}
+                height={605}
+                priority
+                className="h-7 w-auto"
+              />
             </Link>
             <OrganizationSwitcher
               afterCreateOrganizationUrl="/app"

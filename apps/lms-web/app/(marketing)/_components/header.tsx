@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { SignedIn, SignedOut } from "@clerk/nextjs";
 import { Button } from "~/components/ui/button";
 import { siteConfig } from "~/lib/site-config";
@@ -7,8 +8,15 @@ export function Header() {
   return (
     <header className="sticky top-0 z-40 w-full border-b border-[color:var(--border)] bg-[color:var(--background)]/80 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
-        <Link href="/" className="flex items-center gap-2 font-semibold">
-          <span className="text-base">{siteConfig.name}</span>
+        <Link href="/" className="flex items-center" aria-label={siteConfig.name}>
+          <Image
+            src="/tracey-logo.png"
+            alt={siteConfig.name}
+            width={1242}
+            height={605}
+            priority
+            className="h-7 w-auto"
+          />
         </Link>
         <nav className="flex items-center gap-2">
           <Link
