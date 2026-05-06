@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { AuthError } from "next-auth";
-import { signIn } from "~/../auth";
+import { signIn } from "~/auth";
 
 const schema = z.object({
   email: z.string().trim().toLowerCase().email("Enter a valid email address"),

@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { signOut } from "~/../auth";
+import { signOut } from "~/auth";
 import { setActiveTenant } from "~/lib/auth/current";
 
 export async function signOutAction() {

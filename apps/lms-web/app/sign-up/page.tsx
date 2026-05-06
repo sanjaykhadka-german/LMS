@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { auth } from "~/../auth";
+import { auth } from "~/auth";
 import { SignUpForm } from "./_form";
 
 export default async function SignUpPage({

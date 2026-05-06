@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { and, desc, eq } from "drizzle-orm";
 import { db, members, tenants, users, type Tenant, type Role } from "@tracey/db";
-import { auth } from "~/../auth";
+import { auth } from "~/auth";
 
 const ACTIVE_TENANT_COOKIE = "tracey.activeTenant";
 
