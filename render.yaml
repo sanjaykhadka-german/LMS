@@ -6,6 +6,8 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app --timeout 180 --workers 2
     envVars:
+      - key: TZ
+        value: Australia/Sydney
       - key: SECRET_KEY
         generateValue: true
       - key: DATABASE_URL
@@ -49,6 +51,8 @@ services:
     healthCheckPath: /api/health
     autoDeploy: true
     envVars:
+      - key: TZ
+        value: Australia/Sydney
       - key: DATABASE_URL
         fromDatabase:
           name: lms-db
@@ -98,6 +102,8 @@ services:
     buildCommand: corepack enable && pnpm install --frozen-lockfile
     startCommand: pnpm --filter lms-web run reconcile:stripe
     envVars:
+      - key: TZ
+        value: Australia/Sydney
       - key: DATABASE_URL
         fromDatabase:
           name: lms-db

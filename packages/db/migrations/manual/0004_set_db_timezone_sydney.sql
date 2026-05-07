@@ -1,0 +1,40 @@
+-- Pin the lms-db default session timezone to Australia/Sydney so:
+--   * NOW() into TIMESTAMP-without-tz columns (legacy public.audit_logs etc.)
+--     writes Sydney wall-clock values, matching the runtime Australia/Sydney
+--     TZ now set on lms-web / lms / lms-stripe-reconcile via render.yaml.
+--   * Direct psql queries display TIMESTAMPTZ columns (app.audit_events) in
+--     Sydney time — storage is still UTC, no data transformation.
+--
+-- TIMESTAMPTZ rows already inserted are unaffected (UTC normalised at write
+-- time, displayed per session). TIMESTAMP-without-tz rows already inserted
+-- under the old UTC default keep their old wall-clock values; only future
+-- inserts get the new behaviour.
+--
+-- Idempotent: ALTER DATABASE … SET TIMEZONE is naturally idempotent.
+--
+-- HOW TO RUN
+-- ----------
+-- Local:
+--   psql "postgres://root:root@localhost:5432/lms" -f \
+--        packages/db/migrations/manual/0004_set_db_timezone_sydney.sql
+--
+-- Render (lms-db):
+--   1) Open Render dashboard → lms-db → Connect → External psql command.
+--   2) Run \l to confirm the database name (Render auto-generates it; the
+--      database is usually NOT literally "lms_db").
+--   3) Edit the line below to use the literal database name, then run:
+--        ALTER DATABASE <real_name> SET TIMEZONE TO 'Australia/Sydney';
+--   4) Verify with:
+--        SHOW timezone;            -- still UTC in this session
+--        \c <real_name>            -- reconnect
+--        SHOW timezone;            -- now Australia/Sydney
+--
+-- Why not just run it as-is on Render? Because ALTER DATABASE requires the
+-- literal name; it doesn't accept current_database() or a parameter binding.
+-- The local copy below assumes the conventional database name "lms".
+
+ALTER DATABASE lms SET TIMEZONE TO 'Australia/Sydney';
+
+-- Verify (run separately after reconnecting):
+--   SHOW timezone;     -- expect: Australia/Sydney
+--   SELECT now();      -- expect: Sydney wall-clock with +10:00 / +11:00 offset
