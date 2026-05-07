@@ -12,7 +12,7 @@ import {
 } from "@tracey/db";
 import { authConfig } from "./auth.config";
 import { verifyPassword } from "./lib/auth/passwords";
-import { tryLegacyAuth } from "./lib/auth/legacy-bridge";
+import { tryLegacyAuth, userHasAnyMembership } from "./lib/auth/legacy-bridge";
 
 const credentialsSchema = z.object({
   email: z.string().trim().toLowerCase().email(),
@@ -44,28 +44,43 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           .where(eq(users.email, email))
           .limit(1);
 
-        // Existing Tracey user — bcrypt fast path.
+        // Existing Tracey user — bcrypt fast path. Only short-circuits when
+        // both the password verifies AND the user has a workspace membership.
+        // If either fails we fall through to the legacy bridge, which can
+        // (a) verify against a Flask werkzeug hash if the bcrypt one is
+        // stale and (b) repair an orphaned app.users row by upserting the
+        // missing app.members entry. See lib/auth/legacy-bridge.ts.
         if (user && user.passwordHash) {
           if (!user.emailVerified) {
-            // Surfacing a typed error is awkward in v5; we throw to render the
-            // sign-in page's "verify your email" CTA via ?error=Verification.
             throw new Error("EmailNotVerified");
           }
-          const ok = await verifyPassword(password, user.passwordHash);
-          if (!ok) return null;
-          return {
-            id: user.id,
-            name: user.name ?? null,
-            email: user.email,
-            image: user.image ?? null,
-          };
+          const bcryptOk = await verifyPassword(password, user.passwordHash);
+          if (bcryptOk) {
+            const hasMembership = await userHasAnyMembership(user.id);
+            if (hasMembership) {
+              return {
+                id: user.id,
+                name: user.name ?? null,
+                email: user.email,
+                image: user.image ?? null,
+              };
+            }
+            // Bcrypt verified but no membership → orphan. Fall through to
+            // the legacy bridge so it can heal the row from public.users
+            // (only works if they typed their Flask password). If they
+            // typed the bcrypt-matching Tracey signup password, the bridge
+            // will reject (werkzeug verify fails) and we return null —
+            // the user must use their Flask password to recover.
+          }
+          // Bcrypt failed → likely they typed the original Flask password
+          // against an orphaned signup row. Fall through to the bridge.
         }
 
-        // Slice 6 — Tracey row missing. Try the legacy bridge: if a Flask
-        // user with this email exists and the password verifies as werkzeug
-        // pbkdf2, mint the Tracey rows transparently and sign them in. After
-        // this first login they'll have a bcrypt password_hash and the fast
-        // path above takes over.
+        // Tracey row missing OR bcrypt failed OR orphan-no-membership.
+        // tryLegacyAuth: if a Flask user with this email exists and the
+        // password verifies as werkzeug (pbkdf2 or scrypt), upsert the
+        // Tracey rows transparently and sign them in. Idempotent — safe to
+        // re-run for accounts already partially provisioned.
         const legacy = await tryLegacyAuth(email, password);
         if (legacy) {
           return {

@@ -1,8 +1,17 @@
 import "server-only";
 import { eq } from "drizzle-orm";
-import { db, lmsUsers, members, users } from "@tracey/db";
+import { db, lmsUsers, members, users, type Role } from "@tracey/db";
 import { hashPassword, verifyWerkzeugHash } from "./passwords";
 import { logAuditEvent } from "~/lib/audit";
+
+// Flask roles: employee | qaqc | admin (free-text on lmsUsers.role).
+// Tracey roles: owner | admin | member (enum on app.members.role).
+// QA/QC has no Tracey equivalent — collapse it into admin so QA/QC users
+// keep author-level access. Schema migration to extend the enum is deferred.
+function mapFlaskRole(flaskRole: string | null | undefined): Role {
+  if (flaskRole === "admin" || flaskRole === "qaqc") return "admin";
+  return "member";
+}
 
 // Slice 6 — transparent migration of legacy Flask users into Tracey on
 // first sign-in. Auth.js's credentials provider calls tryLegacyAuth() when
@@ -16,6 +25,18 @@ export interface BridgedUser {
   email: string;
   name: string | null;
   emailVerified: Date;
+}
+
+// Used by auth.ts to detect orphaned app.users rows (a Tracey signup that
+// was abandoned before workspace creation). Such users would otherwise
+// land on /onboarding every time. Cheap — single indexed query.
+export async function userHasAnyMembership(userId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: members.id })
+    .from(members)
+    .where(eq(members.userId, userId))
+    .limit(1);
+  return Boolean(row);
 }
 
 export async function tryLegacyAuth(
@@ -57,31 +78,32 @@ export async function tryLegacyAuth(
 
     let userRow = inserted[0];
     if (!userRow) {
-      // Lost a race: another sign-in for the same email created the row
-      // first. Refetch — that path is the bcrypt fast-path on its second
-      // hit so we should never actually need to run this branch outside
-      // a true tab-spam scenario.
+      // Lost a race OR repairing an orphan: an app.users row already
+      // exists for this email (either from concurrent sign-in or an
+      // abandoned signup). Refetch and fall through to membership upsert
+      // so we heal accounts that were stuck on /onboarding because they
+      // had a Tracey user but no membership.
       const [existing] = await tx
         .select({ id: users.id, email: users.email, name: users.name })
         .from(users)
         .where(eq(users.email, email))
         .limit(1);
       if (!existing) {
-        // Should not happen given the unique index, but be explicit.
         throw new Error("Legacy bridge: insert returned no row and refetch found nothing");
       }
       userRow = existing;
-    } else {
-      // Only create the membership row when WE created the user — if the
-      // user already existed in Tracey for another tenant, their existing
-      // memberships stand. Cross-workspace collisions are a known edge
-      // case (see plan).
-      await tx.insert(members).values({
+    }
+
+    // Idempotent: only inserts when no membership for this (tenant, user)
+    // pair exists. Existing memberships in OTHER tenants are untouched.
+    await tx
+      .insert(members)
+      .values({
         tenantId: legacy.traceyTenantId!,
         userId: userRow.id,
-        role: "member",
-      });
-    }
+        role: mapFlaskRole(legacy.role),
+      })
+      .onConflictDoNothing({ target: [members.tenantId, members.userId] });
 
     // Always link the Flask row to the Tracey id (idempotent).
     await tx

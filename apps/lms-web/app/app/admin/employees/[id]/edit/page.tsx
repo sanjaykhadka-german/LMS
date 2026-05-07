@@ -17,6 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { updateEmployeeAction } from "../../actions";
+import { ResetPasswordForm } from "./_reset-password-form";
 
 export const metadata = { title: "Edit employee" };
 
@@ -253,6 +254,20 @@ export default async function EditEmployeePage({
               </Button>
             </div>
           </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Password</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-[color:var(--muted-foreground)]">
+            Generates a new temporary password and emails it to {user.email}.
+            The password is also shown to you once so you can share it
+            manually if email delivery fails.
+          </p>
+          <ResetPasswordForm id={user.id} email={user.email} />
         </CardContent>
       </Card>
     </div>

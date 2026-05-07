@@ -7,8 +7,10 @@ import {
   listUserTenants,
 } from "~/lib/auth/current";
 import { siteConfig } from "~/lib/site-config";
+import { getAuthorAccess } from "~/lib/auth/author";
 import { UserMenu } from "./_components/user-menu";
 import { TenantSwitcher } from "./_components/tenant-switcher";
+import { GlobalSearch } from "./_components/global-search";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await currentUser();
@@ -23,6 +25,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     name: m.tenant.name,
     role: m.role,
   }));
+  const authorAccess = await getAuthorAccess();
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -47,6 +50,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               }}
               options={switcherOptions}
             />
+            {authorAccess && <GlobalSearch />}
             <nav className="hidden items-center gap-1 sm:flex">
               <Link
                 href="/app/my/modules"
