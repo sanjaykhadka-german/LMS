@@ -184,6 +184,33 @@ export const auditEvents = appSchema.table(
   ],
 );
 
+// ─── AI Studio sessions ───
+//
+// Per-(user, tenant) ephemeral state for the AI Studio chat: history, uploaded
+// file references, and the latest AI-generated module JSON. Wiped on /reset.
+// Mirrors what Flask kept in the cookie session at session["ai_studio"].
+
+export const aiStudioSessions = appSchema.table(
+  "ai_studio_sessions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    history: jsonb("history").notNull().default(sql`'[]'::jsonb`),
+    files: jsonb("files").notNull().default(sql`'[]'::jsonb`),
+    currentModuleJson: text("current_module_json"),
+    moduleId: integer("module_id"),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [uniqueIndex("ai_studio_sessions_user_tenant_uq").on(t.userId, t.tenantId)],
+);
+
 // ─── Inferred types ───
 
 export type User = typeof users.$inferSelect;
@@ -198,3 +225,5 @@ export type ProcessedStripeEvent = typeof processedStripeEvents.$inferSelect;
 export type AuditEvent = typeof auditEvents.$inferSelect;
 export type NewAuditEvent = typeof auditEvents.$inferInsert;
 export type Role = "owner" | "admin" | "member";
+export type AiStudioSession = typeof aiStudioSessions.$inferSelect;
+export type NewAiStudioSession = typeof aiStudioSessions.$inferInsert;

@@ -1,0 +1,54 @@
+import { NextResponse } from "next/server";
+import { requireAdmin } from "~/lib/auth/admin";
+import {
+  FileTooLargeError,
+  UnsupportedFileError,
+  processUpload,
+} from "~/lib/ai/files";
+import { getStudioSession, saveStudioSession } from "~/lib/ai/sessions";
+
+export const runtime = "nodejs";
+
+export async function POST(req: Request) {
+  let ctx;
+  try {
+    ctx = await requireAdmin();
+  } catch {
+    return new NextResponse("Unauthorized", { status: 401 });
+  }
+  const userId = ctx.traceyUserId;
+  const tenantId = ctx.traceyTenantId;
+
+  const form = await req.formData();
+  const file = form.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
+  }
+
+  let processed;
+  try {
+    processed = await processUpload(file);
+  } catch (err) {
+    if (err instanceof FileTooLargeError) {
+      return NextResponse.json({ error: err.message }, { status: 413 });
+    }
+    if (err instanceof UnsupportedFileError) {
+      return NextResponse.json({ error: err.message }, { status: 415 });
+    }
+    throw err;
+  }
+
+  const state = await getStudioSession(userId, tenantId);
+  await saveStudioSession(userId, tenantId, {
+    files: [...state.files, processed.stored],
+  });
+
+  return NextResponse.json({
+    file: {
+      id: processed.stored.id,
+      kind: processed.stored.kind,
+      name: processed.stored.name,
+      size: processed.stored.size,
+    },
+  });
+}
