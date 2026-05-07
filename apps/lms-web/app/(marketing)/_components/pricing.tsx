@@ -17,6 +17,7 @@ import { cn } from "~/lib/utils";
 import {
   pricingTiers,
   formatPrice,
+  siteConfig,
   type Billing,
 } from "~/lib/site-config";
 
@@ -30,7 +31,7 @@ export function Pricing() {
           Simple pricing, generous trial
         </h2>
         <p className="mt-3 text-[color:var(--muted-foreground)]">
-          Start free for 24 days. Upgrade only when your team is on board.
+          Start free for {siteConfig.trialDays} days. Upgrade only when your team is on board.
         </p>
         <BillingToggle billing={billing} onChange={setBilling} />
       </div>

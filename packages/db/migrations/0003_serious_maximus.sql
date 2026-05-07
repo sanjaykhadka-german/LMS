@@ -1,0 +1,1 @@
+ALTER TABLE "app"."tenants" ALTER COLUMN "trial_ends_at" SET DEFAULT now() + interval '14 days';

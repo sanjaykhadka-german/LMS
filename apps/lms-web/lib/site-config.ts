@@ -21,7 +21,7 @@ export const siteConfig = {
     "Tracey is the multi-tenant staff-training platform for operations teams. " +
     "Quizzes, qualifications, and audit trails — without the LMS bloat.",
   url: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:4000",
-  trialDays: 24,
+  trialDays: 14,
   contact: {
     sales: "sanjay.khadka@germanbutchery.com.au",
   },
