@@ -14,6 +14,11 @@ export const PASS_THRESHOLD: number = (() => {
   return Number.isFinite(n) && n >= 0 && n <= 100 ? n : 80;
 })();
 
+// Single source of truth for trial length. Referenced by siteConfig below
+// (so siteConfig.trialDays stays accurate) AND by the pricing tiers'
+// feature list (which can't reference siteConfig itself without a cycle).
+const TRIAL_DAYS = 14;
+
 export const siteConfig = {
   name: "Tracey",
   tagline: "Staff training that doesn't get in the way of the work.",
@@ -21,7 +26,7 @@ export const siteConfig = {
     "Tracey is the multi-tenant staff-training platform for operations teams. " +
     "Quizzes, qualifications, and audit trails — without the LMS bloat.",
   url: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:4000",
-  trialDays: 14,
+  trialDays: TRIAL_DAYS,
   contact: {
     sales: "sanjay.khadka@germanbutchery.com.au",
   },
@@ -60,7 +65,7 @@ export const pricingTiers: readonly PricingTier[] = [
       "Up to 25 seats",
       "Unlimited modules and quizzes",
       "Email support",
-      "24-day free trial — no card required",
+      `${TRIAL_DAYS}-day free trial — no card required`,
     ],
     prices: {
       monthly: { perSeatPerMonth: 19, priceEnvVar: "STRIPE_PRICE_STARTER_MONTHLY" },

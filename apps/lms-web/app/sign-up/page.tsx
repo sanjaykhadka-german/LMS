@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "~/auth";
+import { siteConfig } from "~/lib/site-config";
 import { SignUpForm } from "./_form";
 
 export default async function SignUpPage({
@@ -23,7 +24,7 @@ export default async function SignUpPage({
           <p className="text-sm text-[color:var(--muted-foreground)]">
             {isInvite
               ? "Set a password to accept your invitation."
-              : "Start your 24-day free trial. No credit card required."}
+              : `Start your ${siteConfig.trialDays}-day free trial. No credit card required.`}
           </p>
         </div>
         <SignUpForm plan={plan} email={email} returnTo={safeReturnTo} />
