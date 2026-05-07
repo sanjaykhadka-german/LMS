@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { and, eq, isNull } from "drizzle-orm";
 import { db, invitations, members, users } from "@tracey/db";
 import { currentUser, setActiveTenant } from "~/lib/auth/current";
+import { logAuditEvent } from "~/lib/audit";
 
 /**
  * Accept an invitation. Server action; expects `token` in form data.
@@ -57,6 +58,16 @@ export async function acceptInvitationAction(formData: FormData): Promise<void> 
 
   // Single-use: drop the invitation row so it can't be replayed.
   await db.delete(invitations).where(eq(invitations.id, inv.id));
+
+  await logAuditEvent({
+    tenantId: inv.tenantId,
+    actorUserId: me.id,
+    actorEmail: me.email,
+    action: "member.joined",
+    targetKind: "member",
+    targetId: me.id,
+    details: { role: inv.role, via: "invitation" },
+  });
 
   await setActiveTenant(inv.tenantId);
   redirect("/app");

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db, tenants, members, type Tenant } from "@tracey/db";
 import { requireUser, setActiveTenant } from "~/lib/auth/current";
+import { logAuditEvent } from "~/lib/audit";
 
 const schema = z.object({
   name: z.string().trim().min(1, "Workspace name is required").max(100),
@@ -56,6 +57,16 @@ export async function createTenantAction(
     tenantId: created.id,
     userId: user.id,
     role: "owner",
+  });
+
+  await logAuditEvent({
+    tenantId: created.id,
+    actorUserId: user.id,
+    actorEmail: user.email,
+    action: "tenant.created",
+    targetKind: "tenant",
+    targetId: created.id,
+    details: { name: created.name, slug: created.slug },
   });
 
   await setActiveTenant(created.id);

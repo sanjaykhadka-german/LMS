@@ -8,6 +8,7 @@ import {
   type Tenant,
 } from "@tracey/db";
 import { planFromPrice, statusFromStripe } from "./plan";
+import { logAuditEvent } from "~/lib/audit";
 
 export interface HandleResult {
   status: "processed" | "duplicate" | "ignored" | "missing_tenant";
@@ -50,6 +51,13 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<HandleResu
           updatedAt: new Date(),
         })
         .where(eq(tenants.id, tenantId));
+      await logAuditEvent({
+        tenantId,
+        action: "subscription.changed",
+        targetKind: "tenant",
+        targetId: tenantId,
+        details: { stripe_event: event.type, status: "active" },
+      });
       return { status: "processed", tenantId, type: event.type };
     }
 
@@ -75,6 +83,18 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<HandleResu
         .returning({ id: tenants.id });
       const updated = result[0];
       if (!updated) return { status: "missing_tenant", type: event.type };
+      await logAuditEvent({
+        tenantId: updated.id,
+        action: "subscription.changed",
+        targetKind: "tenant",
+        targetId: updated.id,
+        details: {
+          stripe_event: event.type,
+          plan,
+          status: statusFromStripe(sub.status),
+          seats,
+        },
+      });
       return { status: "processed", tenantId: updated.id, type: event.type };
     }
 
@@ -82,10 +102,21 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<HandleResu
       const sub = event.data.object as Stripe.Subscription;
       const customerId = typeof sub.customer === "string" ? sub.customer : null;
       if (!customerId) return { status: "missing_tenant", type: event.type };
-      await db
+      const result = await db
         .update(tenants)
         .set({ status: "canceled", updatedAt: new Date() })
-        .where(eq(tenants.stripeCustomerId, customerId));
+        .where(eq(tenants.stripeCustomerId, customerId))
+        .returning({ id: tenants.id });
+      const updated = result[0];
+      if (updated) {
+        await logAuditEvent({
+          tenantId: updated.id,
+          action: "subscription.changed",
+          targetKind: "tenant",
+          targetId: updated.id,
+          details: { stripe_event: event.type, status: "canceled" },
+        });
+      }
       return { status: "processed", type: event.type };
     }
 
@@ -93,10 +124,21 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<HandleResu
       const invoice = event.data.object as Stripe.Invoice;
       const customerId = typeof invoice.customer === "string" ? invoice.customer : null;
       if (!customerId) return { status: "missing_tenant", type: event.type };
-      await db
+      const result = await db
         .update(tenants)
         .set({ status: "active", updatedAt: new Date() })
-        .where(eq(tenants.stripeCustomerId, customerId));
+        .where(eq(tenants.stripeCustomerId, customerId))
+        .returning({ id: tenants.id });
+      const updated = result[0];
+      if (updated) {
+        await logAuditEvent({
+          tenantId: updated.id,
+          action: "subscription.changed",
+          targetKind: "tenant",
+          targetId: updated.id,
+          details: { stripe_event: event.type, status: "active" },
+        });
+      }
       return { status: "processed", type: event.type };
     }
 
@@ -104,10 +146,21 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<HandleResu
       const invoice = event.data.object as Stripe.Invoice;
       const customerId = typeof invoice.customer === "string" ? invoice.customer : null;
       if (!customerId) return { status: "missing_tenant", type: event.type };
-      await db
+      const result = await db
         .update(tenants)
         .set({ status: "past_due", updatedAt: new Date() })
-        .where(eq(tenants.stripeCustomerId, customerId));
+        .where(eq(tenants.stripeCustomerId, customerId))
+        .returning({ id: tenants.id });
+      const updated = result[0];
+      if (updated) {
+        await logAuditEvent({
+          tenantId: updated.id,
+          action: "subscription.changed",
+          targetKind: "tenant",
+          targetId: updated.id,
+          details: { stripe_event: event.type, status: "past_due" },
+        });
+      }
       return { status: "processed", type: event.type };
     }
 

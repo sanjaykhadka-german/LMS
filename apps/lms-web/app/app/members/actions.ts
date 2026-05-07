@@ -7,6 +7,7 @@ import { db, invitations, members, users } from "@tracey/db";
 import { requireUser, requireTenant } from "~/lib/auth/current";
 import { generateToken, tokenExpiry } from "~/lib/auth/tokens";
 import { sendInvitationEmail } from "~/lib/auth/email";
+import { logAuditEvent } from "~/lib/audit";
 
 const inviteSchema = z.object({
   email: z.string().trim().toLowerCase().email("Enter a valid email address"),
@@ -66,14 +67,17 @@ export async function createInvitationAction(
   }
 
   const token = generateToken();
-  await db.insert(invitations).values({
-    tenantId: tenant.id,
-    email,
-    role,
-    token,
-    expiresAt: tokenExpiry(24 * 7), // 7 days
-    invitedByUserId: user.id,
-  });
+  const [invRow] = await db
+    .insert(invitations)
+    .values({
+      tenantId: tenant.id,
+      email,
+      role,
+      token,
+      expiresAt: tokenExpiry(24 * 7), // 7 days
+      invitedByUserId: user.id,
+    })
+    .returning({ id: invitations.id });
 
   try {
     await sendInvitationEmail({
@@ -92,6 +96,16 @@ export async function createInvitationAction(
     };
   }
 
+  await logAuditEvent({
+    tenantId: tenant.id,
+    actorUserId: user.id,
+    actorEmail: user.email,
+    action: "invitation.created",
+    targetKind: "invitation",
+    targetId: invRow?.id,
+    details: { email, role },
+  });
+
   revalidatePath("/app/members");
   return { status: "ok", message: `Invitation sent to ${email}.` };
 }
@@ -101,6 +115,7 @@ const revokeSchema = z.object({
 });
 
 export async function revokeInvitationAction(formData: FormData): Promise<void> {
+  const user = await requireUser();
   const { tenant, role } = await requireTenant();
   if (role !== "owner" && role !== "admin") {
     throw new Error("Forbidden");
@@ -111,6 +126,17 @@ export async function revokeInvitationAction(formData: FormData): Promise<void> 
   if (!parsed.success) {
     throw new Error("Invalid invitation id");
   }
+  // Capture invite email for the audit log before we delete.
+  const [target] = await db
+    .select({ email: invitations.email, role: invitations.role })
+    .from(invitations)
+    .where(
+      and(
+        eq(invitations.id, parsed.data.invitationId),
+        eq(invitations.tenantId, tenant.id),
+      ),
+    )
+    .limit(1);
   // Scope by tenant_id so an admin in tenant A can't revoke tenant B's invite.
   await db
     .delete(invitations)
@@ -120,5 +146,16 @@ export async function revokeInvitationAction(formData: FormData): Promise<void> 
         eq(invitations.tenantId, tenant.id),
       ),
     );
+  if (target) {
+    await logAuditEvent({
+      tenantId: tenant.id,
+      actorUserId: user.id,
+      actorEmail: user.email,
+      action: "invitation.revoked",
+      targetKind: "invitation",
+      targetId: parsed.data.invitationId,
+      details: { email: target.email, role: target.role },
+    });
+  }
   revalidatePath("/app/members");
 }

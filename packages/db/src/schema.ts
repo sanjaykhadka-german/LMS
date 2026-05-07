@@ -1,7 +1,9 @@
 import { sql } from "drizzle-orm";
 import {
   check,
+  index,
   integer,
+  jsonb,
   pgSchema,
   primaryKey,
   text,
@@ -152,6 +154,36 @@ export const processedStripeEvents = appSchema.table("processed_stripe_events", 
   processedAt: timestamp("processed_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// ─── Audit log ───
+//
+// Append-only record of sensitive events: tenant.created, invitation.created,
+// invitation.revoked, member.joined, subscription.changed. Surfaced in the
+// platform-admin UI; never directly mutated outside logAuditEvent().
+//
+// tenantId / actorUserId are nullable + ON DELETE SET NULL so removing a
+// tenant or user doesn't cascade-destroy their audit history. actorEmail is
+// denormalized for the same reason — the row stays meaningful after the user
+// row is gone.
+
+export const auditEvents = appSchema.table(
+  "audit_events",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "set null" }),
+    actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+    actorEmail: text("actor_email"),
+    action: text("action").notNull(),
+    targetKind: text("target_kind"),
+    targetId: text("target_id"),
+    details: jsonb("details"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("audit_events_tenant_created_idx").on(t.tenantId, t.createdAt),
+    index("audit_events_action_idx").on(t.action),
+  ],
+);
+
 // ─── Inferred types ───
 
 export type User = typeof users.$inferSelect;
@@ -163,4 +195,6 @@ export type NewMember = typeof members.$inferInsert;
 export type Invitation = typeof invitations.$inferSelect;
 export type NewInvitation = typeof invitations.$inferInsert;
 export type ProcessedStripeEvent = typeof processedStripeEvents.$inferSelect;
+export type AuditEvent = typeof auditEvents.$inferSelect;
+export type NewAuditEvent = typeof auditEvents.$inferInsert;
 export type Role = "owner" | "admin" | "member";
