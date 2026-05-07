@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { asc } from "drizzle-orm";
 import { db, lmsDepartments } from "@tracey/db";
+import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { NameCrudForm } from "../_components/NameCrudForm";
 import { DeleteRowForm } from "../_components/DeleteRowForm";
@@ -12,12 +14,17 @@ export default async function DepartmentsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Departments</h1>
-        <p className="text-sm text-[color:var(--muted-foreground)]">
-          The teams staff belong to. Used to filter assignments and (next slice)
-          drive auto-assigned modules.
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Departments</h1>
+          <p className="text-sm text-[color:var(--muted-foreground)]">
+            The teams staff belong to. Pick which modules each department
+            auto-assigns to new staff via the policies grid.
+          </p>
+        </div>
+        <Button asChild variant="outline">
+          <Link href="/app/admin/departments/policies">Module policies →</Link>
+        </Button>
       </div>
 
       <Card>

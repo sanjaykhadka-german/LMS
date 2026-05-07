@@ -16,6 +16,8 @@ import {
 import { requireAdmin } from "~/lib/auth/admin";
 import { logAuditEvent } from "~/lib/audit";
 import { sendInviteEmail, sendPasswordResetEmail } from "~/lib/lms/notify-admin";
+import { deleteStoredPhoto, PhotoUploadError, saveUserPhoto } from "~/lib/lms/photos";
+import { autoAssignForDepartment } from "~/lib/lms/admin";
 import type { FormState } from "../_components/NameCrudForm";
 
 const VALID_ROLES = ["admin", "qaqc", "employee"] as const;
@@ -165,6 +167,11 @@ export async function createEmployeeAction(_prev: FormState, formData: FormData)
     details: { email: data.email, role },
   });
 
+  const newId = row?.id;
+  const autoAssigned = newId
+    ? await autoAssignForDepartment({ userId: newId, departmentId: data.departmentId })
+    : 0;
+
   const emailed = await sendInviteEmail({
     to: data.email,
     name: fullName,
@@ -172,10 +179,14 @@ export async function createEmployeeAction(_prev: FormState, formData: FormData)
   });
 
   revalidatePath("/app/admin/employees");
-  const suffix = emailed
-    ? `Invite emailed.`
-    : `Email not sent — share this temp password manually: ${tempPw}`;
-  return { status: "ok", message: `${fullName} added. ${suffix}` };
+  const parts = [
+    `${fullName} added.`,
+    emailed ? "Invite emailed." : `Email not sent — temp password: ${tempPw}`,
+  ];
+  if (autoAssigned > 0) {
+    parts.push(`${autoAssigned} module${autoAssigned === 1 ? "" : "s"} auto-assigned from department policy.`);
+  }
+  return { status: "ok", message: parts.join(" ") };
 }
 
 export async function toggleEmployeeActiveAction(formData: FormData): Promise<void> {
@@ -352,6 +363,30 @@ export async function updateEmployeeAction(formData: FormData): Promise<void> {
     .filter((s) => /^\d+$/.test(s))
     .map((s) => parseInt(s, 10));
 
+  // Photo handling. Three branches: new file uploaded → save + replace;
+  // remove_photo checkbox checked → null + delete previous; otherwise leave
+  // the column alone.
+  const photoEntry = formData.get("photo");
+  const removePhoto = formData.get("remove_photo") === "1";
+  let nextPhotoFilename: string | null | undefined = undefined;
+  if (photoEntry instanceof File && photoEntry.size > 0) {
+    try {
+      nextPhotoFilename = await saveUserPhoto({
+        file: photoEntry,
+        uploadedByLmsUserId: ctx.lmsUser.id,
+        previousFilename: target.photoFilename,
+      });
+    } catch (err) {
+      if (err instanceof PhotoUploadError) {
+        redirect(`/app/admin/employees/${data.id}/edit?error=photo&msg=${encodeURIComponent(err.message)}`);
+      }
+      throw err;
+    }
+  } else if (removePhoto && target.photoFilename) {
+    nextPhotoFilename = null;
+    await deleteStoredPhoto(target.photoFilename);
+  }
+
   await db.transaction(async (tx) => {
     await tx
       .update(lmsUsers)
@@ -366,6 +401,7 @@ export async function updateEmployeeAction(formData: FormData): Promise<void> {
         terminationDate: data.terminationDate ?? null,
         jobTitle: data.jobTitle ?? "",
         positionId: data.positionId,
+        ...(nextPhotoFilename !== undefined ? { photoFilename: nextPhotoFilename } : {}),
       })
       .where(eq(lmsUsers.id, data.id));
 
@@ -394,6 +430,13 @@ export async function updateEmployeeAction(formData: FormData): Promise<void> {
     targetId: String(data.id),
     details: { email: target.email },
   });
+
+  // If the user moved to a different department, auto-assign any new
+  // department-policy modules. Same condition Flask uses (app.py:2924).
+  if (target.departmentId !== data.departmentId) {
+    await autoAssignForDepartment({ userId: data.id, departmentId: data.departmentId });
+  }
+
   revalidatePath("/app/admin/employees");
   redirect("/app/admin/employees");
 }

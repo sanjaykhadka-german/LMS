@@ -35,12 +35,17 @@ export default async function PositionsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Positions</h1>
-        <p className="text-sm text-[color:var(--muted-foreground)]">
-          The roles that make up your org chart. Hierarchy is between
-          positions, not people — when staff change, the chart stays.
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Positions</h1>
+          <p className="text-sm text-[color:var(--muted-foreground)]">
+            The roles that make up your org chart. Hierarchy is between
+            positions, not people — when staff change, the chart stays.
+          </p>
+        </div>
+        <Button asChild variant="outline">
+          <Link href="/app/admin/positions/chart">View org chart →</Link>
+        </Button>
       </div>
 
       <Card>

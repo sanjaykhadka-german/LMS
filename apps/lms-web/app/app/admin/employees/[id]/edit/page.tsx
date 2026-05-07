@@ -23,7 +23,7 @@ export default async function EditEmployeePage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ error?: string; reset?: string; pw?: string; emailed?: string }>;
+  searchParams: Promise<{ error?: string; msg?: string; reset?: string; pw?: string; emailed?: string }>;
 }) {
   const { id } = await params;
   const userId = parseInt(id, 10);
@@ -69,13 +69,22 @@ export default async function EditEmployeePage({
           Some required fields are missing.
         </div>
       )}
+      {sp.error === "photo" && (
+        <div className="rounded-md border border-[color:var(--destructive)] bg-[color:var(--destructive)]/5 px-4 py-2 text-sm text-[color:var(--destructive)]">
+          Photo not saved: {sp.msg ?? "unknown error"}
+        </div>
+      )}
 
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Edit {user.name}</CardTitle>
         </CardHeader>
         <CardContent>
-          <form action={updateEmployeeAction} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <form
+            action={updateEmployeeAction}
+            encType="multipart/form-data"
+            className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
+          >
             <input type="hidden" name="id" value={user.id} />
             <FieldText label="First name" name="first_name" defaultValue={user.firstName ?? ""} required />
             <FieldText label="Last name" name="last_name" defaultValue={user.lastName ?? ""} required />
@@ -147,6 +156,40 @@ export default async function EditEmployeePage({
               type="date"
               defaultValue={user.terminationDate ?? ""}
             />
+
+            <div className="sm:col-span-2 lg:col-span-3 space-y-1.5">
+              <Label>Profile photo</Label>
+              <div className="flex flex-wrap items-start gap-4">
+                {user.photoFilename ? (
+                  <img
+                    src={`/uploads/${encodeURIComponent(user.photoFilename)}`}
+                    alt={`${user.name} photo`}
+                    className="h-24 w-24 rounded-md border border-[color:var(--border)] object-cover"
+                  />
+                ) : (
+                  <div className="flex h-24 w-24 items-center justify-center rounded-md border border-dashed border-[color:var(--border)] text-xs text-[color:var(--muted-foreground)]">
+                    No photo
+                  </div>
+                )}
+                <div className="flex-1 space-y-2">
+                  <Input
+                    id="photo"
+                    name="photo"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                  />
+                  <p className="text-xs text-[color:var(--muted-foreground)]">
+                    JPEG/PNG/WebP/GIF up to 8 MB. Resized + re-encoded server-side.
+                  </p>
+                  {user.photoFilename && (
+                    <label className="flex items-center gap-2 text-xs">
+                      <input type="checkbox" name="remove_photo" value="1" />
+                      Remove the current photo on save
+                    </label>
+                  )}
+                </div>
+              </div>
+            </div>
 
             <div className="sm:col-span-2 lg:col-span-3 space-y-1.5">
               <Label>Machine competencies</Label>

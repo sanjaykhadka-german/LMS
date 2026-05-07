@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Upload } from "lucide-react";
 import { asc, desc, eq } from "drizzle-orm";
 import {
   db,
@@ -8,6 +9,7 @@ import {
   lmsUsers,
 } from "@tracey/db";
 import { Badge } from "~/components/ui/badge";
+import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { NewEmployeeForm } from "./_new-form";
 import { RowActions } from "./_row-actions";
@@ -51,11 +53,18 @@ export default async function EmployeesPage({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Employees</h1>
-        <p className="text-sm text-[color:var(--muted-foreground)]">
-          {employees.length} total · {activeCount} active · {disabledCount} disabled
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Employees</h1>
+          <p className="text-sm text-[color:var(--muted-foreground)]">
+            {employees.length} total · {activeCount} active · {disabledCount} disabled
+          </p>
+        </div>
+        <Button asChild variant="outline">
+          <Link href="/app/admin/employees/bulk">
+            <Upload className="mr-1 h-4 w-4" /> Bulk upload
+          </Link>
+        </Button>
       </div>
 
       {error && <ErrorBanner code={error} />}
@@ -98,7 +107,7 @@ export default async function EmployeesPage({
                   <tr key={e.id}>
                     <td className="px-6 py-3 align-middle">
                       <div className="font-medium">
-                        <Link href={`/app/admin/employees/${e.id}/edit`} className="hover:underline">
+                        <Link href={`/app/admin/employees/${e.id}`} className="hover:underline">
                           {e.name}
                         </Link>
                       </div>

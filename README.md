@@ -232,10 +232,13 @@ Phase 3 (shipped) added the platform-admin surface and an append-only
 slice; **Slice 1 (shipped)** moves the learner portal (`/my/modules` and
 its quiz/results sub-pages) off Flask. **Slice 2 (shipped)** ports the
 admin foundation: `/app/admin/*` with sidebar nav, plus CRUD for
-employees (incl. role/toggle/password reset), departments, employers,
-machines (with module M2M), and positions (with parent + dept). Bulk CSV
-upload, the org-chart visual, department→module policies, and the
-modules/AI-Studio admin land in subsequent Phase 4 slices. Phase 5 retires Flask. Each phase/slice is its own session
+employees, departments, employers, machines (with module M2M), and
+positions (with parent + dept). **Slice 2b (shipped)** rounds out the
+admin: profile-photo upload (sharp + BYTEA storage), CSV bulk-upload +
+template, org-chart visualization, department→module policies (with
+auto-assign on department change), and the read-only employee detail
+page with full training history + machine competencies. The
+modules/AI-Studio admin still ports in subsequent Phase 4 slices. Phase 5 retires Flask. Each phase/slice is its own session
 and its own sequence of PRs.
 
 `LMS_PASS_THRESHOLD` (default `80`) controls the quiz pass mark. Set the

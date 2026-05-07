@@ -575,6 +575,46 @@ export async function getUploadForLearner(
   return file[0] ?? null;
 }
 
+/** Admin viewer: any file referenced by any module OR by any user
+ *  (photo_filename) in the tenant. Photos in particular need this — they
+ *  aren't referenced by any module. */
+export async function getUploadForAdmin(
+  filename: string,
+  traceyTenantId: string,
+): Promise<typeof lmsUploadedFiles.$inferSelect | null> {
+  // user.photo_filename for any user in the tenant?
+  const photoHit = await db
+    .select({ id: lmsUsers.id })
+    .from(lmsUsers)
+    .where(
+      and(
+        eq(lmsUsers.photoFilename, filename),
+        eq(lmsUsers.traceyTenantId, traceyTenantId),
+      ),
+    )
+    .limit(1);
+  if (!photoHit[0]) {
+    // Fall back to checking module-referenced files for any module the
+    // tenant has staff assigned to. Cheap to do via assignments → users.
+    const moduleIds = (
+      await db
+        .selectDistinct({ moduleId: lmsAssignments.moduleId })
+        .from(lmsAssignments)
+        .innerJoin(lmsUsers, eq(lmsUsers.id, lmsAssignments.userId))
+        .where(eq(lmsUsers.traceyTenantId, traceyTenantId))
+    ).map((r) => r.moduleId);
+    if (moduleIds.length === 0) return null;
+    const referenced = await isFileReferencedByModules(filename, moduleIds);
+    if (!referenced) return null;
+  }
+  const file = await db
+    .select()
+    .from(lmsUploadedFiles)
+    .where(eq(lmsUploadedFiles.filename, filename))
+    .limit(1);
+  return file[0] ?? null;
+}
+
 async function isFileReferencedByModules(
   filename: string,
   moduleIds: number[],
