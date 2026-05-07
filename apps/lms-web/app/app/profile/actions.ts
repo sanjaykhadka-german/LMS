@@ -2,7 +2,6 @@
 
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
-import { z } from "zod";
 import { db, lmsUsers, users } from "@tracey/db";
 import { requireLearner } from "~/lib/lms/learner";
 import { logAuditEvent } from "~/lib/audit";
@@ -12,18 +11,13 @@ import {
   saveUserPhoto,
 } from "~/lib/lms/photos";
 import { hashPassword, verifyPassword } from "~/lib/auth/passwords";
+import { profileSchema, passwordSchema } from "./schemas";
 
 export type ProfileFormState = {
   status: "idle" | "ok" | "error";
   message?: string;
   fieldErrors?: Record<string, string[] | undefined>;
 };
-
-const profileSchema = z.object({
-  firstName: z.string().trim().min(1, "First name is required").max(100),
-  lastName: z.string().trim().min(1, "Last name is required").max(100),
-  phone: z.string().trim().max(32).optional().default(""),
-});
 
 export async function updateProfileAction(
   _prev: ProfileFormState,
@@ -116,17 +110,6 @@ export async function updateProfileAction(
   revalidatePath("/app", "layout");
   return { status: "ok", message: "Saved." };
 }
-
-const passwordSchema = z
-  .object({
-    current: z.string().min(1, "Enter your current password"),
-    next: z.string().min(8, "New password must be at least 8 characters"),
-    confirm: z.string().min(8),
-  })
-  .refine((d) => d.next === d.confirm, {
-    path: ["confirm"],
-    message: "Passwords don't match",
-  });
 
 export async function changePasswordAction(
   _prev: ProfileFormState,

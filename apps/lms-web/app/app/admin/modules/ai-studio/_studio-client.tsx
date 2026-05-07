@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Paperclip } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import { parseJsonResponse } from "~/lib/parse-json-response";
 
 interface FileMeta {
   id: string;
@@ -21,34 +22,6 @@ const ACCEPT =
   "application/pdf," +
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document," +
   "image/png,image/jpeg,image/gif,image/webp";
-
-async function parseJsonResponse<T>(
-  res: Response,
-  fallbackMessage: string,
-): Promise<T> {
-  const text = await res.text();
-  let parsed: unknown = null;
-  if (text) {
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      // Body wasn't JSON — error pages, plain-text 401s, etc.
-    }
-  }
-  if (!res.ok) {
-    const fromBody =
-      parsed &&
-      typeof parsed === "object" &&
-      "error" in (parsed as Record<string, unknown>)
-        ? String((parsed as { error: unknown }).error)
-        : null;
-    const fromText = text && !parsed ? text.slice(0, 200) : null;
-    throw new Error(
-      fromBody ?? fromText ?? `${fallbackMessage} (HTTP ${res.status})`,
-    );
-  }
-  return parsed as T;
-}
 
 const RE_PROMPTS: Array<{ label: string; prompt: string }> = [
   {

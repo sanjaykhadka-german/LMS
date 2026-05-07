@@ -11,6 +11,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:install": "playwright install chromium",
     "reconcile:stripe": "tsx scripts/reconcile-stripe.ts",
     "icons:pwa": "node scripts/generate-pwa-icons.mjs"
   },
@@ -47,6 +49,7 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.48.0",
     "@tailwindcss/postcss": "^4.0.0",
     "@tracey/config": "workspace:*",
     "@types/bcryptjs": "^2.4.6",
