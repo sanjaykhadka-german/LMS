@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type Anthropic from "@anthropic-ai/sdk";
 import { requireAdmin } from "~/lib/auth/admin";
-import { sendMessage } from "~/lib/ai/claude";
+import { getClaudeApiKey, sendMessage } from "~/lib/ai/claude";
 import { getStudioSession, saveStudioSession } from "~/lib/ai/sessions";
 
 export const runtime = "nodejs";
@@ -17,9 +17,12 @@ export async function POST(req: Request) {
   const userId = ctx.traceyUserId;
   const tenantId = ctx.traceyTenantId;
 
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!getClaudeApiKey()) {
     return NextResponse.json(
-      { error: "AI Studio is not configured. Set ANTHROPIC_API_KEY on the server." },
+      {
+        error:
+          "AI Studio is not configured. Set ANTHROPIC_API_KEY or CLAUDE_API_KEY on the server.",
+      },
       { status: 503 },
     );
   }

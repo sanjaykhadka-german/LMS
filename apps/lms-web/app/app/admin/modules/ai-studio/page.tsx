@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Sparkles } from "lucide-react";
 import { requireAdmin } from "~/lib/auth/admin";
+import { getClaudeApiKey } from "~/lib/ai/claude";
 import { StudioClient } from "./_studio-client";
 
 export const metadata = { title: "AI Studio" };
@@ -12,7 +13,7 @@ export default async function AiStudioPage({
 }) {
   await requireAdmin();
   const sp = await searchParams;
-  const hasProvider = Boolean(process.env.ANTHROPIC_API_KEY);
+  const hasProvider = Boolean(getClaudeApiKey());
   const moduleIdParam = sp.module_id ? parseInt(sp.module_id, 10) : NaN;
   const initialModuleId = Number.isFinite(moduleIdParam) ? moduleIdParam : null;
 

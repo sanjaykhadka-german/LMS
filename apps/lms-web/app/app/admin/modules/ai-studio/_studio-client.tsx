@@ -147,8 +147,9 @@ export function StudioClient({
         <CardContent className="space-y-3 text-sm">
           <p>
             AI Studio is shipped without a default provider so it doesn’t cost
-            anything until you opt in. Set <code>ANTHROPIC_API_KEY</code> on the{" "}
-            <code>lms-web</code> service in Render and redeploy.
+            anything until you opt in. Set <code>ANTHROPIC_API_KEY</code> or{" "}
+            <code>CLAUDE_API_KEY</code> on the <code>lms-web</code> service in
+            Render and redeploy.
           </p>
           <p className="text-[color:var(--muted-foreground)]">
             Optional: <code>ANTHROPIC_MODEL</code> selects the Claude model

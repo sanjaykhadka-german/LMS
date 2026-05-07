@@ -9,11 +9,20 @@ import Anthropic from "@anthropic-ai/sdk";
 // most capable model, or any other supported ID.
 const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-6";
 
+// Accept either env var name. Flask's claude_service.py reads CLAUDE_API_KEY,
+// while Anthropic's SDK convention is ANTHROPIC_API_KEY — support both so the
+// AI Studio works with whichever is already configured.
+export function getClaudeApiKey(): string | undefined {
+  return process.env.ANTHROPIC_API_KEY ?? process.env.CLAUDE_API_KEY;
+}
+
 let _client: Anthropic | null = null;
 export function anthropic(): Anthropic {
   if (_client) return _client;
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set");
+  const apiKey = getClaudeApiKey();
+  if (!apiKey) {
+    throw new Error("ANTHROPIC_API_KEY or CLAUDE_API_KEY must be set");
+  }
   _client = new Anthropic({ apiKey });
   return _client;
 }
