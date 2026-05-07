@@ -13,6 +13,7 @@ import {
   date,
   integer,
   pgTable,
+  primaryKey,
   text,
   timestamp,
 } from "drizzle-orm/pg-core";
@@ -133,6 +134,56 @@ export const lmsAttempts = pgTable("attempts", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const lmsDepartments = pgTable("departments", {
+  id: integer("id").generatedByDefaultAsIdentity().primaryKey(),
+  name: text("name").notNull(),
+});
+
+export const lmsEmployers = pgTable("employers", {
+  id: integer("id").generatedByDefaultAsIdentity().primaryKey(),
+  name: text("name").notNull(),
+});
+
+export const lmsMachines = pgTable("machines", {
+  id: integer("id").generatedByDefaultAsIdentity().primaryKey(),
+  name: text("name").notNull(),
+  departmentId: integer("department_id"),
+});
+
+export const lmsPositions = pgTable("positions", {
+  id: integer("id").generatedByDefaultAsIdentity().primaryKey(),
+  name: text("name").notNull(),
+  parentId: integer("parent_id"),
+  departmentId: integer("department_id"),
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const lmsUserMachines = pgTable(
+  "user_machines",
+  {
+    userId: integer("user_id").notNull(),
+    machineId: integer("machine_id").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.machineId] })],
+);
+
+export const lmsMachineModules = pgTable(
+  "machine_modules",
+  {
+    machineId: integer("machine_id").notNull(),
+    moduleId: integer("module_id").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.machineId, t.moduleId] })],
+);
+
+export const lmsDepartmentModulePolicies = pgTable("department_module_policies", {
+  id: integer("id").generatedByDefaultAsIdentity().primaryKey(),
+  departmentId: integer("department_id").notNull(),
+  moduleId: integer("module_id").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const lmsUploadedFiles = pgTable("uploaded_files", {
   filename: text("filename").primaryKey(),
   mimeType: text("mime_type").notNull().default("application/octet-stream"),
@@ -144,6 +195,10 @@ export const lmsUploadedFiles = pgTable("uploaded_files", {
 
 export type LmsUser = typeof lmsUsers.$inferSelect;
 export type NewLmsUser = typeof lmsUsers.$inferInsert;
+export type LmsDepartment = typeof lmsDepartments.$inferSelect;
+export type LmsEmployer = typeof lmsEmployers.$inferSelect;
+export type LmsMachine = typeof lmsMachines.$inferSelect;
+export type LmsPosition = typeof lmsPositions.$inferSelect;
 export type LmsModule = typeof lmsModules.$inferSelect;
 export type LmsContentItem = typeof lmsContentItems.$inferSelect;
 export type LmsContentItemMedia = typeof lmsContentItemMedia.$inferSelect;

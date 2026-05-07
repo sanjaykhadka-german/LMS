@@ -49,11 +49,25 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             />
             <nav className="hidden items-center gap-1 sm:flex">
               <Link
+                href="/app/my/modules"
+                className="rounded-md px-3 py-1.5 text-sm font-medium text-[color:var(--muted-foreground)] transition-colors hover:bg-[color:var(--secondary)] hover:text-[color:var(--foreground)]"
+              >
+                Training
+              </Link>
+              <Link
                 href="/app/members"
                 className="rounded-md px-3 py-1.5 text-sm font-medium text-[color:var(--muted-foreground)] transition-colors hover:bg-[color:var(--secondary)] hover:text-[color:var(--foreground)]"
               >
                 Team
               </Link>
+              {(membership.role === "owner" || membership.role === "admin") && (
+                <Link
+                  href="/app/admin"
+                  className="rounded-md px-3 py-1.5 text-sm font-medium text-[color:var(--muted-foreground)] transition-colors hover:bg-[color:var(--secondary)] hover:text-[color:var(--foreground)]"
+                >
+                  Admin
+                </Link>
+              )}
             </nav>
           </div>
           <UserMenu name={user.name} email={user.email} />

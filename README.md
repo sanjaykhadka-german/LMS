@@ -230,8 +230,12 @@ Phase 2 (shipped) wires Single Sign-On from `lms-web` to the Flask service.
 Phase 3 (shipped) added the platform-admin surface and an append-only
 `audit_events` log. Phase 4 ports each Flask route to Next.js, slice by
 slice; **Slice 1 (shipped)** moves the learner portal (`/my/modules` and
-its quiz/results sub-pages) off Flask. Subsequent Phase 4 slices port the
-admin surfaces. Phase 5 retires Flask. Each phase/slice is its own session
+its quiz/results sub-pages) off Flask. **Slice 2 (shipped)** ports the
+admin foundation: `/app/admin/*` with sidebar nav, plus CRUD for
+employees (incl. role/toggle/password reset), departments, employers,
+machines (with module M2M), and positions (with parent + dept). Bulk CSV
+upload, the org-chart visual, department→module policies, and the
+modules/AI-Studio admin land in subsequent Phase 4 slices. Phase 5 retires Flask. Each phase/slice is its own session
 and its own sequence of PRs.
 
 `LMS_PASS_THRESHOLD` (default `80`) controls the quiz pass mark. Set the
