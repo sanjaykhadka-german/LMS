@@ -85,6 +85,10 @@ services:
         sync: false
       - key: LMS_SSO_SECRET
         generateValue: true
+      # Comma-separated emails. Members of this list see the /platform
+      # super-admin surface. Keep tightly scoped to actual operators.
+      - key: PLATFORM_ADMIN_EMAILS
+        sync: false
 
   - type: cron
     name: lms-stripe-reconcile
