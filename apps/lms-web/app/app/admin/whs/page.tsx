@@ -7,6 +7,7 @@ import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { DeleteRowForm } from "../_components/DeleteRowForm";
+import { WhsReminderButton } from "../_components/ReminderButtons";
 import { deleteWhsRecordAction } from "./actions";
 
 export const metadata = { title: "WHS register" };
@@ -28,7 +29,7 @@ const SEVERITY_VARIANT: Record<string, "secondary" | "warning" | "destructive"> 
 export default async function WhsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ kind?: string; ok?: string }>;
+  searchParams: Promise<{ kind?: string; ok?: string; whs_reminders?: string }>;
 }) {
   const sp = await searchParams;
   const ctx = await requireAdmin();
@@ -68,14 +69,25 @@ export default async function WhsPage({
             High-risk licences, fire wardens, first aiders, and incident reports.
           </p>
         </div>
-        <Button asChild>
-          <Link href="/app/admin/whs/new">Add record</Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <WhsReminderButton />
+          <Button asChild>
+            <Link href="/app/admin/whs/new">Add record</Link>
+          </Button>
+        </div>
       </div>
 
       {sp.ok && (
         <div className="rounded-md border border-emerald-500 bg-emerald-50/50 px-4 py-2 text-sm dark:bg-emerald-900/10">
           Record {sp.ok}.
+        </div>
+      )}
+
+      {sp.whs_reminders !== undefined && (
+        <div className="rounded-md border border-emerald-500 bg-emerald-50/50 px-4 py-2 text-sm dark:bg-emerald-900/10">
+          {sp.whs_reminders === "0"
+            ? "No reminders due — nothing sent."
+            : `Sent ${sp.whs_reminders} WHS reminder email${sp.whs_reminders === "1" ? "" : "s"}.`}
         </div>
       )}
 

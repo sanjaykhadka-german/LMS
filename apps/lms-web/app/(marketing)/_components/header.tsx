@@ -18,7 +18,7 @@ export async function Header() {
             width={1323}
             height={605}
             priority
-            className="h-9 w-auto"
+            className="h-12 w-auto"
           />
         </Link>
         <nav className="flex items-center gap-2">

@@ -13,12 +13,18 @@ import {
 } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
+import { AssignmentReminderButton } from "./_components/ReminderButtons";
 
 export const metadata = { title: "Admin" };
 
-export default async function AdminOverviewPage() {
+export default async function AdminOverviewPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ reminders?: string }>;
+}) {
   const ctx = await requireAdmin();
   const tid = ctx.traceyTenantId;
+  const sp = await searchParams;
 
   const [
     [{ employeeCount = 0 } = {}],
@@ -71,12 +77,21 @@ export default async function AdminOverviewPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Admin</h1>
-        <p className="text-sm text-[color:var(--muted-foreground)]">
-          Manage your training programme.
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Admin</h1>
+          <p className="text-sm text-[color:var(--muted-foreground)]">
+            Manage your training programme.
+          </p>
+        </div>
+        <AssignmentReminderButton />
       </div>
+
+      {sp.reminders !== undefined && (
+        <div className="rounded-md border border-emerald-500 bg-emerald-50/50 px-4 py-2 text-sm dark:bg-emerald-900/10">
+          Sent reminders to {sp.reminders} employee{sp.reminders === "1" ? "" : "s"}.
+        </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard label="Employees" value={employeeCount} hint={`${activeCount} active`} href="/app/admin/employees" />

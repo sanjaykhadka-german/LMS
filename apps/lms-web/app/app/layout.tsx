@@ -39,7 +39,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 width={1323}
                 height={605}
                 priority
-                className="h-9 w-auto"
+                className="h-12 w-auto"
               />
             </Link>
             <TenantSwitcher

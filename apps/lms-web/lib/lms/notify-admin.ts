@@ -52,6 +52,77 @@ export async function sendInviteEmail(opts: Envelope): Promise<boolean> {
   }
 }
 
+export async function sendAssignmentReminderEmail(opts: {
+  to: string;
+  name: string | null;
+  moduleTitles: string[];
+}): Promise<boolean> {
+  if (!apiKey) return false;
+  const greeting = opts.name ? `Hi ${opts.name},` : "Hi,";
+  const items = opts.moduleTitles.map((t) => `<li>${escapeHtml(t)}</li>`).join("");
+  const html =
+    `<p>${greeting}</p>` +
+    `<p>You have outstanding training modules:</p>` +
+    `<ul>${items}</ul>` +
+    `<p><a href="${baseUrl()}/app/my/modules">Open your portal</a></p>`;
+  try {
+    await client().emails.send({
+      from,
+      to: opts.to,
+      subject: "Reminder: outstanding training",
+      html,
+    });
+    return true;
+  } catch (err) {
+    console.error("[admin/reminder] email failed:", err);
+    return false;
+  }
+}
+
+export async function sendWhsExpiryReminderEmail(opts: {
+  to: string;
+  name: string | null;
+  kindLabel: string;
+  recordTitle: string;
+  expiresOn: string | null;
+}): Promise<boolean> {
+  if (!apiKey) return false;
+  const greeting = opts.name ? `Hi ${opts.name},` : "Hi,";
+  const expires = opts.expiresOn ? formatDate(opts.expiresOn) : "soon";
+  const html =
+    `<p>${greeting}</p>` +
+    `<p>Your ${escapeHtml(opts.kindLabel.toLowerCase())} <b>${escapeHtml(
+      opts.recordTitle,
+    )}</b> expires on <b>${expires}</b>.</p>` +
+    `<p>Please start renewal now and let your manager know once it's done.</p>`;
+  try {
+    await client().emails.send({
+      from,
+      to: opts.to,
+      subject: `Reminder: ${opts.kindLabel} expires ${expires}`,
+      html,
+    });
+    return true;
+  } catch (err) {
+    console.error("[admin/whs-reminder] email failed:", err);
+    return false;
+  }
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function formatDate(yyyyMmDd: string): string {
+  const d = new Date(yyyyMmDd);
+  if (Number.isNaN(d.getTime())) return yyyyMmDd;
+  return d.toLocaleDateString("en-AU", { day: "2-digit", month: "short", year: "numeric" });
+}
+
 export async function sendPasswordResetEmail(opts: Envelope): Promise<boolean> {
   if (!apiKey) return false;
   const greeting = opts.name ? `Hi ${opts.name},` : "Hi,";
