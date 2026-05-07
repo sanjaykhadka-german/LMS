@@ -272,6 +272,17 @@ inline unassign), `/app/admin/audit-logs` (unified view of Tracey's
 `/app/admin/register` with a CSV export at
 `/app/admin/register/csv`.
 
+**Slice 6 (shipped)** is the auth bridge that lets legacy Flask users
+sign in to Tracey with their existing Flask password. Tracey's Auth.js
+credentials provider now falls back to `public.users` when an email
+isn't in `app.users`: it verifies the werkzeug pbkdf2 hash, and on
+success transparently provisions `app.users` + `app.members`, links
+`tracey_user_id`, and bcrypts the password so the next sign-in uses
+the fast path. Logged as `auth.legacy_migrated` to `app.audit_events`.
+After every legacy user has signed in once (when
+`SELECT count(*) FROM public.users WHERE tracey_user_id IS NULL`
+returns 0), the pbkdf2 path can be removed in a Phase 5 cleanup.
+
 Phase 4 is now feature-complete. Phase 5 will retire the Flask service
 and remove the `LMS_ALLOWED_TENANT_ID` single-tenant gate. Phase 5 retires Flask. Each phase/slice is its own session
 and its own sequence of PRs.
