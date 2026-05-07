@@ -11,6 +11,8 @@ instance/
 *.sqlite3
 uploads/
 static/uploads/
+# Next.js dynamic route folder, not user uploads
+!apps/lms-web/app/uploads/
 .DS_Store
 .idea/
 .vscode/

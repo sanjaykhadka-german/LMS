@@ -4,6 +4,16 @@ export type Billing = "monthly" | "annual";
 
 export const ANNUAL_DISCOUNT = 0.2; // 20% off when billed annually
 
+/** Quiz pass threshold (percent). Shared with Flask via the same env var so
+ *  a learner who passes here would also pass there. Default 80 matches
+ *  Flask's PASS_THRESHOLD config default. */
+export const PASS_THRESHOLD: number = (() => {
+  const raw = process.env.LMS_PASS_THRESHOLD;
+  if (!raw) return 80;
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) && n >= 0 && n <= 100 ? n : 80;
+})();
+
 export const siteConfig = {
   name: "Tracey",
   tagline: "Staff training that doesn't get in the way of the work.",

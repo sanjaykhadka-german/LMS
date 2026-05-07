@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { ExternalLink } from "lucide-react";
 import { currentTenant } from "~/lib/auth/current";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -42,7 +41,6 @@ export default async function DashboardPage() {
   const planName =
     pricingTiers.find((t) => t.id === tenant.plan)?.name ??
     tenant.plan.charAt(0).toUpperCase() + tenant.plan.slice(1);
-  const flaskHref = "/api/sso/launch";
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
@@ -50,7 +48,7 @@ export default async function DashboardPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">{tenant.name}</h1>
           <p className="text-sm text-[color:var(--muted-foreground)]">
-            Welcome back. Your training data lives in the Flask portal until Phase 2.
+            Welcome back.
           </p>
         </div>
         <Badge variant={statusVariant[tenant.status as keyof typeof statusVariant]}>
@@ -83,15 +81,12 @@ export default async function DashboardPage() {
           <CardHeader>
             <CardTitle className="text-lg">Training</CardTitle>
             <CardDescription>
-              Open the training portal. You&rsquo;ll be signed in
-              automatically.
+              See your assigned modules, take quizzes, and review past results.
             </CardDescription>
           </CardHeader>
           <CardFooter>
             <Button asChild className="w-full">
-              <a href={flaskHref} target="_self" rel="noreferrer">
-                Open Training <ExternalLink className="ml-1 h-4 w-4" />
-              </a>
+              <Link href="/app/my/modules">My training</Link>
             </Button>
           </CardFooter>
         </Card>

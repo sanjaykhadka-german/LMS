@@ -226,7 +226,15 @@ After connecting the repo as a Render Blueprint:
 
 ## What's next
 
-Phase 2 wires Single Sign-On from `lms-web` to the Flask service so the
-"Open Training" button signs users in seamlessly. Phase 3 makes Flask
-multi-tenant. Phase 4 ports each Flask Blueprint to Next.js. Phase 5
-retires Flask. Each phase is its own session and its own sequence of PRs.
+Phase 2 (shipped) wires Single Sign-On from `lms-web` to the Flask service.
+Phase 3 (shipped) added the platform-admin surface and an append-only
+`audit_events` log. Phase 4 ports each Flask route to Next.js, slice by
+slice; **Slice 1 (shipped)** moves the learner portal (`/my/modules` and
+its quiz/results sub-pages) off Flask. Subsequent Phase 4 slices port the
+admin surfaces. Phase 5 retires Flask. Each phase/slice is its own session
+and its own sequence of PRs.
+
+`LMS_PASS_THRESHOLD` (default `80`) controls the quiz pass mark. Set the
+same value on both Flask and `lms-web` so a learner who passes on one app
+would pass on the other. `LMS_ADMIN_EMAIL` (optional) receives a one-line
+notification when a learner submits a quiz; unset means no email.
