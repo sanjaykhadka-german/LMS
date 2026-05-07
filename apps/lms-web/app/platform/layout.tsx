@@ -27,6 +27,12 @@ export default async function PlatformLayout({
               >
                 Tenants
               </Link>
+              <Link
+                href="/platform/audit"
+                className="rounded-md px-3 py-1.5 text-sm font-medium text-[color:var(--muted-foreground)] transition-colors hover:bg-[color:var(--secondary)] hover:text-[color:var(--foreground)]"
+              >
+                Audit
+              </Link>
             </nav>
           </div>
           <Link
