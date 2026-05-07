@@ -8,6 +8,8 @@ import {
   lmsPositions,
   lmsUsers,
 } from "@tracey/db";
+import { requireAdmin } from "~/lib/auth/admin";
+import { tenantWhere } from "~/lib/lms/tenant-scope";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
@@ -22,6 +24,8 @@ export default async function EmployeesPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   const { error } = await searchParams;
+  const ctx = await requireAdmin();
+  const tid = ctx.traceyTenantId;
 
   const [employees, departments, employers, positions] = await Promise.all([
     db
@@ -39,12 +43,22 @@ export default async function EmployeesPage({
       .leftJoin(lmsDepartments, eq(lmsDepartments.id, lmsUsers.departmentId))
       .leftJoin(lmsEmployers, eq(lmsEmployers.id, lmsUsers.employerId))
       .leftJoin(lmsPositions, eq(lmsPositions.id, lmsUsers.positionId))
+      .where(eq(lmsUsers.traceyTenantId, tid))
       .orderBy(desc(lmsUsers.role), asc(lmsUsers.name)),
-    db.select().from(lmsDepartments).orderBy(asc(lmsDepartments.name)),
-    db.select().from(lmsEmployers).orderBy(asc(lmsEmployers.name)),
+    db
+      .select()
+      .from(lmsDepartments)
+      .where(tenantWhere(lmsDepartments, tid))
+      .orderBy(asc(lmsDepartments.name)),
+    db
+      .select()
+      .from(lmsEmployers)
+      .where(tenantWhere(lmsEmployers, tid))
+      .orderBy(asc(lmsEmployers.name)),
     db
       .select({ id: lmsPositions.id, name: lmsPositions.name })
       .from(lmsPositions)
+      .where(tenantWhere(lmsPositions, tid))
       .orderBy(asc(lmsPositions.name)),
   ]);
 

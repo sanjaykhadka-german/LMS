@@ -2,11 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db, lmsPositions, lmsUsers } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
 import { logAuditEvent } from "~/lib/audit";
+import { tenantWhere } from "~/lib/lms/tenant-scope";
 import type { FormState } from "../_components/NameCrudForm";
 
 const baseSchema = z.object({
@@ -21,6 +22,7 @@ function parseOptionalInt(raw: FormDataEntryValue | null): number | null {
 
 export async function createPositionAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireAdmin();
+  const tid = ctx.traceyTenantId;
   const parsed = baseSchema.safeParse({ name: formData.get("name") });
   if (!parsed.success) {
     return {
@@ -35,11 +37,11 @@ export async function createPositionAction(_prev: FormState, formData: FormData)
 
   const [row] = await db
     .insert(lmsPositions)
-    .values({ name, parentId, departmentId })
+    .values({ name, parentId, departmentId, traceyTenantId: tid })
     .returning({ id: lmsPositions.id });
 
   await logAuditEvent({
-    tenantId: ctx.traceyTenantId,
+    tenantId: tid,
     actorUserId: ctx.traceyUserId,
     actorEmail: ctx.lmsUser.email,
     action: "position.created",
@@ -53,6 +55,7 @@ export async function createPositionAction(_prev: FormState, formData: FormData)
 
 export async function updatePositionAction(formData: FormData): Promise<void> {
   const ctx = await requireAdmin();
+  const tid = ctx.traceyTenantId;
   const id = parseOptionalInt(formData.get("id"));
   if (!id) throw new Error("Bad id");
 
@@ -64,7 +67,11 @@ export async function updatePositionAction(formData: FormData): Promise<void> {
   let parentId = parseOptionalInt(formData.get("parent_id"));
   const departmentId = parseOptionalInt(formData.get("department_id"));
 
-  const [current] = await db.select().from(lmsPositions).where(eq(lmsPositions.id, id)).limit(1);
+  const [current] = await db
+    .select()
+    .from(lmsPositions)
+    .where(and(eq(lmsPositions.id, id), tenantWhere(lmsPositions, tid)))
+    .limit(1);
   if (!current) throw new Error("Position not found");
 
   // Cycle guard — port of app.py:1582-1593. Self-as-parent and direct-child
@@ -75,7 +82,7 @@ export async function updatePositionAction(formData: FormData): Promise<void> {
     const [candidate] = await db
       .select({ parentId: lmsPositions.parentId })
       .from(lmsPositions)
-      .where(eq(lmsPositions.id, parentId))
+      .where(and(eq(lmsPositions.id, parentId), tenantWhere(lmsPositions, tid)))
       .limit(1);
     if (candidate?.parentId === id) {
       parentId = current.parentId;
@@ -85,10 +92,10 @@ export async function updatePositionAction(formData: FormData): Promise<void> {
   await db
     .update(lmsPositions)
     .set({ name, parentId, departmentId })
-    .where(eq(lmsPositions.id, id));
+    .where(and(eq(lmsPositions.id, id), tenantWhere(lmsPositions, tid)));
 
   await logAuditEvent({
-    tenantId: ctx.traceyTenantId,
+    tenantId: tid,
     actorUserId: ctx.traceyUserId,
     actorEmail: ctx.lmsUser.email,
     action: "position.updated",
@@ -102,13 +109,14 @@ export async function updatePositionAction(formData: FormData): Promise<void> {
 
 export async function deletePositionAction(formData: FormData): Promise<void> {
   const ctx = await requireAdmin();
+  const tid = ctx.traceyTenantId;
   const id = parseOptionalInt(formData.get("id"));
   if (!id) throw new Error("Bad id");
 
   const [target] = await db
     .select()
     .from(lmsPositions)
-    .where(eq(lmsPositions.id, id))
+    .where(and(eq(lmsPositions.id, id), tenantWhere(lmsPositions, tid)))
     .limit(1);
   if (!target) throw new Error("Position not found");
 
@@ -118,18 +126,20 @@ export async function deletePositionAction(formData: FormData): Promise<void> {
     await tx
       .update(lmsPositions)
       .set({ parentId: target.parentId })
-      .where(eq(lmsPositions.parentId, id));
+      .where(and(eq(lmsPositions.parentId, id), tenantWhere(lmsPositions, tid)));
     // Users hold this position via FK; clearing position_id is the visible
     // effect the audit message describes.
     await tx
       .update(lmsUsers)
       .set({ positionId: null })
-      .where(eq(lmsUsers.positionId, id));
-    await tx.delete(lmsPositions).where(eq(lmsPositions.id, id));
+      .where(and(eq(lmsUsers.positionId, id), eq(lmsUsers.traceyTenantId, tid)));
+    await tx
+      .delete(lmsPositions)
+      .where(and(eq(lmsPositions.id, id), tenantWhere(lmsPositions, tid)));
   });
 
   await logAuditEvent({
-    tenantId: ctx.traceyTenantId,
+    tenantId: tid,
     actorUserId: ctx.traceyUserId,
     actorEmail: ctx.lmsUser.email,
     action: "position.deleted",

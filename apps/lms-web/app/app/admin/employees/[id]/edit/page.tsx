@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import {
   db,
   lmsDepartments,
@@ -10,6 +10,8 @@ import {
   lmsUserMachines,
   lmsUsers,
 } from "@tracey/db";
+import { requireAdmin } from "~/lib/auth/admin";
+import { tenantWhere } from "~/lib/lms/tenant-scope";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
@@ -30,17 +32,47 @@ export default async function EditEmployeePage({
   if (!Number.isFinite(userId)) notFound();
   const sp = await searchParams;
 
-  const [user] = await db.select().from(lmsUsers).where(eq(lmsUsers.id, userId)).limit(1);
+  const ctx = await requireAdmin();
+  const tid = ctx.traceyTenantId;
+
+  const [user] = await db
+    .select()
+    .from(lmsUsers)
+    .where(and(eq(lmsUsers.id, userId), eq(lmsUsers.traceyTenantId, tid)))
+    .limit(1);
   if (!user) notFound();
 
   const [departments, employers, positions, machines, userMachines, employer] = await Promise.all([
-    db.select().from(lmsDepartments).orderBy(asc(lmsDepartments.name)),
-    db.select().from(lmsEmployers).orderBy(asc(lmsEmployers.name)),
-    db.select({ id: lmsPositions.id, name: lmsPositions.name }).from(lmsPositions).orderBy(asc(lmsPositions.name)),
-    db.select({ id: lmsMachines.id, name: lmsMachines.name }).from(lmsMachines).orderBy(asc(lmsMachines.name)),
-    db.select({ machineId: lmsUserMachines.machineId }).from(lmsUserMachines).where(eq(lmsUserMachines.userId, userId)),
+    db
+      .select()
+      .from(lmsDepartments)
+      .where(tenantWhere(lmsDepartments, tid))
+      .orderBy(asc(lmsDepartments.name)),
+    db
+      .select()
+      .from(lmsEmployers)
+      .where(tenantWhere(lmsEmployers, tid))
+      .orderBy(asc(lmsEmployers.name)),
+    db
+      .select({ id: lmsPositions.id, name: lmsPositions.name })
+      .from(lmsPositions)
+      .where(tenantWhere(lmsPositions, tid))
+      .orderBy(asc(lmsPositions.name)),
+    db
+      .select({ id: lmsMachines.id, name: lmsMachines.name })
+      .from(lmsMachines)
+      .where(tenantWhere(lmsMachines, tid))
+      .orderBy(asc(lmsMachines.name)),
+    db
+      .select({ machineId: lmsUserMachines.machineId })
+      .from(lmsUserMachines)
+      .where(and(eq(lmsUserMachines.userId, userId), tenantWhere(lmsUserMachines, tid))),
     user.employerId
-      ? db.select().from(lmsEmployers).where(eq(lmsEmployers.id, user.employerId)).limit(1)
+      ? db
+          .select()
+          .from(lmsEmployers)
+          .where(and(eq(lmsEmployers.id, user.employerId), tenantWhere(lmsEmployers, tid)))
+          .limit(1)
       : Promise.resolve([]),
   ]);
   const linkedMachineIds = new Set(userMachines.map((m) => m.machineId));

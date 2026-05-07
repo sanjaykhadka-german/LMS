@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import {
   db,
   lmsAssignments,
@@ -14,6 +14,8 @@ import {
   lmsUserMachines,
   lmsUsers,
 } from "@tracey/db";
+import { requireAdmin } from "~/lib/auth/admin";
+import { tenantWhere } from "~/lib/lms/tenant-scope";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
@@ -31,6 +33,9 @@ export default async function EmployeeDetailPage({
   const { id } = await params;
   const userId = parseInt(id, 10);
   if (!Number.isFinite(userId)) notFound();
+
+  const ctx = await requireAdmin();
+  const tid = ctx.traceyTenantId;
 
   const [user] = await db
     .select({
@@ -52,7 +57,7 @@ export default async function EmployeeDetailPage({
     .leftJoin(lmsDepartments, eq(lmsDepartments.id, lmsUsers.departmentId))
     .leftJoin(lmsEmployers, eq(lmsEmployers.id, lmsUsers.employerId))
     .leftJoin(lmsPositions, eq(lmsPositions.id, lmsUsers.positionId))
-    .where(eq(lmsUsers.id, userId))
+    .where(and(eq(lmsUsers.id, userId), eq(lmsUsers.traceyTenantId, tid)))
     .limit(1);
   if (!user) notFound();
 
@@ -68,7 +73,7 @@ export default async function EmployeeDetailPage({
       })
       .from(lmsAssignments)
       .innerJoin(lmsModules, eq(lmsModules.id, lmsAssignments.moduleId))
-      .where(eq(lmsAssignments.userId, userId)),
+      .where(and(eq(lmsAssignments.userId, userId), tenantWhere(lmsAssignments, tid))),
     db
       .select({
         id: lmsAttempts.id,
@@ -80,7 +85,7 @@ export default async function EmployeeDetailPage({
       })
       .from(lmsAttempts)
       .leftJoin(lmsModules, eq(lmsModules.id, lmsAttempts.moduleId))
-      .where(eq(lmsAttempts.userId, userId))
+      .where(and(eq(lmsAttempts.userId, userId), tenantWhere(lmsAttempts, tid)))
       .orderBy(desc(lmsAttempts.createdAt)),
     db
       .select({
@@ -89,7 +94,7 @@ export default async function EmployeeDetailPage({
       })
       .from(lmsUserMachines)
       .innerJoin(lmsMachines, eq(lmsMachines.id, lmsUserMachines.machineId))
-      .where(eq(lmsUserMachines.userId, userId))
+      .where(and(eq(lmsUserMachines.userId, userId), tenantWhere(lmsUserMachines, tid)))
       .orderBy(asc(lmsMachines.name)),
   ]);
 
@@ -182,7 +187,12 @@ export default async function EmployeeDetailPage({
         })
         .from(lmsMachineModules)
         .innerJoin(lmsModules, eq(lmsModules.id, lmsMachineModules.moduleId))
-        .where(inArray(lmsMachineModules.machineId, machineIds))
+        .where(
+          and(
+            inArray(lmsMachineModules.machineId, machineIds),
+            tenantWhere(lmsMachineModules, tid),
+          ),
+        )
     : [];
   const passedModuleIds = new Set(
     attempts.filter((a) => a.passed).map((a) => a.moduleId),

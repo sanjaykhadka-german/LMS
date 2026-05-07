@@ -34,6 +34,8 @@ export interface SavePhotoOpts {
   uploadedByLmsUserId?: number | null;
   /** Existing photo filename to delete if the upload succeeds. */
   previousFilename?: string | null;
+  /** Tenant the new uploaded_files row belongs to. Required after Slice 3. */
+  traceyTenantId: string;
 }
 
 export async function saveUserPhoto(opts: SavePhotoOpts): Promise<string> {
@@ -69,6 +71,7 @@ export async function saveUserPhoto(opts: SavePhotoOpts): Promise<string> {
       data: processed,
       size: processed.byteLength,
       uploadedById: opts.uploadedByLmsUserId ?? null,
+      traceyTenantId: opts.traceyTenantId,
     });
     if (opts.previousFilename && opts.previousFilename !== stored) {
       await tx

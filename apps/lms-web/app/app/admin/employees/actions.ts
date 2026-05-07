@@ -4,7 +4,7 @@ import crypto from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import {
   db,
@@ -18,6 +18,7 @@ import { logAuditEvent } from "~/lib/audit";
 import { sendInviteEmail, sendPasswordResetEmail } from "~/lib/lms/notify-admin";
 import { deleteStoredPhoto, PhotoUploadError, saveUserPhoto } from "~/lib/lms/photos";
 import { autoAssignForDepartment } from "~/lib/lms/admin";
+import { tenantWhere } from "~/lib/lms/tenant-scope";
 import type { FormState } from "../_components/NameCrudForm";
 
 const VALID_ROLES = ["admin", "qaqc", "employee"] as const;
@@ -59,18 +60,18 @@ const createSchema = z.object({
   terminationDate: dateish.optional(),
 });
 
-async function getOrCreateEmployer(name: string): Promise<number> {
+async function getOrCreateEmployer(name: string, tenantId: string): Promise<number> {
   const trimmed = name.trim();
   if (!trimmed) throw new Error("Employer name required");
   const existing = await db
     .select({ id: lmsEmployers.id })
     .from(lmsEmployers)
-    .where(eq(lmsEmployers.name, trimmed))
+    .where(and(eq(lmsEmployers.name, trimmed), tenantWhere(lmsEmployers, tenantId)))
     .limit(1);
   if (existing[0]) return existing[0].id;
   const [row] = await db
     .insert(lmsEmployers)
-    .values({ name: trimmed })
+    .values({ name: trimmed, traceyTenantId: tenantId })
     .returning({ id: lmsEmployers.id });
   return row!.id;
 }
@@ -82,6 +83,7 @@ function generateTempPassword(): string {
 
 export async function createEmployeeAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireAdmin();
+  const tid = ctx.traceyTenantId;
 
   let parsed;
   try {
@@ -123,16 +125,25 @@ export async function createEmployeeAction(_prev: FormState, formData: FormData)
     role = "qaqc";
   }
 
+  // users.email has a global UNIQUE constraint (Phase-2 SSO contract). Two
+  // tenants therefore cannot share an email — surface that as a duplicate
+  // error rather than silently failing on the constraint.
   const dupe = await db
-    .select({ id: lmsUsers.id })
+    .select({ id: lmsUsers.id, traceyTenantId: lmsUsers.traceyTenantId })
     .from(lmsUsers)
     .where(eq(lmsUsers.email, data.email))
     .limit(1);
   if (dupe[0]) {
+    if (dupe[0].traceyTenantId !== tid) {
+      return {
+        status: "error",
+        message: "That email already belongs to another workspace's user.",
+      };
+    }
     return { status: "error", message: "A user with this email already exists." };
   }
 
-  const employerId = await getOrCreateEmployer(data.employerName);
+  const employerId = await getOrCreateEmployer(data.employerName, tid);
   const fullName = `${data.firstName} ${data.lastName}`.trim();
   const tempPw = generateTempPassword();
   const passwordHash = await bcrypt.hash(tempPw, 12);
@@ -154,11 +165,12 @@ export async function createEmployeeAction(_prev: FormState, formData: FormData)
       terminationDate: data.terminationDate ?? null,
       jobTitle: data.jobTitle ?? "",
       positionId: data.positionId,
+      traceyTenantId: tid,
     })
     .returning({ id: lmsUsers.id });
 
   await logAuditEvent({
-    tenantId: ctx.traceyTenantId,
+    tenantId: tid,
     actorUserId: ctx.traceyUserId,
     actorEmail: ctx.lmsUser.email,
     action: "employee.created",
@@ -169,7 +181,11 @@ export async function createEmployeeAction(_prev: FormState, formData: FormData)
 
   const newId = row?.id;
   const autoAssigned = newId
-    ? await autoAssignForDepartment({ userId: newId, departmentId: data.departmentId })
+    ? await autoAssignForDepartment({
+        userId: newId,
+        departmentId: data.departmentId,
+        traceyTenantId: tid,
+      })
     : 0;
 
   const emailed = await sendInviteEmail({
@@ -191,10 +207,15 @@ export async function createEmployeeAction(_prev: FormState, formData: FormData)
 
 export async function toggleEmployeeActiveAction(formData: FormData): Promise<void> {
   const ctx = await requireAdmin();
+  const tid = ctx.traceyTenantId;
   const id = parseInt(String(formData.get("id") ?? ""), 10);
   if (!Number.isFinite(id)) throw new Error("Bad id");
 
-  const [target] = await db.select().from(lmsUsers).where(eq(lmsUsers.id, id)).limit(1);
+  const [target] = await db
+    .select()
+    .from(lmsUsers)
+    .where(and(eq(lmsUsers.id, id), eq(lmsUsers.traceyTenantId, tid)))
+    .limit(1);
   if (!target) throw new Error("User not found");
 
   // Match Flask's "can't disable yourself" guard.
@@ -207,10 +228,13 @@ export async function toggleEmployeeActiveAction(formData: FormData): Promise<vo
   }
 
   const next = !target.isActiveFlag;
-  await db.update(lmsUsers).set({ isActiveFlag: next }).where(eq(lmsUsers.id, id));
+  await db
+    .update(lmsUsers)
+    .set({ isActiveFlag: next })
+    .where(and(eq(lmsUsers.id, id), eq(lmsUsers.traceyTenantId, tid)));
 
   await logAuditEvent({
-    tenantId: ctx.traceyTenantId,
+    tenantId: tid,
     actorUserId: ctx.traceyUserId,
     actorEmail: ctx.lmsUser.email,
     action: next ? "employee.activated" : "employee.deactivated",
@@ -228,6 +252,7 @@ const roleSchema = z.object({
 
 export async function changeEmployeeRoleAction(formData: FormData): Promise<void> {
   const ctx = await requireAdmin();
+  const tid = ctx.traceyTenantId;
   const parsed = roleSchema.safeParse({
     id: formData.get("id"),
     role: formData.get("role"),
@@ -243,7 +268,7 @@ export async function changeEmployeeRoleAction(formData: FormData): Promise<void
   const [target] = await db
     .select()
     .from(lmsUsers)
-    .where(eq(lmsUsers.id, parsed.data.id))
+    .where(and(eq(lmsUsers.id, parsed.data.id), eq(lmsUsers.traceyTenantId, tid)))
     .limit(1);
   if (!target) throw new Error("User not found");
   if (target.id === ctx.lmsUser.id) {
@@ -257,10 +282,10 @@ export async function changeEmployeeRoleAction(formData: FormData): Promise<void
   await db
     .update(lmsUsers)
     .set({ role: parsed.data.role })
-    .where(eq(lmsUsers.id, parsed.data.id));
+    .where(and(eq(lmsUsers.id, parsed.data.id), eq(lmsUsers.traceyTenantId, tid)));
 
   await logAuditEvent({
-    tenantId: ctx.traceyTenantId,
+    tenantId: tid,
     actorUserId: ctx.traceyUserId,
     actorEmail: ctx.lmsUser.email,
     action: "employee.role_changed",
@@ -273,10 +298,15 @@ export async function changeEmployeeRoleAction(formData: FormData): Promise<void
 
 export async function resetEmployeePasswordAction(formData: FormData): Promise<void> {
   const ctx = await requireAdmin();
+  const tid = ctx.traceyTenantId;
   const id = parseInt(String(formData.get("id") ?? ""), 10);
   if (!Number.isFinite(id)) throw new Error("Bad id");
 
-  const [target] = await db.select().from(lmsUsers).where(eq(lmsUsers.id, id)).limit(1);
+  const [target] = await db
+    .select()
+    .from(lmsUsers)
+    .where(and(eq(lmsUsers.id, id), eq(lmsUsers.traceyTenantId, tid)))
+    .limit(1);
   if (!target) throw new Error("User not found");
   if (target.role === "admin" && ctx.role !== "owner") {
     redirect("/app/admin/employees?error=forbidden");
@@ -284,10 +314,13 @@ export async function resetEmployeePasswordAction(formData: FormData): Promise<v
 
   const tempPw = generateTempPassword();
   const hash = await bcrypt.hash(tempPw, 12);
-  await db.update(lmsUsers).set({ passwordHash: hash }).where(eq(lmsUsers.id, id));
+  await db
+    .update(lmsUsers)
+    .set({ passwordHash: hash })
+    .where(and(eq(lmsUsers.id, id), eq(lmsUsers.traceyTenantId, tid)));
 
   await logAuditEvent({
-    tenantId: ctx.traceyTenantId,
+    tenantId: tid,
     actorUserId: ctx.traceyUserId,
     actorEmail: ctx.lmsUser.email,
     action: "employee.password_reset",
@@ -323,6 +356,7 @@ const updateSchema = z.object({
 
 export async function updateEmployeeAction(formData: FormData): Promise<void> {
   const ctx = await requireAdmin();
+  const tid = ctx.traceyTenantId;
   let parsed;
   try {
     parsed = updateSchema.safeParse({
@@ -350,13 +384,17 @@ export async function updateEmployeeAction(formData: FormData): Promise<void> {
   }
   const data = parsed.data;
 
-  const [target] = await db.select().from(lmsUsers).where(eq(lmsUsers.id, data.id)).limit(1);
+  const [target] = await db
+    .select()
+    .from(lmsUsers)
+    .where(and(eq(lmsUsers.id, data.id), eq(lmsUsers.traceyTenantId, tid)))
+    .limit(1);
   if (!target) throw new Error("User not found");
   if (target.role === "admin" && ctx.role !== "owner") {
     redirect("/app/admin/employees?error=forbidden");
   }
 
-  const employerId = await getOrCreateEmployer(data.employerName);
+  const employerId = await getOrCreateEmployer(data.employerName, tid);
   const machineIds = formData
     .getAll("machine_ids")
     .map(String)
@@ -375,6 +413,7 @@ export async function updateEmployeeAction(formData: FormData): Promise<void> {
         file: photoEntry,
         uploadedByLmsUserId: ctx.lmsUser.id,
         previousFilename: target.photoFilename,
+        traceyTenantId: tid,
       });
     } catch (err) {
       if (err instanceof PhotoUploadError) {
@@ -403,26 +442,28 @@ export async function updateEmployeeAction(formData: FormData): Promise<void> {
         positionId: data.positionId,
         ...(nextPhotoFilename !== undefined ? { photoFilename: nextPhotoFilename } : {}),
       })
-      .where(eq(lmsUsers.id, data.id));
+      .where(and(eq(lmsUsers.id, data.id), eq(lmsUsers.traceyTenantId, tid)));
 
     // Sync user_machines M2M.
-    await tx.delete(lmsUserMachines).where(eq(lmsUserMachines.userId, data.id));
+    await tx
+      .delete(lmsUserMachines)
+      .where(and(eq(lmsUserMachines.userId, data.id), tenantWhere(lmsUserMachines, tid)));
     if (machineIds.length > 0) {
       const real = await tx
         .select({ id: lmsMachines.id })
         .from(lmsMachines)
-        .where(inArray(lmsMachines.id, machineIds));
+        .where(and(inArray(lmsMachines.id, machineIds), tenantWhere(lmsMachines, tid)));
       const realIds = real.map((r) => r.id);
       if (realIds.length > 0) {
         await tx.insert(lmsUserMachines).values(
-          realIds.map((machineId) => ({ userId: data.id, machineId })),
+          realIds.map((machineId) => ({ userId: data.id, machineId, traceyTenantId: tid })),
         );
       }
     }
   });
 
   await logAuditEvent({
-    tenantId: ctx.traceyTenantId,
+    tenantId: tid,
     actorUserId: ctx.traceyUserId,
     actorEmail: ctx.lmsUser.email,
     action: "employee.updated",
@@ -434,7 +475,11 @@ export async function updateEmployeeAction(formData: FormData): Promise<void> {
   // If the user moved to a different department, auto-assign any new
   // department-policy modules. Same condition Flask uses (app.py:2924).
   if (target.departmentId !== data.departmentId) {
-    await autoAssignForDepartment({ userId: data.id, departmentId: data.departmentId });
+    await autoAssignForDepartment({
+      userId: data.id,
+      departmentId: data.departmentId,
+      traceyTenantId: tid,
+    });
   }
 
   revalidatePath("/app/admin/employees");

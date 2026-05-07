@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
   db,
   lmsDepartmentModulePolicies,
@@ -11,6 +11,7 @@ import {
 } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
 import { logAuditEvent } from "~/lib/audit";
+import { tenantWhere } from "~/lib/lms/tenant-scope";
 
 // Port of /admin/departments/policies POST (app.py:3299-3339). Form posts
 // `policy_<dept>_<module>` checkboxes; we diff desired vs existing and only
@@ -18,14 +19,16 @@ import { logAuditEvent } from "~/lib/audit";
 
 export async function saveDepartmentPoliciesAction(formData: FormData): Promise<void> {
   const ctx = await requireAdmin();
+  const tid = ctx.traceyTenantId;
 
   const departments = await db
     .select({ id: lmsDepartments.id })
-    .from(lmsDepartments);
+    .from(lmsDepartments)
+    .where(tenantWhere(lmsDepartments, tid));
   const moduleRows = await db
     .select({ id: lmsModules.id })
     .from(lmsModules)
-    .where(eq(lmsModules.isPublished, true));
+    .where(and(eq(lmsModules.isPublished, true), tenantWhere(lmsModules, tid)));
   const validDepartmentIds = new Set(departments.map((d) => d.id));
   const validModuleIds = new Set(moduleRows.map((m) => m.id));
 
@@ -49,7 +52,8 @@ export async function saveDepartmentPoliciesAction(formData: FormData): Promise<
       departmentId: lmsDepartmentModulePolicies.departmentId,
       moduleId: lmsDepartmentModulePolicies.moduleId,
     })
-    .from(lmsDepartmentModulePolicies);
+    .from(lmsDepartmentModulePolicies)
+    .where(tenantWhere(lmsDepartmentModulePolicies, tid));
   const existing = new Map<string, number>();
   for (const r of existingRows) {
     existing.set(`${r.departmentId}:${r.moduleId}`, r.id);
@@ -73,17 +77,24 @@ export async function saveDepartmentPoliciesAction(formData: FormData): Promise<
 
   await db.transaction(async (tx) => {
     if (toAdd.length > 0) {
-      await tx.insert(lmsDepartmentModulePolicies).values(toAdd);
+      await tx
+        .insert(lmsDepartmentModulePolicies)
+        .values(toAdd.map((r) => ({ ...r, traceyTenantId: tid })));
     }
     for (const id of toDeleteIds) {
       await tx
         .delete(lmsDepartmentModulePolicies)
-        .where(eq(lmsDepartmentModulePolicies.id, id));
+        .where(
+          and(
+            eq(lmsDepartmentModulePolicies.id, id),
+            tenantWhere(lmsDepartmentModulePolicies, tid),
+          ),
+        );
     }
   });
 
   await logAuditEvent({
-    tenantId: ctx.traceyTenantId,
+    tenantId: tid,
     actorUserId: ctx.traceyUserId,
     actorEmail: ctx.lmsUser.email,
     action: "department.policies_updated",

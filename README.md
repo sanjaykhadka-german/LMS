@@ -237,8 +237,25 @@ positions (with parent + dept). **Slice 2b (shipped)** rounds out the
 admin: profile-photo upload (sharp + BYTEA storage), CSV bulk-upload +
 template, org-chart visualization, department→module policies (with
 auto-assign on department change), and the read-only employee detail
-page with full training history + machine competencies. The
-modules/AI-Studio admin still ports in subsequent Phase 4 slices. Phase 5 retires Flask. Each phase/slice is its own session
+page with full training history + machine competencies.
+
+**Slice 3 (shipped)** is the multi-tenant data fix. Every legacy LMS
+table now carries `tracey_tenant_id` (see
+`packages/db/migrations/manual/0003_lms_multitenant.sql`); every Tracey
+admin query filters by it. Run the SQL once on each environment after
+pulling this commit:
+
+```
+psql $DATABASE_URL \
+  -v tenant_id="'<your-LMS_ALLOWED_TENANT_ID>'" \
+  -f packages/db/migrations/manual/0003_lms_multitenant.sql
+```
+
+The script is idempotent. Existing rows backfill to that single tenant.
+A `DEFAULT` is installed on every column so Flask's existing INSERTs
+keep working without code change.
+
+The modules/AI-Studio admin still ports in subsequent Phase 4 slices. Phase 5 retires Flask. Each phase/slice is its own session
 and its own sequence of PRs.
 
 `LMS_PASS_THRESHOLD` (default `80`) controls the quiz pass mark. Set the

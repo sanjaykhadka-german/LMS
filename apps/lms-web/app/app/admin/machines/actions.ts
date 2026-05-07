@@ -7,10 +7,12 @@ import { z } from "zod";
 import { db, lmsMachineModules, lmsMachines, lmsModules } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
 import { logAuditEvent } from "~/lib/audit";
+import { tenantWhere } from "~/lib/lms/tenant-scope";
 import type { FormState } from "../_components/NameCrudForm";
 
 export async function createMachineAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireAdmin();
+  const tid = ctx.traceyTenantId;
   const parsed = z
     .object({ name: z.string().trim().min(1, "Name is required").max(100) })
     .safeParse({ name: formData.get("name") });
@@ -26,16 +28,19 @@ export async function createMachineAction(_prev: FormState, formData: FormData):
   const existing = await db
     .select({ id: lmsMachines.id })
     .from(lmsMachines)
-    .where(eq(lmsMachines.name, name))
+    .where(and(eq(lmsMachines.name, name), tenantWhere(lmsMachines, tid)))
     .limit(1);
   if (existing[0]) {
     return { status: "error", message: `Machine '${name}' already exists.` };
   }
 
-  const [row] = await db.insert(lmsMachines).values({ name }).returning({ id: lmsMachines.id });
+  const [row] = await db
+    .insert(lmsMachines)
+    .values({ name, traceyTenantId: tid })
+    .returning({ id: lmsMachines.id });
 
   await logAuditEvent({
-    tenantId: ctx.traceyTenantId,
+    tenantId: tid,
     actorUserId: ctx.traceyUserId,
     actorEmail: ctx.lmsUser.email,
     action: "machine.created",
@@ -56,6 +61,7 @@ const updateSchema = z.object({
 
 export async function updateMachineAction(formData: FormData): Promise<void> {
   const ctx = await requireAdmin();
+  const tid = ctx.traceyTenantId;
   const parsed = updateSchema.safeParse({
     id: formData.get("id"),
     name: formData.get("name"),
@@ -69,11 +75,19 @@ export async function updateMachineAction(formData: FormData): Promise<void> {
     : null;
   const moduleIds = parsed.data.moduleIds.filter((s) => /^\d+$/.test(s)).map((s) => parseInt(s, 10));
 
-  // Reject duplicate names against any other machine.
+  // Verify ownership before any write.
+  const [owned] = await db
+    .select({ id: lmsMachines.id })
+    .from(lmsMachines)
+    .where(and(eq(lmsMachines.id, id), tenantWhere(lmsMachines, tid)))
+    .limit(1);
+  if (!owned) throw new Error("Machine not found");
+
+  // Reject duplicate names against any other machine in this tenant.
   const dupe = await db
     .select({ id: lmsMachines.id })
     .from(lmsMachines)
-    .where(and(eq(lmsMachines.name, name), ne(lmsMachines.id, id)))
+    .where(and(eq(lmsMachines.name, name), ne(lmsMachines.id, id), tenantWhere(lmsMachines, tid)))
     .limit(1);
   if (dupe[0]) {
     redirect(`/app/admin/machines/${id}/edit?error=duplicate`);
@@ -85,25 +99,29 @@ export async function updateMachineAction(formData: FormData): Promise<void> {
     await tx
       .update(lmsMachines)
       .set({ name, departmentId })
-      .where(eq(lmsMachines.id, id));
-    await tx.delete(lmsMachineModules).where(eq(lmsMachineModules.machineId, id));
+      .where(and(eq(lmsMachines.id, id), tenantWhere(lmsMachines, tid)));
+    await tx
+      .delete(lmsMachineModules)
+      .where(
+        and(eq(lmsMachineModules.machineId, id), tenantWhere(lmsMachineModules, tid)),
+      );
     if (moduleIds.length > 0) {
-      // Defensive filter: only link to modules that actually exist.
+      // Defensive filter: only link to modules in this tenant.
       const realModules = await tx
         .select({ id: lmsModules.id })
         .from(lmsModules)
-        .where(inArray(lmsModules.id, moduleIds));
+        .where(and(inArray(lmsModules.id, moduleIds), tenantWhere(lmsModules, tid)));
       const realIds = realModules.map((r) => r.id);
       if (realIds.length > 0) {
         await tx.insert(lmsMachineModules).values(
-          realIds.map((moduleId) => ({ machineId: id, moduleId })),
+          realIds.map((moduleId) => ({ machineId: id, moduleId, traceyTenantId: tid })),
         );
       }
     }
   });
 
   await logAuditEvent({
-    tenantId: ctx.traceyTenantId,
+    tenantId: tid,
     actorUserId: ctx.traceyUserId,
     actorEmail: ctx.lmsUser.email,
     action: "machine.updated",
@@ -117,21 +135,24 @@ export async function updateMachineAction(formData: FormData): Promise<void> {
 
 export async function deleteMachineAction(formData: FormData): Promise<void> {
   const ctx = await requireAdmin();
+  const tid = ctx.traceyTenantId;
   const id = parseInt(String(formData.get("id") ?? ""), 10);
   if (!Number.isFinite(id)) throw new Error("Bad id");
 
   const [target] = await db
     .select({ id: lmsMachines.id, name: lmsMachines.name })
     .from(lmsMachines)
-    .where(eq(lmsMachines.id, id))
+    .where(and(eq(lmsMachines.id, id), tenantWhere(lmsMachines, tid)))
     .limit(1);
   if (!target) throw new Error("Machine not found");
 
   // FK cascades on user_machines / machine_modules drop their rows.
-  await db.delete(lmsMachines).where(eq(lmsMachines.id, id));
+  await db
+    .delete(lmsMachines)
+    .where(and(eq(lmsMachines.id, id), tenantWhere(lmsMachines, tid)));
 
   await logAuditEvent({
-    tenantId: ctx.traceyTenantId,
+    tenantId: tid,
     actorUserId: ctx.traceyUserId,
     actorEmail: ctx.lmsUser.email,
     action: "machine.deleted",

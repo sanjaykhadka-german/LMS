@@ -23,24 +23,34 @@ function computeDueAt(validForDays: number | null | undefined, now: Date): Date 
  *
  *  Module.is_published is respected (only published modules are assigned).
  *  Modules already assigned to the user are skipped, regardless of
- *  completed_at status. */
+ *  completed_at status. Tenant-scoped: every read + write filters by
+ *  traceyTenantId so a malicious caller can't cross-link tenants. */
 export async function autoAssignForDepartment(opts: {
   userId: number;
   departmentId: number | null;
+  traceyTenantId: string;
 }): Promise<number> {
   if (!opts.departmentId) return 0;
+  const tid = opts.traceyTenantId;
 
   const policyRows = await db
     .select({ moduleId: lmsDepartmentModulePolicies.moduleId })
     .from(lmsDepartmentModulePolicies)
-    .where(eq(lmsDepartmentModulePolicies.departmentId, opts.departmentId));
+    .where(
+      and(
+        eq(lmsDepartmentModulePolicies.departmentId, opts.departmentId),
+        eq(lmsDepartmentModulePolicies.traceyTenantId, tid),
+      ),
+    );
   const policyModuleIds = policyRows.map((r) => r.moduleId);
   if (policyModuleIds.length === 0) return 0;
 
   const existingRows = await db
     .select({ moduleId: lmsAssignments.moduleId })
     .from(lmsAssignments)
-    .where(eq(lmsAssignments.userId, opts.userId));
+    .where(
+      and(eq(lmsAssignments.userId, opts.userId), eq(lmsAssignments.traceyTenantId, tid)),
+    );
   const existing = new Set(existingRows.map((r) => r.moduleId));
 
   const candidateIds = policyModuleIds.filter((mid) => !existing.has(mid));
@@ -53,7 +63,7 @@ export async function autoAssignForDepartment(opts: {
       validForDays: lmsModules.validForDays,
     })
     .from(lmsModules)
-    .where(inArray(lmsModules.id, candidateIds));
+    .where(and(inArray(lmsModules.id, candidateIds), eq(lmsModules.traceyTenantId, tid)));
 
   const now = new Date();
   const valuesToInsert = candidateModules
@@ -63,6 +73,7 @@ export async function autoAssignForDepartment(opts: {
       moduleId: m.id,
       assignedAt: now,
       dueAt: computeDueAt(m.validForDays, now),
+      traceyTenantId: tid,
     }));
 
   if (valuesToInsert.length === 0) return 0;
@@ -83,11 +94,11 @@ export async function autoAssignForDepartment(opts: {
 }
 
 /** True iff (departmentId, moduleId) is currently in
- *  department_module_policies. Use to avoid unnecessary writes when an
- *  admin re-saves an unchanged checkbox grid. */
+ *  department_module_policies for the given tenant. */
 export async function policyExists(
   departmentId: number,
   moduleId: number,
+  traceyTenantId: string,
 ): Promise<boolean> {
   const rows = await db
     .select({ id: lmsDepartmentModulePolicies.id })
@@ -96,6 +107,7 @@ export async function policyExists(
       and(
         eq(lmsDepartmentModulePolicies.departmentId, departmentId),
         eq(lmsDepartmentModulePolicies.moduleId, moduleId),
+        eq(lmsDepartmentModulePolicies.traceyTenantId, traceyTenantId),
       ),
     )
     .limit(1);

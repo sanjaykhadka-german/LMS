@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { asc, eq, ne } from "drizzle-orm";
+import { and, asc, eq, ne } from "drizzle-orm";
 import { db, lmsDepartments, lmsPositions } from "@tracey/db";
+import { requireAdmin } from "~/lib/auth/admin";
+import { tenantWhere } from "~/lib/lms/tenant-scope";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
@@ -22,10 +24,13 @@ export default async function EditPositionPage({
   if (!Number.isFinite(positionId)) notFound();
   const { error } = await searchParams;
 
+  const ctx = await requireAdmin();
+  const tid = ctx.traceyTenantId;
+
   const [position] = await db
     .select()
     .from(lmsPositions)
-    .where(eq(lmsPositions.id, positionId))
+    .where(and(eq(lmsPositions.id, positionId), tenantWhere(lmsPositions, tid)))
     .limit(1);
   if (!position) notFound();
 
@@ -33,9 +38,13 @@ export default async function EditPositionPage({
     db
       .select({ id: lmsPositions.id, name: lmsPositions.name })
       .from(lmsPositions)
-      .where(ne(lmsPositions.id, positionId))
+      .where(and(ne(lmsPositions.id, positionId), tenantWhere(lmsPositions, tid)))
       .orderBy(asc(lmsPositions.name)),
-    db.select().from(lmsDepartments).orderBy(asc(lmsDepartments.name)),
+    db
+      .select()
+      .from(lmsDepartments)
+      .where(tenantWhere(lmsDepartments, tid))
+      .orderBy(asc(lmsDepartments.name)),
   ]);
 
   return (

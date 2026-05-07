@@ -1,11 +1,13 @@
 import Link from "next/link";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import {
   db,
   lmsDepartmentModulePolicies,
   lmsDepartments,
   lmsModules,
 } from "@tracey/db";
+import { requireAdmin } from "~/lib/auth/admin";
+import { tenantWhere } from "~/lib/lms/tenant-scope";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { saveDepartmentPoliciesAction } from "./actions";
@@ -18,20 +20,27 @@ export default async function DepartmentPoliciesPage({
   searchParams: Promise<{ ok?: string; added?: string; removed?: string; info?: string }>;
 }) {
   const sp = await searchParams;
+  const ctx = await requireAdmin();
+  const tid = ctx.traceyTenantId;
 
   const [departments, modules, policies] = await Promise.all([
-    db.select().from(lmsDepartments).orderBy(asc(lmsDepartments.name)),
+    db
+      .select()
+      .from(lmsDepartments)
+      .where(tenantWhere(lmsDepartments, tid))
+      .orderBy(asc(lmsDepartments.name)),
     db
       .select({ id: lmsModules.id, title: lmsModules.title })
       .from(lmsModules)
-      .where(eq(lmsModules.isPublished, true))
+      .where(and(eq(lmsModules.isPublished, true), tenantWhere(lmsModules, tid)))
       .orderBy(asc(lmsModules.title)),
     db
       .select({
         departmentId: lmsDepartmentModulePolicies.departmentId,
         moduleId: lmsDepartmentModulePolicies.moduleId,
       })
-      .from(lmsDepartmentModulePolicies),
+      .from(lmsDepartmentModulePolicies)
+      .where(tenantWhere(lmsDepartmentModulePolicies, tid)),
   ]);
   const policySet = new Set(policies.map((p) => `${p.departmentId}:${p.moduleId}`));
 

@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { asc, eq, sql } from "drizzle-orm";
 import { db, lmsDepartments, lmsMachineModules, lmsMachines } from "@tracey/db";
+import { requireAdmin } from "~/lib/auth/admin";
+import { tenantWhere } from "~/lib/lms/tenant-scope";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { NameCrudForm } from "../_components/NameCrudForm";
@@ -10,6 +12,7 @@ import { createMachineAction, deleteMachineAction } from "./actions";
 export const metadata = { title: "Machines" };
 
 export default async function MachinesPage() {
+  const ctx = await requireAdmin();
   const machines = await db
     .select({
       id: lmsMachines.id,
@@ -23,6 +26,7 @@ export default async function MachinesPage() {
     })
     .from(lmsMachines)
     .leftJoin(lmsDepartments, eq(lmsDepartments.id, lmsMachines.departmentId))
+    .where(tenantWhere(lmsMachines, ctx.traceyTenantId))
     .orderBy(asc(lmsMachines.name));
 
   return (

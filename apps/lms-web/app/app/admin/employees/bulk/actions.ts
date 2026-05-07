@@ -4,7 +4,7 @@ import crypto from "node:crypto";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import bcrypt from "bcryptjs";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
   db,
   lmsDepartments,
@@ -19,6 +19,7 @@ import { logAuditEvent } from "~/lib/audit";
 import { autoAssignForDepartment } from "~/lib/lms/admin";
 import { sendInviteEmail } from "~/lib/lms/notify-admin";
 import { normalizeHeader, parseCsv } from "~/lib/lms/csv";
+import { tenantWhere } from "~/lib/lms/tenant-scope";
 
 const VALID_ROLES = new Set(["admin", "qaqc", "employee"]);
 
@@ -52,63 +53,65 @@ function parseUserDate(raw: string): string | null {
   throw new Error(`bad date '${s}'`);
 }
 
-async function getOrCreateDepartment(name: string): Promise<number> {
+async function getOrCreateDepartment(name: string, tid: string): Promise<number> {
   const trimmed = name.trim();
   const existing = await db
     .select({ id: lmsDepartments.id })
     .from(lmsDepartments)
-    .where(eq(lmsDepartments.name, trimmed))
+    .where(and(eq(lmsDepartments.name, trimmed), tenantWhere(lmsDepartments, tid)))
     .limit(1);
   if (existing[0]) return existing[0].id;
   const [row] = await db
     .insert(lmsDepartments)
-    .values({ name: trimmed })
+    .values({ name: trimmed, traceyTenantId: tid })
     .returning({ id: lmsDepartments.id });
   return row!.id;
 }
 
-async function getOrCreateEmployer(name: string): Promise<number> {
+async function getOrCreateEmployer(name: string, tid: string): Promise<number> {
   const trimmed = name.trim();
   const existing = await db
     .select({ id: lmsEmployers.id })
     .from(lmsEmployers)
-    .where(eq(lmsEmployers.name, trimmed))
+    .where(and(eq(lmsEmployers.name, trimmed), tenantWhere(lmsEmployers, tid)))
     .limit(1);
   if (existing[0]) return existing[0].id;
   const [row] = await db
     .insert(lmsEmployers)
-    .values({ name: trimmed })
+    .values({ name: trimmed, traceyTenantId: tid })
     .returning({ id: lmsEmployers.id });
   return row!.id;
 }
 
-async function getOrCreateMachine(name: string): Promise<number> {
+async function getOrCreateMachine(name: string, tid: string): Promise<number> {
   const trimmed = name.trim();
   const existing = await db
     .select({ id: lmsMachines.id })
     .from(lmsMachines)
-    .where(eq(lmsMachines.name, trimmed))
+    .where(and(eq(lmsMachines.name, trimmed), tenantWhere(lmsMachines, tid)))
     .limit(1);
   if (existing[0]) return existing[0].id;
   const [row] = await db
     .insert(lmsMachines)
-    .values({ name: trimmed })
+    .values({ name: trimmed, traceyTenantId: tid })
     .returning({ id: lmsMachines.id });
   return row!.id;
 }
 
-async function findPositionIdByName(name: string): Promise<number | null> {
+async function findPositionIdByName(name: string, tid: string): Promise<number | null> {
   const lower = name.trim().toLowerCase();
   if (!lower) return null;
   const all = await db
     .select({ id: lmsPositions.id, name: lmsPositions.name })
-    .from(lmsPositions);
+    .from(lmsPositions)
+    .where(tenantWhere(lmsPositions, tid));
   const hit = all.find((p) => p.name.toLowerCase() === lower);
   return hit?.id ?? null;
 }
 
 export async function bulkUploadEmployeesAction(formData: FormData): Promise<void> {
   const ctx = await requireAdmin();
+  const tid = ctx.traceyTenantId;
   const file = formData.get("csv");
   if (!(file instanceof File) || file.size === 0) {
     redirect("/app/admin/employees/bulk?error=nofile");
@@ -208,13 +211,19 @@ export async function bulkUploadEmployeesAction(formData: FormData): Promise<voi
       reject("This email appears more than once in the CSV", email);
       continue;
     }
+    // users.email is globally unique; reject any prior occurrence regardless
+    // of tenant (cross-tenant collisions become "already used elsewhere").
     const dupe = await db
-      .select({ id: lmsUsers.id })
+      .select({ id: lmsUsers.id, traceyTenantId: lmsUsers.traceyTenantId })
       .from(lmsUsers)
       .where(eq(lmsUsers.email, email))
       .limit(1);
     if (dupe[0]) {
-      reject("This email is already in the system", email);
+      const reason =
+        dupe[0].traceyTenantId !== tid
+          ? "This email belongs to a user in another workspace"
+          : "This email is already in the system";
+      reject(reason, email);
       seenEmails.add(email);
       continue;
     }
@@ -231,8 +240,8 @@ export async function bulkUploadEmployeesAction(formData: FormData): Promise<voi
       continue;
     }
 
-    const departmentId = await getOrCreateDepartment(deptName);
-    const employerId = await getOrCreateEmployer(employerName);
+    const departmentId = await getOrCreateDepartment(deptName, tid);
+    const employerId = await getOrCreateEmployer(employerName, tid);
 
     const machineNames = machinesRaw
       .replace(/\|/g, ",")
@@ -241,10 +250,10 @@ export async function bulkUploadEmployeesAction(formData: FormData): Promise<voi
       .filter(Boolean);
     const machineIds: number[] = [];
     for (const m of machineNames) {
-      machineIds.push(await getOrCreateMachine(m));
+      machineIds.push(await getOrCreateMachine(m, tid));
     }
 
-    const positionId = positionName ? await findPositionIdByName(positionName) : null;
+    const positionId = positionName ? await findPositionIdByName(positionName, tid) : null;
     const fullName = `${firstName} ${lastName}`.trim();
     const tempPw = crypto.randomBytes(9).toString("base64url");
     const passwordHash = await bcrypt.hash(tempPw, 12);
@@ -268,6 +277,7 @@ export async function bulkUploadEmployeesAction(formData: FormData): Promise<voi
           terminationDate: termDate,
           jobTitle,
           positionId,
+          traceyTenantId: tid,
         })
         .returning({ id: lmsUsers.id });
       newId = inserted?.id;
@@ -280,7 +290,7 @@ export async function bulkUploadEmployeesAction(formData: FormData): Promise<voi
 
     if (newId && machineIds.length > 0) {
       await db.insert(lmsUserMachines).values(
-        machineIds.map((machineId) => ({ userId: newId!, machineId })),
+        machineIds.map((machineId) => ({ userId: newId!, machineId, traceyTenantId: tid })),
       );
     }
 
@@ -291,14 +301,14 @@ export async function bulkUploadEmployeesAction(formData: FormData): Promise<voi
     });
     if (emailed) result.invited += 1;
     if (newId) {
-      await autoAssignForDepartment({ userId: newId, departmentId });
+      await autoAssignForDepartment({ userId: newId, departmentId, traceyTenantId: tid });
     }
     result.created += 1;
   }
 
   if (result.created > 0) {
     await logAuditEvent({
-      tenantId: ctx.traceyTenantId,
+      tenantId: tid,
       actorUserId: ctx.traceyUserId,
       actorEmail: ctx.lmsUser.email,
       action: "employee.bulk_imported",

@@ -1,6 +1,8 @@
 import Link from "next/link";
-import { asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { db, lmsDepartments, lmsPositions, lmsUsers } from "@tracey/db";
+import { requireAdmin } from "~/lib/auth/admin";
+import { tenantWhere } from "~/lib/lms/tenant-scope";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 
 export const metadata = { title: "Org chart" };
@@ -14,6 +16,8 @@ interface ChartNode {
 }
 
 export default async function OrgChartPage() {
+  const ctx = await requireAdmin();
+  const tid = ctx.traceyTenantId;
   const rows = await db
     .select({
       id: lmsPositions.id,
@@ -25,10 +29,15 @@ export default async function OrgChartPage() {
         select count(*)::int from ${lmsUsers}
           where ${lmsUsers.positionId} = ${lmsPositions.id}
             and ${lmsUsers.isActiveFlag} = true
+            and ${lmsUsers.traceyTenantId} = ${tid}
       )`,
     })
     .from(lmsPositions)
-    .leftJoin(lmsDepartments, eq(lmsDepartments.id, lmsPositions.departmentId))
+    .leftJoin(
+      lmsDepartments,
+      and(eq(lmsDepartments.id, lmsPositions.departmentId), tenantWhere(lmsDepartments, tid)),
+    )
+    .where(tenantWhere(lmsPositions, tid))
     .orderBy(asc(lmsPositions.sortOrder), asc(lmsPositions.name));
 
   // Build tree. Anything whose parent_id is unknown (e.g. a deleted parent)
@@ -58,7 +67,9 @@ export default async function OrgChartPage() {
     .select({ count: sql<number>`count(*)::int` })
     .from(lmsUsers)
     .where(
-      sql`${lmsUsers.positionId} is null and ${lmsUsers.isActiveFlag} = true`,
+      sql`${lmsUsers.positionId} is null
+            and ${lmsUsers.isActiveFlag} = true
+            and ${lmsUsers.traceyTenantId} = ${tid}`,
     );
   const unassignedCount = unassignedRows[0]?.count ?? 0;
 

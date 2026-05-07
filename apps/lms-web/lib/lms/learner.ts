@@ -472,6 +472,11 @@ export async function submitAttempt(opts: {
   const score = scoreAttempt(opts.module.questions, opts.answers);
   const passed = score.percent >= PASS_THRESHOLD;
 
+  // Tenant comes from the assignment row, which was loaded under
+  // requireLearner() and is therefore the user's own tenant. Stamp the
+  // attempt with the same tenant so cross-tenant queries stay honest.
+  const tid = opts.assignment.traceyTenantId;
+
   const attemptId = await db.transaction(async (tx) => {
     const inserted = await tx
       .insert(lmsAttempts)
@@ -483,6 +488,7 @@ export async function submitAttempt(opts: {
         total: score.total,
         passed,
         answersJson: JSON.stringify(opts.answers),
+        traceyTenantId: tid,
       })
       .returning({ id: lmsAttempts.id });
     const id = inserted[0]?.id;

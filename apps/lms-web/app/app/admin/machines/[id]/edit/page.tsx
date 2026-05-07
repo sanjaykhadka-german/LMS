@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import {
   db,
   lmsDepartments,
@@ -8,6 +8,8 @@ import {
   lmsMachines,
   lmsModules,
 } from "@tracey/db";
+import { requireAdmin } from "~/lib/auth/admin";
+import { tenantWhere } from "~/lib/lms/tenant-scope";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
@@ -28,24 +30,33 @@ export default async function EditMachinePage({
   if (!Number.isFinite(machineId)) notFound();
   const { error } = await searchParams;
 
+  const ctx = await requireAdmin();
+  const tid = ctx.traceyTenantId;
+
   const [machine] = await db
     .select()
     .from(lmsMachines)
-    .where(eq(lmsMachines.id, machineId))
+    .where(and(eq(lmsMachines.id, machineId), tenantWhere(lmsMachines, tid)))
     .limit(1);
   if (!machine) notFound();
 
   const [departments, modules, links] = await Promise.all([
-    db.select().from(lmsDepartments).orderBy(asc(lmsDepartments.name)),
+    db
+      .select()
+      .from(lmsDepartments)
+      .where(tenantWhere(lmsDepartments, tid))
+      .orderBy(asc(lmsDepartments.name)),
     db
       .select({ id: lmsModules.id, title: lmsModules.title })
       .from(lmsModules)
-      .where(eq(lmsModules.isPublished, true))
+      .where(and(eq(lmsModules.isPublished, true), tenantWhere(lmsModules, tid)))
       .orderBy(asc(lmsModules.title)),
     db
       .select({ moduleId: lmsMachineModules.moduleId })
       .from(lmsMachineModules)
-      .where(eq(lmsMachineModules.machineId, machineId)),
+      .where(
+        and(eq(lmsMachineModules.machineId, machineId), tenantWhere(lmsMachineModules, tid)),
+      ),
   ]);
   const linkedModuleIds = new Set(links.map((l) => l.moduleId));
 

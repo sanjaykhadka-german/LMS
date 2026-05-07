@@ -48,6 +48,12 @@ export const lmsUsers = pgTable("users", {
   traceyTenantId: text("tracey_tenant_id"),
 });
 
+// Phase 4 Slice 3: every legacy table now carries `tracey_tenant_id`. The
+// SQL migration in packages/db/migrations/manual/0003_lms_multitenant.sql
+// installs both the column and a DEFAULT to LMS_ALLOWED_TENANT_ID, so
+// Flask's existing INSERTs keep working without code change. Tracey
+// always sets the column explicitly.
+
 export const lmsModules = pgTable("modules", {
   id: integer("id").generatedByDefaultAsIdentity().primaryKey(),
   title: text("title").notNull(),
@@ -57,6 +63,7 @@ export const lmsModules = pgTable("modules", {
   createdById: integer("created_by_id"),
   coverPath: text("cover_path").default(""),
   validForDays: integer("valid_for_days"),
+  traceyTenantId: text("tracey_tenant_id").notNull(),
 });
 
 export const lmsContentItems = pgTable("content_items", {
@@ -67,6 +74,7 @@ export const lmsContentItems = pgTable("content_items", {
   body: text("body").default(""),
   filePath: text("file_path").default(""),
   position: integer("position").default(0),
+  traceyTenantId: text("tracey_tenant_id").notNull(),
 });
 
 export const lmsContentItemMedia = pgTable("content_item_media", {
@@ -75,6 +83,7 @@ export const lmsContentItemMedia = pgTable("content_item_media", {
   filePath: text("file_path").notNull(),
   kind: text("kind").default(""),
   position: integer("position").default(0),
+  traceyTenantId: text("tracey_tenant_id").notNull(),
 });
 
 export const lmsModuleMedia = pgTable("module_media", {
@@ -83,6 +92,7 @@ export const lmsModuleMedia = pgTable("module_media", {
   filePath: text("file_path").notNull(),
   kind: text("kind").default(""),
   position: integer("position").default(0),
+  traceyTenantId: text("tracey_tenant_id").notNull(),
 });
 
 export const lmsQuestions = pgTable("questions", {
@@ -91,6 +101,7 @@ export const lmsQuestions = pgTable("questions", {
   prompt: text("prompt").notNull(),
   kind: text("kind").default("single"),
   position: integer("position").default(0),
+  traceyTenantId: text("tracey_tenant_id").notNull(),
 });
 
 export const lmsChoices = pgTable("choices", {
@@ -99,6 +110,7 @@ export const lmsChoices = pgTable("choices", {
   text: text("text").notNull(),
   isCorrect: boolean("is_correct").default(false),
   position: integer("position").default(0),
+  traceyTenantId: text("tracey_tenant_id").notNull(),
 });
 
 export const lmsAssignments = pgTable("assignments", {
@@ -109,6 +121,7 @@ export const lmsAssignments = pgTable("assignments", {
   dueAt: timestamp("due_at"),
   completedAt: timestamp("completed_at"),
   versionId: integer("version_id"),
+  traceyTenantId: text("tracey_tenant_id").notNull(),
 });
 
 export const lmsModuleVersions = pgTable("module_versions", {
@@ -120,6 +133,7 @@ export const lmsModuleVersions = pgTable("module_versions", {
   createdById: integer("created_by_id"),
   createdAt: timestamp("created_at").defaultNow(),
   summary: text("summary").default(""),
+  traceyTenantId: text("tracey_tenant_id").notNull(),
 });
 
 export const lmsAttempts = pgTable("attempts", {
@@ -132,22 +146,26 @@ export const lmsAttempts = pgTable("attempts", {
   passed: boolean("passed").default(false),
   answersJson: text("answers_json").default("{}"),
   createdAt: timestamp("created_at").defaultNow(),
+  traceyTenantId: text("tracey_tenant_id").notNull(),
 });
 
 export const lmsDepartments = pgTable("departments", {
   id: integer("id").generatedByDefaultAsIdentity().primaryKey(),
   name: text("name").notNull(),
+  traceyTenantId: text("tracey_tenant_id").notNull(),
 });
 
 export const lmsEmployers = pgTable("employers", {
   id: integer("id").generatedByDefaultAsIdentity().primaryKey(),
   name: text("name").notNull(),
+  traceyTenantId: text("tracey_tenant_id").notNull(),
 });
 
 export const lmsMachines = pgTable("machines", {
   id: integer("id").generatedByDefaultAsIdentity().primaryKey(),
   name: text("name").notNull(),
   departmentId: integer("department_id"),
+  traceyTenantId: text("tracey_tenant_id").notNull(),
 });
 
 export const lmsPositions = pgTable("positions", {
@@ -157,6 +175,7 @@ export const lmsPositions = pgTable("positions", {
   departmentId: integer("department_id"),
   sortOrder: integer("sort_order").default(0),
   createdAt: timestamp("created_at").defaultNow(),
+  traceyTenantId: text("tracey_tenant_id").notNull(),
 });
 
 export const lmsUserMachines = pgTable(
@@ -164,6 +183,7 @@ export const lmsUserMachines = pgTable(
   {
     userId: integer("user_id").notNull(),
     machineId: integer("machine_id").notNull(),
+    traceyTenantId: text("tracey_tenant_id").notNull(),
   },
   (t) => [primaryKey({ columns: [t.userId, t.machineId] })],
 );
@@ -173,6 +193,7 @@ export const lmsMachineModules = pgTable(
   {
     machineId: integer("machine_id").notNull(),
     moduleId: integer("module_id").notNull(),
+    traceyTenantId: text("tracey_tenant_id").notNull(),
   },
   (t) => [primaryKey({ columns: [t.machineId, t.moduleId] })],
 );
@@ -182,6 +203,7 @@ export const lmsDepartmentModulePolicies = pgTable("department_module_policies",
   departmentId: integer("department_id").notNull(),
   moduleId: integer("module_id").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
+  traceyTenantId: text("tracey_tenant_id").notNull(),
 });
 
 export const lmsUploadedFiles = pgTable("uploaded_files", {
@@ -191,6 +213,7 @@ export const lmsUploadedFiles = pgTable("uploaded_files", {
   size: integer("size").default(0),
   uploadedById: integer("uploaded_by_id"),
   uploadedAt: timestamp("uploaded_at").defaultNow(),
+  traceyTenantId: text("tracey_tenant_id").notNull(),
 });
 
 export type LmsUser = typeof lmsUsers.$inferSelect;

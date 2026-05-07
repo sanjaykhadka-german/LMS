@@ -1,6 +1,8 @@
 import Link from "next/link";
-import { asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { db, lmsDepartments, lmsPositions, lmsUsers } from "@tracey/db";
+import { requireAdmin } from "~/lib/auth/admin";
+import { tenantWhere } from "~/lib/lms/tenant-scope";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { DeleteRowForm } from "../_components/DeleteRowForm";
@@ -10,6 +12,8 @@ import { deletePositionAction } from "./actions";
 export const metadata = { title: "Positions" };
 
 export default async function PositionsPage() {
+  const ctx = await requireAdmin();
+  const tid = ctx.traceyTenantId;
   const [positions, departments] = await Promise.all([
     db
       .select({
@@ -23,12 +27,21 @@ export default async function PositionsPage() {
           select count(*)::int from ${lmsUsers}
             where ${lmsUsers.positionId} = ${lmsPositions.id}
               and ${lmsUsers.isActiveFlag} = true
+              and ${lmsUsers.traceyTenantId} = ${tid}
         )`,
       })
       .from(lmsPositions)
-      .leftJoin(lmsDepartments, eq(lmsDepartments.id, lmsPositions.departmentId))
+      .leftJoin(
+        lmsDepartments,
+        and(eq(lmsDepartments.id, lmsPositions.departmentId), tenantWhere(lmsDepartments, tid)),
+      )
+      .where(tenantWhere(lmsPositions, tid))
       .orderBy(asc(lmsPositions.sortOrder), asc(lmsPositions.name)),
-    db.select().from(lmsDepartments).orderBy(asc(lmsDepartments.name)),
+    db
+      .select()
+      .from(lmsDepartments)
+      .where(tenantWhere(lmsDepartments, tid))
+      .orderBy(asc(lmsDepartments.name)),
   ]);
 
   const positionLookup = new Map(positions.map((p) => [p.id, p.name]));

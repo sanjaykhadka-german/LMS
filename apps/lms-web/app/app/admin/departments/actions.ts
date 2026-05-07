@@ -1,11 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db, lmsDepartments, lmsUsers } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
 import { logAuditEvent } from "~/lib/audit";
+import { tenantWhere } from "~/lib/lms/tenant-scope";
 
 export type FormState =
   | { status: "idle" }
@@ -18,6 +19,7 @@ const nameSchema = z.object({
 
 export async function createDepartmentAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireAdmin();
+  const tid = ctx.traceyTenantId;
   const parsed = nameSchema.safeParse({ name: formData.get("name") });
   if (!parsed.success) {
     return {
@@ -31,16 +33,19 @@ export async function createDepartmentAction(_prev: FormState, formData: FormDat
   const existing = await db
     .select({ id: lmsDepartments.id })
     .from(lmsDepartments)
-    .where(eq(lmsDepartments.name, name))
+    .where(and(eq(lmsDepartments.name, name), tenantWhere(lmsDepartments, tid)))
     .limit(1);
   if (existing[0]) {
     return { status: "error", message: `Department '${name}' already exists.` };
   }
 
-  const [row] = await db.insert(lmsDepartments).values({ name }).returning({ id: lmsDepartments.id });
+  const [row] = await db
+    .insert(lmsDepartments)
+    .values({ name, traceyTenantId: tid })
+    .returning({ id: lmsDepartments.id });
 
   await logAuditEvent({
-    tenantId: ctx.traceyTenantId,
+    tenantId: tid,
     actorUserId: ctx.traceyUserId,
     actorEmail: ctx.lmsUser.email,
     action: "department.created",
@@ -54,13 +59,14 @@ export async function createDepartmentAction(_prev: FormState, formData: FormDat
 
 export async function deleteDepartmentAction(formData: FormData): Promise<void> {
   const ctx = await requireAdmin();
+  const tid = ctx.traceyTenantId;
   const id = parseInt(String(formData.get("id") ?? ""), 10);
   if (!Number.isFinite(id)) throw new Error("Bad id");
 
   const [target] = await db
     .select({ id: lmsDepartments.id, name: lmsDepartments.name })
     .from(lmsDepartments)
-    .where(eq(lmsDepartments.id, id))
+    .where(and(eq(lmsDepartments.id, id), tenantWhere(lmsDepartments, tid)))
     .limit(1);
   if (!target) throw new Error("Department not found");
 
@@ -70,12 +76,14 @@ export async function deleteDepartmentAction(formData: FormData): Promise<void> 
     await tx
       .update(lmsUsers)
       .set({ departmentId: null })
-      .where(eq(lmsUsers.departmentId, id));
-    await tx.delete(lmsDepartments).where(eq(lmsDepartments.id, id));
+      .where(and(eq(lmsUsers.departmentId, id), eq(lmsUsers.traceyTenantId, tid)));
+    await tx
+      .delete(lmsDepartments)
+      .where(and(eq(lmsDepartments.id, id), tenantWhere(lmsDepartments, tid)));
   });
 
   await logAuditEvent({
-    tenantId: ctx.traceyTenantId,
+    tenantId: tid,
     actorUserId: ctx.traceyUserId,
     actorEmail: ctx.lmsUser.email,
     action: "department.deleted",

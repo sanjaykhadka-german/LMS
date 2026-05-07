@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import {
   db,
   lmsAssignments,
@@ -12,12 +12,14 @@ import {
   lmsUsers,
 } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
+import { tenantWhere } from "~/lib/lms/tenant-scope";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 
 export const metadata = { title: "Admin" };
 
 export default async function AdminOverviewPage() {
-  await requireAdmin();
+  const ctx = await requireAdmin();
+  const tid = ctx.traceyTenantId;
 
   const [
     [{ employeeCount = 0 } = {}],
@@ -30,18 +32,42 @@ export default async function AdminOverviewPage() {
     [{ assignmentCount = 0 } = {}],
     [{ attemptCount = 0 } = {}],
   ] = await Promise.all([
-    db.select({ employeeCount: sql<number>`count(*)::int` }).from(lmsUsers),
+    db
+      .select({ employeeCount: sql<number>`count(*)::int` })
+      .from(lmsUsers)
+      .where(eq(lmsUsers.traceyTenantId, tid)),
     db
       .select({ activeCount: sql<number>`count(*)::int` })
       .from(lmsUsers)
-      .where(eq(lmsUsers.isActiveFlag, true)),
-    db.select({ deptCount: sql<number>`count(*)::int` }).from(lmsDepartments),
-    db.select({ employerCount: sql<number>`count(*)::int` }).from(lmsEmployers),
-    db.select({ machineCount: sql<number>`count(*)::int` }).from(lmsMachines),
-    db.select({ positionCount: sql<number>`count(*)::int` }).from(lmsPositions),
-    db.select({ moduleCount: sql<number>`count(*)::int` }).from(lmsModules),
-    db.select({ assignmentCount: sql<number>`count(*)::int` }).from(lmsAssignments),
-    db.select({ attemptCount: sql<number>`count(*)::int` }).from(lmsAttempts),
+      .where(and(eq(lmsUsers.isActiveFlag, true), eq(lmsUsers.traceyTenantId, tid))),
+    db
+      .select({ deptCount: sql<number>`count(*)::int` })
+      .from(lmsDepartments)
+      .where(tenantWhere(lmsDepartments, tid)),
+    db
+      .select({ employerCount: sql<number>`count(*)::int` })
+      .from(lmsEmployers)
+      .where(tenantWhere(lmsEmployers, tid)),
+    db
+      .select({ machineCount: sql<number>`count(*)::int` })
+      .from(lmsMachines)
+      .where(tenantWhere(lmsMachines, tid)),
+    db
+      .select({ positionCount: sql<number>`count(*)::int` })
+      .from(lmsPositions)
+      .where(tenantWhere(lmsPositions, tid)),
+    db
+      .select({ moduleCount: sql<number>`count(*)::int` })
+      .from(lmsModules)
+      .where(tenantWhere(lmsModules, tid)),
+    db
+      .select({ assignmentCount: sql<number>`count(*)::int` })
+      .from(lmsAssignments)
+      .where(tenantWhere(lmsAssignments, tid)),
+    db
+      .select({ attemptCount: sql<number>`count(*)::int` })
+      .from(lmsAttempts)
+      .where(tenantWhere(lmsAttempts, tid)),
   ]);
 
   return (
