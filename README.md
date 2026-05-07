@@ -255,7 +255,25 @@ The script is idempotent. Existing rows backfill to that single tenant.
 A `DEFAULT` is installed on every column so Flask's existing INSERTs
 keep working without code change.
 
-The modules/AI-Studio admin still ports in subsequent Phase 4 slices. Phase 5 retires Flask. Each phase/slice is its own session
+**Slice 4 (shipped)** ports the modules admin: `/app/admin/modules/*`
+covers create/edit/delete, cover + module media uploads, content
+sections (9 kinds — story/scenario/takeaway/section/text/link/pdf/doc/
+audio/video/image) with per-section media, the question + choice editor,
+module-version snapshotting, a learner-style preview, and bulk-assign
+to staff. AI Studio is shipped as a UI stub gated on `OPENAI_API_KEY` /
+`ANTHROPIC_API_KEY`; LLM wiring is a follow-up that doesn't block the
+Flask retirement.
+
+**Slice 5 (shipped)** ports the rest: `/app/admin/whs` (high-risk
+licences, fire wardens, first aiders, incident register),
+`/app/admin/assignments` (cross-module rollup with status badges and
+inline unassign), `/app/admin/audit-logs` (unified view of Tracey's
+`app.audit_events` + Flask's `public.audit_logs`), and
+`/app/admin/register` with a CSV export at
+`/app/admin/register/csv`.
+
+Phase 4 is now feature-complete. Phase 5 will retire the Flask service
+and remove the `LMS_ALLOWED_TENANT_ID` single-tenant gate. Phase 5 retires Flask. Each phase/slice is its own session
 and its own sequence of PRs.
 
 `LMS_PASS_THRESHOLD` (default `80`) controls the quiz pass mark. Set the

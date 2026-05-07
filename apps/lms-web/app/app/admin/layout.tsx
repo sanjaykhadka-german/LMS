@@ -1,10 +1,15 @@
 import Link from "next/link";
 import {
   Building2,
+  ClipboardList,
   Cog,
+  FileText,
   GraduationCap,
+  HardHat,
   Network,
   Users,
+  Library,
+  Receipt,
 } from "lucide-react";
 import { requireAdmin } from "~/lib/auth/admin";
 
@@ -22,6 +27,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <SidebarLink href="/app/admin" icon={GraduationCap}>
             Overview
           </SidebarLink>
+          <SidebarLink href="/app/admin/modules" icon={Library}>
+            Modules
+          </SidebarLink>
+          <SidebarLink href="/app/admin/assignments" icon={ClipboardList}>
+            Assignments
+          </SidebarLink>
           <SidebarLink href="/app/admin/employees" icon={Users}>
             Employees
           </SidebarLink>
@@ -36,6 +47,15 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           </SidebarLink>
           <SidebarLink href="/app/admin/machines" icon={Cog}>
             Machines
+          </SidebarLink>
+          <SidebarLink href="/app/admin/whs" icon={HardHat}>
+            WHS register
+          </SidebarLink>
+          <SidebarLink href="/app/admin/register" icon={Receipt}>
+            Staff register
+          </SidebarLink>
+          <SidebarLink href="/app/admin/audit-logs" icon={FileText}>
+            Audit logs
           </SidebarLink>
         </nav>
       </aside>

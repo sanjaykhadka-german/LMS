@@ -13,7 +13,6 @@ import {
 } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 
 export const metadata = { title: "Admin" };
 
@@ -89,16 +88,6 @@ export default async function AdminOverviewPage() {
         <StatCard label="Machines" value={machineCount} href="/app/admin/machines" />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Coming next</CardTitle>
-          <CardDescription>
-            Modules + AI Studio, assignments, WHS register, audit logs, and the
-            CSV bulk-upload flow are still served by the Flask portal until
-            their Phase&nbsp;4 sub-slices land. Use the SSO bridge for those.
-          </CardDescription>
-        </CardHeader>
-      </Card>
     </div>
   );
 }

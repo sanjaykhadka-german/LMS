@@ -206,6 +206,39 @@ export const lmsDepartmentModulePolicies = pgTable("department_module_policies",
   traceyTenantId: text("tracey_tenant_id").notNull(),
 });
 
+export const lmsWhsRecords = pgTable("whs_records", {
+  id: integer("id").generatedByDefaultAsIdentity().primaryKey(),
+  kind: text("kind").notNull(),
+  userId: integer("user_id"),
+  title: text("title").notNull(),
+  issuedOn: date("issued_on"),
+  expiresOn: date("expires_on"),
+  notes: text("notes").default(""),
+  documentFilename: text("document_filename"),
+  lastRemindedAt: timestamp("last_reminded_at"),
+  incidentDate: date("incident_date"),
+  severity: text("severity"),
+  reportedById: integer("reported_by_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+  traceyTenantId: text("tracey_tenant_id").notNull(),
+});
+
+export const lmsAuditLogs = pgTable("audit_logs", {
+  id: integer("id").generatedByDefaultAsIdentity().primaryKey(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  userId: integer("user_id"),
+  actorEmail: text("actor_email").default(""),
+  actorName: text("actor_name").default(""),
+  action: text("action").notNull(),
+  entityType: text("entity_type").notNull(),
+  entityId: integer("entity_id"),
+  summary: text("summary").default(""),
+  detailsJson: text("details_json").default(""),
+  ipAddress: text("ip_address").default(""),
+  userAgent: text("user_agent").default(""),
+  traceyTenantId: text("tracey_tenant_id").notNull(),
+});
+
 export const lmsUploadedFiles = pgTable("uploaded_files", {
   filename: text("filename").primaryKey(),
   mimeType: text("mime_type").notNull().default("application/octet-stream"),
@@ -221,6 +254,9 @@ export type NewLmsUser = typeof lmsUsers.$inferInsert;
 export type LmsDepartment = typeof lmsDepartments.$inferSelect;
 export type LmsEmployer = typeof lmsEmployers.$inferSelect;
 export type LmsMachine = typeof lmsMachines.$inferSelect;
+export type LmsWhsRecord = typeof lmsWhsRecords.$inferSelect;
+export type NewLmsWhsRecord = typeof lmsWhsRecords.$inferInsert;
+export type LmsAuditLog = typeof lmsAuditLogs.$inferSelect;
 export type LmsPosition = typeof lmsPositions.$inferSelect;
 export type LmsModule = typeof lmsModules.$inferSelect;
 export type LmsContentItem = typeof lmsContentItems.$inferSelect;

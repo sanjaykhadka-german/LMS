@@ -89,3 +89,60 @@ export async function deleteStoredPhoto(filename: string): Promise<void> {
   if (!filename) return;
   await db.delete(lmsUploadedFiles).where(eq(lmsUploadedFiles.filename, filename));
 }
+
+// ─── General-purpose binary upload (covers, content media, PDFs, etc.) ─────
+
+const ALLOWED_BINARY_EXTS = new Set([
+  // images
+  "png", "jpg", "jpeg", "gif", "webp",
+  // video
+  "mp4", "mov", "webm",
+  // audio
+  "mp3", "wav", "m4a", "ogg",
+  // documents
+  "pdf", "doc", "docx", "txt", "md",
+]);
+
+const BINARY_MAX_BYTES = 10 * 1024 * 1024; // 10 MB — matches Flask MAX_PERSISTED_FILE_BYTES
+
+export interface SaveBinaryOpts {
+  file: File;
+  prefix: string; // e.g. "cover_", "media_", "content_"
+  uploadedByLmsUserId?: number | null;
+  traceyTenantId: string;
+}
+
+/** Persist any allowed-extension upload (image/video/audio/pdf/doc) into
+ *  uploaded_files. Returns the stored filename. Mirrors save_upload
+ *  (app.py:610) but with no disk fallback. */
+export async function saveBinaryUpload(opts: SaveBinaryOpts): Promise<string> {
+  if (opts.file.size === 0) {
+    throw new PhotoUploadError("No file selected.");
+  }
+  if (opts.file.size > BINARY_MAX_BYTES) {
+    const mb = Math.round(opts.file.size / (1024 * 1024));
+    throw new PhotoUploadError(`File too large (${mb} MB). Max 10 MB.`);
+  }
+
+  const original = opts.file.name || "";
+  const dot = original.lastIndexOf(".");
+  if (dot < 0) throw new PhotoUploadError("File has no extension.");
+  const ext = original.slice(dot + 1).toLowerCase();
+  if (!ALLOWED_BINARY_EXTS.has(ext)) {
+    throw new PhotoUploadError(`File type .${ext} is not allowed.`);
+  }
+
+  const buf = Buffer.from(await opts.file.arrayBuffer());
+  const stored = `${opts.prefix}${crypto.randomBytes(8).toString("hex")}.${ext}`;
+  const mime = opts.file.type || "application/octet-stream";
+
+  await db.insert(lmsUploadedFiles).values({
+    filename: stored,
+    mimeType: mime,
+    data: buf,
+    size: buf.byteLength,
+    uploadedById: opts.uploadedByLmsUserId ?? null,
+    traceyTenantId: opts.traceyTenantId,
+  });
+  return stored;
+}
