@@ -1,10 +1,21 @@
 import { NextResponse } from "next/server";
+import { eq } from "drizzle-orm";
+import { db, lmsUploadedFiles } from "@tracey/db";
 import { requireTenant } from "~/lib/auth/current";
 import {
   getUploadForAdmin,
   getUploadForLearner,
   requireLearner,
 } from "~/lib/lms/learner";
+
+async function getOwnPhotoUpload(filename: string) {
+  const rows = await db
+    .select()
+    .from(lmsUploadedFiles)
+    .where(eq(lmsUploadedFiles.filename, filename))
+    .limit(1);
+  return rows[0] ?? null;
+}
 
 // Tenant-scoped port of Flask's /uploads/<name> (app.py:3886). Streams the
 // BYTEA stored in `uploaded_files`. Disk-fallback is intentionally dropped:
@@ -30,7 +41,14 @@ export async function GET(
   }
   if (!file) {
     const { lmsUser } = await requireLearner();
-    file = await getUploadForLearner(name, lmsUser.id);
+    // A user may always read their own profile photo, even though it isn't
+    // referenced by any module (so getUploadForLearner alone wouldn't allow it).
+    if (lmsUser.photoFilename === name) {
+      file = await getOwnPhotoUpload(name);
+    }
+    if (!file) {
+      file = await getUploadForLearner(name, lmsUser.id);
+    }
   }
   if (!file) return new NextResponse("Not Found", { status: 404 });
 

@@ -1,6 +1,7 @@
 "use client";
 
-import { LogOut } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { LogOut, User } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,7 +12,16 @@ import {
 } from "~/components/ui/dropdown-menu";
 import { signOutAction } from "../_actions";
 
-export function UserMenu({ name, email }: { name: string | null; email: string }) {
+export function UserMenu({
+  name,
+  email,
+  photoUrl,
+}: {
+  name: string | null;
+  email: string;
+  photoUrl?: string | null;
+}) {
+  const router = useRouter();
   const initials = (name ?? email).slice(0, 2).toUpperCase();
   return (
     <DropdownMenu>
@@ -19,9 +29,14 @@ export function UserMenu({ name, email }: { name: string | null; email: string }
         <button
           type="button"
           aria-label="User menu"
-          className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[color:var(--secondary)] text-sm font-medium text-[color:var(--secondary-foreground)] transition-colors hover:opacity-90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[color:var(--ring)]"
+          className="inline-flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-[color:var(--secondary)] text-sm font-medium text-[color:var(--secondary-foreground)] transition-colors hover:opacity-90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[color:var(--ring)]"
         >
-          {initials}
+          {photoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={photoUrl} alt="" className="h-full w-full object-cover" />
+          ) : (
+            initials
+          )}
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
@@ -33,6 +48,17 @@ export function UserMenu({ name, email }: { name: string | null; email: string }
             <span className="text-xs text-[color:var(--muted-foreground)]">{email}</span>
           </div>
         </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onSelect={(e) => {
+            e.preventDefault();
+            router.push("/app/profile");
+          }}
+          className="cursor-pointer"
+        >
+          <User className="mr-2 h-4 w-4" />
+          Profile
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onSelect={(e) => {

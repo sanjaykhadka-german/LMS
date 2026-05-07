@@ -8,9 +8,11 @@ import {
 } from "~/lib/auth/current";
 import { siteConfig } from "~/lib/site-config";
 import { getAuthorAccess } from "~/lib/auth/author";
+import { getOrProvisionLmsUser } from "~/lib/lms/learner";
 import { UserMenu } from "./_components/user-menu";
 import { TenantSwitcher } from "./_components/tenant-switcher";
 import { GlobalSearch } from "./_components/global-search";
+import { InstallAppButton } from "~/components/pwa/InstallAppButton";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await currentUser();
@@ -26,6 +28,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     role: m.role,
   }));
   const authorAccess = await getAuthorAccess();
+  const lmsUser = await getOrProvisionLmsUser({
+    traceyUserId: user.id,
+    traceyTenantId: membership.tenant.id,
+    email: user.email,
+    name: user.name,
+  });
+  const photoUrl = lmsUser.photoFilename
+    ? `/uploads/${lmsUser.photoFilename}`
+    : null;
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -74,7 +85,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               )}
             </nav>
           </div>
-          <UserMenu name={user.name} email={user.email} />
+          <div className="flex items-center gap-2">
+            <InstallAppButton />
+            <UserMenu name={user.name} email={user.email} photoUrl={photoUrl} />
+          </div>
         </div>
       </header>
       <main className="flex-1">{children}</main>

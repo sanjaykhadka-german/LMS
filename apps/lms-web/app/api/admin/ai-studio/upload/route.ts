@@ -14,7 +14,7 @@ export async function POST(req: Request) {
   try {
     ctx = await requireAdmin();
   } catch {
-    return new NextResponse("Unauthorized", { status: 401 });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const userId = ctx.traceyUserId;
   const tenantId = ctx.traceyTenantId;
@@ -35,7 +35,13 @@ export async function POST(req: Request) {
     if (err instanceof UnsupportedFileError) {
       return NextResponse.json({ error: err.message }, { status: 415 });
     }
-    throw err;
+    console.error("[ai-studio] upload failed:", err);
+    const msg =
+      err instanceof Error ? err.message : "Could not process the uploaded file.";
+    return NextResponse.json(
+      { error: `Could not process ${file.name}: ${msg}` },
+      { status: 422 },
+    );
   }
 
   const state = await getStudioSession(userId, tenantId);

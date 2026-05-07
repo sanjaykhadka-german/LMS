@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Paperclip } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 
@@ -20,6 +21,34 @@ const ACCEPT =
   "application/pdf," +
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document," +
   "image/png,image/jpeg,image/gif,image/webp";
+
+async function parseJsonResponse<T>(
+  res: Response,
+  fallbackMessage: string,
+): Promise<T> {
+  const text = await res.text();
+  let parsed: unknown = null;
+  if (text) {
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      // Body wasn't JSON — error pages, plain-text 401s, etc.
+    }
+  }
+  if (!res.ok) {
+    const fromBody =
+      parsed &&
+      typeof parsed === "object" &&
+      "error" in (parsed as Record<string, unknown>)
+        ? String((parsed as { error: unknown }).error)
+        : null;
+    const fromText = text && !parsed ? text.slice(0, 200) : null;
+    throw new Error(
+      fromBody ?? fromText ?? `${fallbackMessage} (HTTP ${res.status})`,
+    );
+  }
+  return parsed as T;
+}
 
 const RE_PROMPTS: Array<{ label: string; prompt: string }> = [
   {
@@ -72,11 +101,11 @@ export function StudioClient({
             method: "POST",
             body: fd,
           });
-          const data = await res.json();
-          if (!res.ok) {
-            throw new Error(data.error ?? `${file.name}: upload failed`);
-          }
-          return data.file as FileMeta;
+          const data = await parseJsonResponse<{ file: FileMeta }>(
+            res,
+            `${file.name}: upload failed`,
+          );
+          return data.file;
         }),
       );
       const ok: FileMeta[] = [];
@@ -341,8 +370,18 @@ export function StudioClient({
                   const list = e.target.files;
                   if (list && list.length > 0) void uploadFiles(list);
                 }}
-                className="text-xs"
+                className="hidden"
               />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={pending}
+              >
+                <Paperclip aria-hidden />
+                Attach files
+              </Button>
               <div className="flex-1" />
               <Button onClick={() => void send()} disabled={pending || !text.trim()}>
                 Send
