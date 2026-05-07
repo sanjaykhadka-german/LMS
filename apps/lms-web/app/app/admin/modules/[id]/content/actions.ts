@@ -32,6 +32,37 @@ const VALID_KINDS = new Set([
   "image",
 ]);
 
+// Re-serialise the body field set into the on-disk shape that
+// loadLiveModule (lib/lms/learner.ts) and Flask's templates parse:
+//   section  → JSON { body, bullets, groups }
+//   scenario → JSON { body, answerBody }
+//   else     → plain text in the body column
+function serialiseBody(kind: string, formData: FormData): string {
+  const bodyText = String(formData.get("body") ?? "");
+  if (kind === "section") {
+    const bullets = formData
+      .getAll("bullet")
+      .map((b) => String(b))
+      .filter((s) => s.trim().length > 0);
+    let groups: unknown[] = [];
+    const rawGroups = formData.get("groups_json");
+    if (typeof rawGroups === "string" && rawGroups.trim().startsWith("[")) {
+      try {
+        const parsed = JSON.parse(rawGroups);
+        if (Array.isArray(parsed)) groups = parsed;
+      } catch {
+        groups = [];
+      }
+    }
+    return JSON.stringify({ body: bodyText, bullets, groups });
+  }
+  if (kind === "scenario") {
+    const answerBody = String(formData.get("answer_body") ?? "");
+    return JSON.stringify({ body: bodyText, answerBody });
+  }
+  return bodyText;
+}
+
 async function assertModuleOwned(moduleId: number, tid: string) {
   const [m] = await db
     .select({ id: lmsModules.id })
@@ -110,7 +141,7 @@ export async function updateContentItemAction(formData: FormData): Promise<void>
 
   const kind = String(formData.get("kind") ?? target.kind);
   const title = String(formData.get("title") ?? "").trim().slice(0, 255);
-  const body = String(formData.get("body") ?? "");
+  const body = serialiseBody(kind, formData);
 
   // Optional new file replaces the existing one.
   const file = formData.get("file");

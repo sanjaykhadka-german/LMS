@@ -10,7 +10,7 @@ export async function Header() {
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-[color:var(--border)] bg-[color:var(--background)]/80 backdrop-blur">
-      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
+      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
         <Link href="/" className="flex items-center" aria-label={siteConfig.name}>
           <Image
             src="/tracey-wordmark.png"
@@ -18,7 +18,7 @@ export async function Header() {
             width={1323}
             height={605}
             priority
-            className="h-12 w-auto"
+            className="h-14 w-auto"
           />
         </Link>
         <nav className="flex items-center gap-2">

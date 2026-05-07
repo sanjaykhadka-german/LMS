@@ -58,25 +58,45 @@ export async function loadSystemPrompt(): Promise<string> {
 const FENCED_JSON_RE = /```(?:json)?\s*([\s\S]*?)\s*```/gm;
 
 export function extractModuleJson(reply: string): string | null {
-  // Try fenced blocks first.
-  let lastValid: string | null = null;
+  return splitReplyAndJson(reply).moduleJson;
+}
+
+// Returns the visible (chat-display) reply with any module-JSON block stripped,
+// plus the JSON itself for the preview pane. Keeps the chat plain English even
+// when Claude inlines a giant JSON object in its turn.
+export function splitReplyAndJson(reply: string): {
+  visibleReply: string;
+  moduleJson: string | null;
+} {
+  // 1. Try fenced blocks first — they're easy to remove cleanly.
+  let lastValid: { json: string; start: number; end: number } | null = null;
   for (const match of reply.matchAll(FENCED_JSON_RE)) {
     const candidate = match[1]?.trim();
-    if (!candidate) continue;
-    if (looksLikeModuleObject(candidate)) lastValid = candidate;
+    if (!candidate || match.index === undefined) continue;
+    if (looksLikeModuleObject(candidate)) {
+      lastValid = {
+        json: candidate,
+        start: match.index,
+        end: match.index + match[0].length,
+      };
+    }
   }
-  if (lastValid) return lastValid;
+  if (lastValid) {
+    const visible =
+      reply.slice(0, lastValid.start) + reply.slice(lastValid.end);
+    return { visibleReply: cleanWhitespace(visible), moduleJson: lastValid.json };
+  }
 
-  // Fall back to detecting a top-level JSON object.
+  // 2. Top-level JSON object (no fence). Walk braces.
   const start = reply.indexOf("{");
-  if (start === -1) return null;
-  const candidate = reply.slice(start);
-  // Walk braces to find the matching close; cheap and good enough.
+  if (start === -1) {
+    return { visibleReply: reply, moduleJson: null };
+  }
   let depth = 0;
   let inString = false;
   let escape = false;
-  for (let i = 0; i < candidate.length; i++) {
-    const ch = candidate[i];
+  for (let i = start; i < reply.length; i++) {
+    const ch = reply[i];
     if (escape) {
       escape = false;
       continue;
@@ -94,13 +114,25 @@ export function extractModuleJson(reply: string): string | null {
     else if (ch === "}") {
       depth--;
       if (depth === 0) {
-        const candidateJson = candidate.slice(0, i + 1);
-        if (looksLikeModuleObject(candidateJson)) return candidateJson;
-        return null;
+        const candidate = reply.slice(start, i + 1);
+        if (looksLikeModuleObject(candidate)) {
+          const visible = reply.slice(0, start) + reply.slice(i + 1);
+          return {
+            visibleReply: cleanWhitespace(visible),
+            moduleJson: candidate,
+          };
+        }
+        break;
       }
     }
   }
-  return null;
+  return { visibleReply: reply, moduleJson: null };
+}
+
+function cleanWhitespace(s: string): string {
+  // Collapse the gap left by removing the JSON block — at most one blank line
+  // between paragraphs, and trim leading/trailing whitespace.
+  return s.replace(/\n{3,}/g, "\n\n").trim();
 }
 
 function looksLikeModuleObject(raw: string): boolean {
@@ -131,9 +163,11 @@ export interface SendMessageInput {
 }
 
 export interface SendMessageResult {
-  reply: string;
+  // Plain-English chat reply with the module JSON block removed.
+  visibleReply: string;
   moduleJson: string | null;
-  // Updated history including this turn's user + assistant entries.
+  // Updated history including this turn's user + assistant entries (full
+  // content blocks intact — the model needs its prior JSON in context).
   nextHistory: ChatTurn[];
 }
 
@@ -169,7 +203,7 @@ export async function sendMessage(opts: SendMessageInput): Promise<SendMessageRe
   for (const block of response.content) {
     if (block.type === "text") reply += block.text;
   }
-  const moduleJson = extractModuleJson(reply);
+  const { visibleReply, moduleJson } = splitReplyAndJson(reply);
 
   const assistantTurn: ChatTurn = {
     role: "assistant",
@@ -177,7 +211,7 @@ export async function sendMessage(opts: SendMessageInput): Promise<SendMessageRe
   };
 
   return {
-    reply,
+    visibleReply: visibleReply || "(Claude returned a module update — see the preview pane.)",
     moduleJson,
     nextHistory: [...messages, assistantTurn],
   };

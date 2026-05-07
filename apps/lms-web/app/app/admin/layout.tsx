@@ -19,7 +19,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   await requireAdmin();
 
   return (
-    <div className="mx-auto flex max-w-6xl gap-8 px-4 py-8">
+    <div className="mx-auto flex max-w-screen-2xl gap-8 px-4 py-8">
       <aside className="hidden w-56 shrink-0 md:block">
         <nav className="text-sm">
           <SidebarSection label="Training">

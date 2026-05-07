@@ -34,8 +34,8 @@ import {
   addContentMediaAction,
   deleteContentItemAction,
   removeContentMediaAction,
-  updateContentItemAction,
 } from "./content/actions";
+import { SectionForm } from "./_section-form";
 import {
   addChoiceAction,
   addQuestionAction,
@@ -443,65 +443,14 @@ function ContentItemEditor({
           <Button type="submit" variant="outline" size="sm">Delete</Button>
         </form>
       </div>
-      <form action={updateContentItemAction} encType="multipart/form-data" className="space-y-3">
-        <input type="hidden" name="id" value={item.id} />
-        <input type="hidden" name="module_id" value={moduleId} />
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="space-y-1">
-            <Label htmlFor={`ci-${item.id}-kind`}>Kind</Label>
-            <select
-              id={`ci-${item.id}-kind`}
-              name="kind"
-              defaultValue={item.kind}
-              className="flex h-9 w-full rounded-md border border-[color:var(--input)] bg-transparent px-3 text-sm shadow-sm"
-            >
-              {CONTENT_KINDS.map((k) => (
-                <option key={k} value={k}>{k}</option>
-              ))}
-            </select>
-          </div>
-          <div className="sm:col-span-2 space-y-1">
-            <Label htmlFor={`ci-${item.id}-title`}>Title</Label>
-            <Input
-              id={`ci-${item.id}-title`}
-              name="title"
-              defaultValue={item.title}
-              required
-            />
-          </div>
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor={`ci-${item.id}-body`}>Body</Label>
-          <textarea
-            id={`ci-${item.id}-body`}
-            name="body"
-            defaultValue={item.body ?? ""}
-            rows={4}
-            className="w-full rounded-md border border-[color:var(--input)] bg-transparent px-3 py-2 text-sm shadow-sm font-mono"
-          />
-          <p className="text-xs text-[color:var(--muted-foreground)]">
-            Plain text for story/takeaway/text. JSON object {"{ body, bullets, groups }"} for section, or {"{ body, answerBody }"} for scenario.
-          </p>
-        </div>
-        {(["pdf", "doc", "audio", "video", "image"].includes(item.kind) || item.filePath) && (
-          <div className="space-y-1">
-            <Label>File</Label>
-            {item.filePath && (
-              <div className="text-xs text-[color:var(--muted-foreground)]">
-                Current: <a className="underline" href={`/uploads/${encodeURIComponent(item.filePath)}`} target="_blank" rel="noreferrer">{item.filePath}</a>
-              </div>
-            )}
-            <input type="file" name="file" />
-            {item.filePath && (
-              <label className="flex items-center gap-2 text-xs">
-                <input type="checkbox" name="clear_file" value="1" />
-                Remove the current file on save
-              </label>
-            )}
-          </div>
-        )}
-        <Button type="submit" size="sm">Save section</Button>
-      </form>
+      <SectionForm
+        itemId={item.id}
+        moduleId={moduleId}
+        initialKind={item.kind}
+        initialTitle={item.title}
+        initialBody={item.body ?? ""}
+        filePath={item.filePath ?? null}
+      />
 
       {/* Per-section media */}
       <div className="rounded-md bg-[color:var(--secondary)] p-3 space-y-2">

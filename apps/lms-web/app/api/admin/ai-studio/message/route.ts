@@ -81,7 +81,7 @@ export async function POST(req: Request) {
   });
 
   return NextResponse.json({
-    reply: result.reply,
+    reply: result.visibleReply,
     moduleJson: result.moduleJson,
   });
 }

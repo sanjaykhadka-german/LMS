@@ -16,6 +16,24 @@ interface ChatMessage {
   text: string;
 }
 
+const ACCEPT =
+  "application/pdf," +
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document," +
+  "image/png,image/jpeg,image/gif,image/webp";
+
+const RE_PROMPTS: Array<{ label: string; prompt: string }> = [
+  {
+    label: "Make it shorter",
+    prompt:
+      "Make this module shorter — keep the key takeaway and quiz, but trim each section's body to 1–2 punchy sentences.",
+  },
+  {
+    label: "Make it longer",
+    prompt:
+      "Expand this module — add more concrete examples and context to each section, and add 2 more quiz questions.",
+  },
+];
+
 export function StudioClient({
   hasProvider,
   initialModuleId,
@@ -30,37 +48,57 @@ export function StudioClient({
   const [text, setText] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
+  const dragCounter = useRef(0);
 
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [messages, pending]);
 
-  async function uploadFile(file: File) {
+  async function uploadFiles(fileList: FileList | File[]) {
     setError(null);
-    const fd = new FormData();
-    fd.append("file", file);
+    const arr = Array.from(fileList).filter(Boolean);
+    if (arr.length === 0) return;
     setPending(true);
     try {
-      const res = await fetch("/api/admin/ai-studio/upload", {
-        method: "POST",
-        body: fd,
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error ?? "Upload failed");
-        return;
+      const results = await Promise.allSettled(
+        arr.map(async (file) => {
+          const fd = new FormData();
+          fd.append("file", file);
+          const res = await fetch("/api/admin/ai-studio/upload", {
+            method: "POST",
+            body: fd,
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            throw new Error(data.error ?? `${file.name}: upload failed`);
+          }
+          return data.file as FileMeta;
+        }),
+      );
+      const ok: FileMeta[] = [];
+      const fails: string[] = [];
+      for (const r of results) {
+        if (r.status === "fulfilled") ok.push(r.value);
+        else fails.push(r.reason instanceof Error ? r.reason.message : String(r.reason));
       }
-      setFiles((prev) => [...prev, data.file]);
+      if (ok.length > 0) setFiles((prev) => [...prev, ...ok]);
+      if (fails.length > 0) setError(fails.join("\n"));
     } finally {
       setPending(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   }
 
-  async function send() {
-    const trimmed = text.trim();
+  function removeFile(id: string) {
+    setFiles((prev) => prev.filter((f) => f.id !== id));
+  }
+
+  async function send(promptOverride?: string) {
+    const trimmed = (promptOverride ?? text).trim();
     if (!trimmed || pending) return;
     setError(null);
     const fileIds = files.map((f) => f.id);
@@ -138,6 +176,37 @@ export function StudioClient({
     }
   }
 
+  function usePrompt(p: string) {
+    setText(p);
+    textareaRef.current?.focus();
+  }
+
+  // Drag-and-drop handlers — track counter to debounce dragenter/leave.
+  function onDragEnter(e: React.DragEvent) {
+    e.preventDefault();
+    dragCounter.current += 1;
+    if (e.dataTransfer.types.includes("Files")) setDragActive(true);
+  }
+  function onDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    dragCounter.current -= 1;
+    if (dragCounter.current <= 0) {
+      dragCounter.current = 0;
+      setDragActive(false);
+    }
+  }
+  function onDragOver(e: React.DragEvent) {
+    e.preventDefault();
+  }
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    dragCounter.current = 0;
+    setDragActive(false);
+    if (e.dataTransfer.files.length > 0) {
+      void uploadFiles(e.dataTransfer.files);
+    }
+  }
+
   if (!hasProvider) {
     return (
       <Card>
@@ -163,8 +232,18 @@ export function StudioClient({
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
-      {/* Left pane — chat */}
-      <Card className="flex flex-col">
+      {/* Left pane — chat (drag-drop target) */}
+      <Card
+        className={`flex flex-col transition-colors ${
+          dragActive
+            ? "border-amber-500 ring-2 ring-amber-500/30"
+            : ""
+        }`}
+        onDragEnter={onDragEnter}
+        onDragLeave={onDragLeave}
+        onDragOver={onDragOver}
+        onDrop={onDrop}
+      >
         <CardHeader className="flex-row items-center justify-between gap-2">
           <CardTitle className="text-lg">Chat</CardTitle>
           <Button variant="outline" size="sm" onClick={reset} disabled={pending}>
@@ -174,67 +253,105 @@ export function StudioClient({
         <CardContent className="flex flex-1 flex-col gap-3">
           <div
             ref={logRef}
-            className="flex-1 min-h-[260px] max-h-[420px] overflow-y-auto rounded-md border border-[color:var(--border)] bg-[color:var(--secondary)]/30 p-3 text-sm"
+            className="relative flex-1 min-h-[360px] max-h-[640px] overflow-y-auto rounded-md border border-[color:var(--border)] bg-[color:var(--secondary)]/30 p-4 text-sm"
           >
-            {messages.length === 0 && !pending && (
+            {messages.length === 0 && !pending && !dragActive && (
               <p className="text-[color:var(--muted-foreground)]">
-                Drop a PDF, DOCX, or image (or just describe the topic), then
-                ask Claude to draft a module.
+                Drop a PDF / DOCX / image (or several) onto this card, or use
+                Choose files below — then describe the training topic and ask
+                Claude to draft a module.
               </p>
             )}
             {messages.map((m, i) => (
-              <div key={i} className="mb-3 last:mb-0">
+              <div key={i} className="mb-4 last:mb-0">
                 <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
                   {m.role === "user" ? "You" : "Claude"}
                 </div>
-                <div className="whitespace-pre-wrap">{m.text}</div>
+                <div className="whitespace-pre-wrap leading-relaxed">{m.text}</div>
               </div>
             ))}
             {pending && (
-              <div className="text-[color:var(--muted-foreground)]">…</div>
+              <div className="text-[color:var(--muted-foreground)]">
+                Working…
+              </div>
+            )}
+            {dragActive && (
+              <div className="absolute inset-0 flex items-center justify-center rounded-md bg-amber-500/10 text-sm font-medium text-amber-700 dark:text-amber-300">
+                Drop files to upload
+              </div>
             )}
           </div>
 
           {files.length > 0 && (
-            <ul className="text-xs text-[color:var(--muted-foreground)]">
+            <div className="flex flex-wrap gap-2">
               {files.map((f) => (
-                <li key={f.id}>
-                  {f.kind.toUpperCase()} · {f.name} ({prettyBytes(f.size)})
-                </li>
+                <span
+                  key={f.id}
+                  className="inline-flex items-center gap-1 rounded-full border border-[color:var(--border)] bg-[color:var(--secondary)] px-2 py-1 text-xs"
+                  title={`${f.kind.toUpperCase()} · ${prettyBytes(f.size)}`}
+                >
+                  <span className="font-medium">{f.kind.toUpperCase()}</span>
+                  <span>{f.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeFile(f.id)}
+                    className="ml-1 text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)]"
+                    aria-label={`Remove ${f.name}`}
+                  >
+                    ×
+                  </button>
+                </span>
               ))}
-            </ul>
+            </div>
           )}
 
           <div className="flex flex-col gap-2">
             <textarea
+              ref={textareaRef}
               value={text}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) send();
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void send();
               }}
               placeholder="Ask Claude to draft 5 questions on knife safety from the SOP… (Ctrl+Enter to send)"
-              className="min-h-[80px] rounded-md border border-[color:var(--input)] bg-transparent p-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[color:var(--ring)]"
+              className="min-h-[90px] rounded-md border border-[color:var(--input)] bg-transparent p-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[color:var(--ring)]"
             />
-            <div className="flex items-center gap-2">
+            {moduleJson && (
+              <div className="flex flex-wrap gap-2">
+                {RE_PROMPTS.map((rp) => (
+                  <Button
+                    key={rp.label}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => usePrompt(rp.prompt)}
+                    disabled={pending}
+                  >
+                    {rp.label}
+                  </Button>
+                ))}
+              </div>
+            )}
+            <div className="flex flex-wrap items-center gap-2">
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/png,image/jpeg,image/gif,image/webp"
+                accept={ACCEPT}
+                multiple
                 onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) uploadFile(f);
+                  const list = e.target.files;
+                  if (list && list.length > 0) void uploadFiles(list);
                 }}
                 className="text-xs"
               />
               <div className="flex-1" />
-              <Button onClick={send} disabled={pending || !text.trim()}>
+              <Button onClick={() => void send()} disabled={pending || !text.trim()}>
                 Send
               </Button>
             </div>
           </div>
 
           {error && (
-            <div className="rounded-md border border-[color:var(--destructive)] bg-[color:var(--destructive)]/5 px-3 py-2 text-sm text-[color:var(--destructive)]">
+            <div className="rounded-md border border-[color:var(--destructive)] bg-[color:var(--destructive)]/5 px-3 py-2 text-sm text-[color:var(--destructive)] whitespace-pre-wrap">
               {error}
             </div>
           )}
@@ -249,14 +366,14 @@ export function StudioClient({
         <CardContent className="flex flex-1 flex-col gap-3">
           {!moduleJson ? (
             <p className="text-sm text-[color:var(--muted-foreground)]">
-              Once Claude returns a module JSON object, it will appear here for
-              review. You can then import it as a new module or apply it to an
-              existing one.
+              Once Claude has a module ready, the title, sections, and quiz
+              will appear here for review. You can then import it as a new
+              module or apply it to an existing one.
             </p>
           ) : (
             <>
               <ModulePreview json={moduleJson} />
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 pt-2">
                 <Button onClick={importAsNew} disabled={pending}>
                   Import as new module
                 </Button>
@@ -276,6 +393,20 @@ export function StudioClient({
       </Card>
     </div>
   );
+}
+
+interface PreviewSection {
+  heading: string;
+  type: string;
+  body: string;
+  bullets: string[];
+}
+
+interface PreviewQuestion {
+  question: string;
+  type: string;
+  options: string[];
+  correctAnswer: number | boolean | undefined;
 }
 
 function ModulePreview({ json }: { json: string }) {
@@ -300,22 +431,123 @@ function ModulePreview({ json }: { json: string }) {
     );
   }
 
-  const sections = Array.isArray(parsed.sections) ? parsed.sections : [];
+  const title = String(parsed.title ?? "Untitled");
+  const subtitle = typeof parsed.subtitle === "string" ? parsed.subtitle : "";
+  const summary = typeof parsed.summary === "string" ? parsed.summary : "";
+  const keyTakeaway =
+    typeof parsed.keyTakeaway === "string" ? parsed.keyTakeaway : "";
+  const sections: PreviewSection[] = (Array.isArray(parsed.sections)
+    ? parsed.sections
+    : []
+  )
+    .filter((s): s is Record<string, unknown> => !!s && typeof s === "object")
+    .map((s) => ({
+      heading: typeof s.heading === "string" ? s.heading : "Section",
+      type: typeof s.type === "string" ? s.type : "section",
+      body: typeof s.body === "string" ? s.body : "",
+      bullets: Array.isArray(s.bullets) ? s.bullets.map(String) : [],
+    }));
   const quiz = (parsed.quiz ?? {}) as { questions?: unknown[] };
-  const qCount = Array.isArray(quiz.questions) ? quiz.questions.length : 0;
+  const questions: PreviewQuestion[] = (Array.isArray(quiz.questions)
+    ? quiz.questions
+    : []
+  )
+    .filter((q): q is Record<string, unknown> => !!q && typeof q === "object")
+    .map((q) => ({
+      question: typeof q.question === "string" ? q.question : "",
+      type: typeof q.type === "string" ? q.type : "multiple_choice",
+      options: Array.isArray(q.options) ? q.options.map(String) : [],
+      correctAnswer:
+        typeof q.correctAnswer === "number" || typeof q.correctAnswer === "boolean"
+          ? q.correctAnswer
+          : undefined,
+    }));
 
   return (
-    <div className="space-y-2 text-sm">
-      <div className="font-semibold">{String(parsed.title ?? "Untitled")}</div>
-      {typeof parsed.subtitle === "string" && parsed.subtitle.length > 0 && (
-        <div className="text-[color:var(--muted-foreground)]">
-          {parsed.subtitle}
+    <div className="space-y-4 text-sm">
+      <div>
+        <h2 className="text-lg font-semibold leading-tight">{title}</h2>
+        {subtitle && (
+          <p className="text-[color:var(--muted-foreground)]">{subtitle}</p>
+        )}
+      </div>
+      {summary && (
+        <p className="leading-relaxed">{summary}</p>
+      )}
+      {keyTakeaway && (
+        <div className="rounded-md border-l-4 border-amber-500 bg-amber-500/5 px-3 py-2">
+          <div className="text-xs uppercase tracking-wide text-amber-700 dark:text-amber-300">
+            Key takeaway
+          </div>
+          <div>{keyTakeaway}</div>
         </div>
       )}
-      <div className="flex flex-wrap gap-3 text-xs text-[color:var(--muted-foreground)]">
-        <span>{sections.length} section{sections.length === 1 ? "" : "s"}</span>
-        <span>{qCount} question{qCount === 1 ? "" : "s"}</span>
-      </div>
+      {sections.length > 0 && (
+        <div className="space-y-2">
+          <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
+            Sections ({sections.length})
+          </div>
+          <ul className="space-y-2">
+            {sections.map((s, i) => (
+              <li
+                key={i}
+                className="rounded-md border border-[color:var(--border)] p-3"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <strong>{s.heading}</strong>
+                  <span className="text-xs text-[color:var(--muted-foreground)]">
+                    {s.type}
+                  </span>
+                </div>
+                {s.body && (
+                  <p className="mt-1 text-[color:var(--muted-foreground)]">
+                    {s.body.length > 240 ? s.body.slice(0, 240) + "…" : s.body}
+                  </p>
+                )}
+                {s.bullets.length > 0 && (
+                  <ul className="mt-1 list-disc pl-5 text-xs text-[color:var(--muted-foreground)]">
+                    {s.bullets.slice(0, 4).map((b, j) => (
+                      <li key={j}>{b}</li>
+                    ))}
+                    {s.bullets.length > 4 && (
+                      <li>… {s.bullets.length - 4} more</li>
+                    )}
+                  </ul>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {questions.length > 0 && (
+        <div className="space-y-2">
+          <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
+            Quiz ({questions.length} question{questions.length === 1 ? "" : "s"})
+          </div>
+          <ol className="list-decimal space-y-2 pl-5">
+            {questions.slice(0, 3).map((q, i) => (
+              <li key={i}>
+                <div>{q.question}</div>
+                {q.options.length > 0 && (
+                  <ul className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+                    {q.options.map((o, j) => (
+                      <li key={j}>
+                        {j === q.correctAnswer ? "✓ " : "· "}
+                        {o}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            ))}
+            {questions.length > 3 && (
+              <li className="text-xs text-[color:var(--muted-foreground)]">
+                … {questions.length - 3} more
+              </li>
+            )}
+          </ol>
+        </div>
+      )}
       <details>
         <summary className="cursor-pointer text-xs text-[color:var(--muted-foreground)]">
           Show raw JSON
