@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
+import { PasswordInput } from "~/components/ui/password-input";
 import { signUpAction, type SignUpState } from "./actions";
 
 const initial: SignUpState = { status: "idle" };
@@ -39,10 +40,9 @@ export function SignUpForm({
         readOnly={!!email}
         errors={state.status === "error" ? state.fieldErrors?.email : undefined}
       />
-      <Field
+      <PasswordField
         name="password"
         label="Password"
-        type="password"
         autoComplete="new-password"
         hint="At least 8 characters."
         errors={state.status === "error" ? state.fieldErrors?.password : undefined}
@@ -88,6 +88,38 @@ function Field({
         autoComplete={autoComplete}
         defaultValue={defaultValue}
         readOnly={readOnly}
+        required
+        aria-invalid={errors ? true : undefined}
+      />
+      {errors && errors.length > 0 ? (
+        <p className="text-xs text-red-600 dark:text-red-400">{errors[0]}</p>
+      ) : hint ? (
+        <p className="text-xs text-[color:var(--muted-foreground)]">{hint}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function PasswordField({
+  name,
+  label,
+  autoComplete,
+  hint,
+  errors,
+}: {
+  name: string;
+  label: string;
+  autoComplete?: string;
+  hint?: string;
+  errors?: string[];
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={name}>{label}</Label>
+      <PasswordInput
+        id={name}
+        name={name}
+        autoComplete={autoComplete}
         required
         aria-invalid={errors ? true : undefined}
       />
