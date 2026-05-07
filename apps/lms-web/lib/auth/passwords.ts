@@ -1,5 +1,5 @@
 import "server-only";
-import { pbkdf2Sync, timingSafeEqual } from "node:crypto";
+import { pbkdf2Sync, scryptSync, timingSafeEqual } from "node:crypto";
 import bcrypt from "bcryptjs";
 
 const ROUNDS = 12; // ~250ms on a modern laptop
@@ -12,20 +12,29 @@ export async function verifyPassword(plaintext: string, hash: string): Promise<b
   return bcrypt.compare(plaintext, hash);
 }
 
-// ─── Legacy Flask password verification (Slice 6) ─────────────────────────
+// ─── Legacy Flask password verification (Slice 6 + scrypt hotfix) ─────────
 //
-// werkzeug.security.generate_password_hash produces strings shaped like
-//   pbkdf2:sha256:<iterations>$<salt>$<hex_digest>
-// e.g. "pbkdf2:sha256:600000$Mj3a2Mf3$<64 hex chars>".
+// werkzeug.security.generate_password_hash produces strings in two shapes
+// depending on which version of werkzeug ran:
 //
-// Until every legacy Flask user has logged into Tracey at least once, the
-// credentials provider falls back to checking these hashes against
-// public.users.password_hash. Once a successful verify happens we bcrypt
-// the plaintext into app.users.password_hash, so the next login takes the
-// fast path and never touches this code.
+//   pbkdf2:sha256:<iterations>$<salt>$<hex>          — werkzeug ≤ 2.x default
+//   scrypt:<N>:<r>:<p>$<salt>$<hex>                  — werkzeug 3.x default
 //
-// Only sha256 is supported — that's what werkzeug has defaulted to for
-// every version Flask LMS ever shipped on. Any other prefix returns false.
+// German Butchery's prod DB is 100% scrypt:32768:8:1 (werkzeug 3.x). Tracey's
+// credentials provider falls back to checking these against public.users
+// when an email isn't yet in app.users; on success we bcrypt the plaintext
+// into app.users.password_hash so the next login takes the fast path.
+//
+// verifyWerkzeugHash is the dispatcher. It returns false for any unknown
+// prefix (e.g. plain hex, custom schemes, sha512, malformed) so the
+// credentials provider falls through to "invalid email or password".
+
+export function verifyWerkzeugHash(plaintext: string, stored: string | null | undefined): boolean {
+  if (!stored) return false;
+  if (stored.startsWith("pbkdf2:sha256:")) return verifyWerkzeugPbkdf2(plaintext, stored);
+  if (stored.startsWith("scrypt:")) return verifyWerkzeugScrypt(plaintext, stored);
+  return false;
+}
 
 const PBKDF2_RE = /^pbkdf2:sha256:(\d+)\$([^$]+)\$([0-9a-f]+)$/;
 const PBKDF2_KEY_LEN = 32; // werkzeug defaults to 32 bytes (64 hex chars)
@@ -37,12 +46,42 @@ export function verifyWerkzeugPbkdf2(plaintext: string, stored: string): boolean
   if (!Number.isFinite(iterations) || iterations <= 0) return false;
   const salt = match[2]!;
   const expectedHex = match[3]!;
-  // werkzeug stores the digest in hex of length 64 (32 bytes); reject
-  // anything that doesn't conform so a malformed string can't bypass.
   if (expectedHex.length !== PBKDF2_KEY_LEN * 2) return false;
   let derived: Buffer;
   try {
     derived = pbkdf2Sync(plaintext, salt, iterations, PBKDF2_KEY_LEN, "sha256");
+  } catch {
+    return false;
+  }
+  const expected = Buffer.from(expectedHex, "hex");
+  if (expected.length !== derived.length) return false;
+  return timingSafeEqual(expected, derived);
+}
+
+const SCRYPT_RE = /^scrypt:(\d+):(\d+):(\d+)\$([^$]+)\$([0-9a-f]+)$/;
+const SCRYPT_KEY_LEN = 64; // werkzeug uses dklen=64 (128 hex chars)
+
+export function verifyWerkzeugScrypt(plaintext: string, stored: string): boolean {
+  const match = SCRYPT_RE.exec(stored ?? "");
+  if (!match) return false;
+  const N = parseInt(match[1]!, 10);
+  const r = parseInt(match[2]!, 10);
+  const p = parseInt(match[3]!, 10);
+  if (!Number.isFinite(N) || N <= 0) return false;
+  if (!Number.isFinite(r) || r <= 0) return false;
+  if (!Number.isFinite(p) || p <= 0) return false;
+  // Defence against absurd parameters (someone smuggled in N=2^30 to OOM
+  // the box). Cap at werkzeug's largest default plus headroom.
+  if (N > 1 << 20 || r > 32 || p > 16) return false;
+  const salt = match[4]!;
+  const expectedHex = match[5]!;
+  if (expectedHex.length !== SCRYPT_KEY_LEN * 2) return false;
+  let derived: Buffer;
+  try {
+    // Node's default maxmem (32 MB) is just under what N=32768, r=8 needs.
+    // Pass an explicit cushion so we don't get ERR_CRYPTO_INVALID_SCRYPT_PARAMS.
+    const maxmem = 256 * N * r * p;
+    derived = scryptSync(plaintext, salt, SCRYPT_KEY_LEN, { N, r, p, maxmem });
   } catch {
     return false;
   }

@@ -1,7 +1,7 @@
 import "server-only";
 import { eq } from "drizzle-orm";
 import { db, lmsUsers, members, users } from "@tracey/db";
-import { hashPassword, verifyWerkzeugPbkdf2 } from "./passwords";
+import { hashPassword, verifyWerkzeugHash } from "./passwords";
 import { logAuditEvent } from "~/lib/audit";
 
 // Slice 6 — transparent migration of legacy Flask users into Tracey on
@@ -36,8 +36,9 @@ export async function tryLegacyAuth(
   // we refuse rather than guess.
   if (!legacy.traceyTenantId) return null;
 
-  // 2. Verify the password against werkzeug pbkdf2.
-  if (!verifyWerkzeugPbkdf2(plaintext, legacy.passwordHash)) return null;
+  // 2. Verify the password against werkzeug (handles both pbkdf2:sha256:
+  //    and scrypt: schemes — see lib/auth/passwords.ts).
+  if (!verifyWerkzeugHash(plaintext, legacy.passwordHash)) return null;
 
   // 3. Provision app.users + app.members + link tracey_user_id atomically.
   const bcryptHash = await hashPassword(plaintext);
