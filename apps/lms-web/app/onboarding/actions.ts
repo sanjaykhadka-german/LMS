@@ -6,6 +6,7 @@ import { z } from "zod";
 import { db, tenants, members, type Tenant } from "@tracey/db";
 import { requireUser, setActiveTenant } from "~/lib/auth/current";
 import { logAuditEvent } from "~/lib/audit";
+import { provisionTenant } from "~/lib/tenancy/provision";
 
 const schema = z.object({
   name: z.string().trim().min(1, "Workspace name is required").max(100),
@@ -58,6 +59,15 @@ export async function createTenantAction(
     userId: user.id,
     role: "owner",
   });
+
+  // Phase 7a: provision a per-tenant schema if the feature flag is on.
+  // Off by default — without the flag, new tenants behave exactly as
+  // before (queries fall through to public.lms_* via search_path). The
+  // helper is idempotent, so a second signup attempt after a partial
+  // failure won't double-provision.
+  if (process.env.PER_TENANT_SCHEMA_ENABLED === "true") {
+    await provisionTenant(created.id);
+  }
 
   await logAuditEvent({
     tenantId: created.id,
