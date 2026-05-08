@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { and, eq, inArray, ne } from "drizzle-orm";
 import { z } from "zod";
-import { db, lmsMachineModules, lmsMachines, lmsModules } from "@tracey/db";
+import { lmsMachineModules, lmsMachines, lmsModules } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
 import { logAuditEvent } from "~/lib/audit";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
@@ -25,19 +25,22 @@ export async function createMachineAction(_prev: FormState, formData: FormData):
   }
   const name = parsed.data.name;
 
-  const existing = await db
-    .select({ id: lmsMachines.id })
-    .from(lmsMachines)
-    .where(and(eq(lmsMachines.name, name), tenantWhere(lmsMachines, tid)))
-    .limit(1);
-  if (existing[0]) {
+  const row = await ctx.db.run(async (tx) => {
+    const existing = await tx
+      .select({ id: lmsMachines.id })
+      .from(lmsMachines)
+      .where(and(eq(lmsMachines.name, name), tenantWhere(lmsMachines, tid)))
+      .limit(1);
+    if (existing[0]) return null;
+    const [r] = await tx
+      .insert(lmsMachines)
+      .values({ name, traceyTenantId: tid })
+      .returning({ id: lmsMachines.id });
+    return r ?? null;
+  });
+  if (!row) {
     return { status: "error", message: `Machine '${name}' already exists.` };
   }
-
-  const [row] = await db
-    .insert(lmsMachines)
-    .values({ name, traceyTenantId: tid })
-    .returning({ id: lmsMachines.id });
 
   await logAuditEvent({
     tenantId: tid,
@@ -75,27 +78,29 @@ export async function updateMachineAction(formData: FormData): Promise<void> {
     : null;
   const moduleIds = parsed.data.moduleIds.filter((s) => /^\d+$/.test(s)).map((s) => parseInt(s, 10));
 
-  // Verify ownership before any write.
-  const [owned] = await db
-    .select({ id: lmsMachines.id })
-    .from(lmsMachines)
-    .where(and(eq(lmsMachines.id, id), tenantWhere(lmsMachines, tid)))
-    .limit(1);
-  if (!owned) throw new Error("Machine not found");
-
-  // Reject duplicate names against any other machine in this tenant.
-  const dupe = await db
-    .select({ id: lmsMachines.id })
-    .from(lmsMachines)
-    .where(and(eq(lmsMachines.name, name), ne(lmsMachines.id, id), tenantWhere(lmsMachines, tid)))
-    .limit(1);
-  if (dupe[0]) {
+  // Verify ownership + duplicate-name check in one tenant-scoped tx.
+  const checks = await ctx.db.run(async (tx) => {
+    const [owned] = await tx
+      .select({ id: lmsMachines.id })
+      .from(lmsMachines)
+      .where(and(eq(lmsMachines.id, id), tenantWhere(lmsMachines, tid)))
+      .limit(1);
+    if (!owned) return { owned: false, dupe: false };
+    const [dupe] = await tx
+      .select({ id: lmsMachines.id })
+      .from(lmsMachines)
+      .where(and(eq(lmsMachines.name, name), ne(lmsMachines.id, id), tenantWhere(lmsMachines, tid)))
+      .limit(1);
+    return { owned: true, dupe: Boolean(dupe) };
+  });
+  if (!checks.owned) throw new Error("Machine not found");
+  if (checks.dupe) {
     redirect(`/app/admin/machines/${id}/edit?error=duplicate`);
   }
 
   // Sync the M2M to exactly the chosen module ids — clear-and-reinsert is
   // simpler than diffing and is fine for a small set.
-  await db.transaction(async (tx) => {
+  await ctx.db.run(async (tx) => {
     await tx
       .update(lmsMachines)
       .set({ name, departmentId })
@@ -139,17 +144,21 @@ export async function deleteMachineAction(formData: FormData): Promise<void> {
   const id = parseInt(String(formData.get("id") ?? ""), 10);
   if (!Number.isFinite(id)) throw new Error("Bad id");
 
-  const [target] = await db
-    .select({ id: lmsMachines.id, name: lmsMachines.name })
-    .from(lmsMachines)
-    .where(and(eq(lmsMachines.id, id), tenantWhere(lmsMachines, tid)))
-    .limit(1);
-  if (!target) throw new Error("Machine not found");
+  const target = await ctx.db.run(async (tx) => {
+    const [t] = await tx
+      .select({ id: lmsMachines.id, name: lmsMachines.name })
+      .from(lmsMachines)
+      .where(and(eq(lmsMachines.id, id), tenantWhere(lmsMachines, tid)))
+      .limit(1);
+    if (!t) return null;
 
-  // FK cascades on user_machines / machine_modules drop their rows.
-  await db
-    .delete(lmsMachines)
-    .where(and(eq(lmsMachines.id, id), tenantWhere(lmsMachines, tid)));
+    // FK cascades on user_machines / machine_modules drop their rows.
+    await tx
+      .delete(lmsMachines)
+      .where(and(eq(lmsMachines.id, id), tenantWhere(lmsMachines, tid)));
+    return t;
+  });
+  if (!target) throw new Error("Machine not found");
 
   await logAuditEvent({
     tenantId: tid,

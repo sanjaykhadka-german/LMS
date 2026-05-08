@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { asc, desc, eq } from "drizzle-orm";
 import {
-  db,
   lmsAssignments,
   lmsModules,
   lmsUsers,
@@ -19,38 +18,42 @@ export default async function AssignmentsPage() {
   const ctx = await requireAdmin();
   const tid = ctx.traceyTenantId;
 
-  const rows = await db
-    .select({
-      id: lmsAssignments.id,
-      moduleId: lmsAssignments.moduleId,
-      moduleTitle: lmsModules.title,
-      userId: lmsAssignments.userId,
-      userName: lmsUsers.name,
-      userEmail: lmsUsers.email,
-      assignedAt: lmsAssignments.assignedAt,
-      dueAt: lmsAssignments.dueAt,
-      completedAt: lmsAssignments.completedAt,
-    })
-    .from(lmsAssignments)
-    .innerJoin(lmsModules, eq(lmsModules.id, lmsAssignments.moduleId))
-    .innerJoin(lmsUsers, eq(lmsUsers.id, lmsAssignments.userId))
-    .where(tenantWhere(lmsAssignments, tid))
-    .orderBy(asc(lmsModules.title), asc(lmsUsers.name));
-
-  // Also expose the most-recent assignments at the top.
-  const recent = await db
-    .select({
-      id: lmsAssignments.id,
-      moduleTitle: lmsModules.title,
-      userName: lmsUsers.name,
-      assignedAt: lmsAssignments.assignedAt,
-    })
-    .from(lmsAssignments)
-    .innerJoin(lmsModules, eq(lmsModules.id, lmsAssignments.moduleId))
-    .innerJoin(lmsUsers, eq(lmsUsers.id, lmsAssignments.userId))
-    .where(tenantWhere(lmsAssignments, tid))
-    .orderBy(desc(lmsAssignments.assignedAt))
-    .limit(5);
+  const [rows, recent] = await Promise.all([
+    ctx.db.run((tx) =>
+      tx
+        .select({
+          id: lmsAssignments.id,
+          moduleId: lmsAssignments.moduleId,
+          moduleTitle: lmsModules.title,
+          userId: lmsAssignments.userId,
+          userName: lmsUsers.name,
+          userEmail: lmsUsers.email,
+          assignedAt: lmsAssignments.assignedAt,
+          dueAt: lmsAssignments.dueAt,
+          completedAt: lmsAssignments.completedAt,
+        })
+        .from(lmsAssignments)
+        .innerJoin(lmsModules, eq(lmsModules.id, lmsAssignments.moduleId))
+        .innerJoin(lmsUsers, eq(lmsUsers.id, lmsAssignments.userId))
+        .where(tenantWhere(lmsAssignments, tid))
+        .orderBy(asc(lmsModules.title), asc(lmsUsers.name)),
+    ),
+    ctx.db.run((tx) =>
+      tx
+        .select({
+          id: lmsAssignments.id,
+          moduleTitle: lmsModules.title,
+          userName: lmsUsers.name,
+          assignedAt: lmsAssignments.assignedAt,
+        })
+        .from(lmsAssignments)
+        .innerJoin(lmsModules, eq(lmsModules.id, lmsAssignments.moduleId))
+        .innerJoin(lmsUsers, eq(lmsUsers.id, lmsAssignments.userId))
+        .where(tenantWhere(lmsAssignments, tid))
+        .orderBy(desc(lmsAssignments.assignedAt))
+        .limit(5),
+    ),
+  ]);
 
   const now = Date.now();
   const soonMs = 14 * 24 * 60 * 60 * 1000;

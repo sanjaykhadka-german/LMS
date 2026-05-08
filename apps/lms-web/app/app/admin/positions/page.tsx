@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { and, asc, eq, sql } from "drizzle-orm";
-import { db, lmsDepartments, lmsPositions, lmsUsers } from "@tracey/db";
+import { lmsDepartments, lmsPositions, lmsUsers } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
 import { Button } from "~/components/ui/button";
@@ -15,33 +15,37 @@ export default async function PositionsPage() {
   const ctx = await requireAdmin();
   const tid = ctx.traceyTenantId;
   const [positions, departments] = await Promise.all([
-    db
-      .select({
-        id: lmsPositions.id,
-        name: lmsPositions.name,
-        parentId: lmsPositions.parentId,
-        departmentId: lmsPositions.departmentId,
-        sortOrder: lmsPositions.sortOrder,
-        departmentName: lmsDepartments.name,
-        headcount: sql<number>`(
-          select count(*)::int from ${lmsUsers}
-            where ${lmsUsers.positionId} = ${lmsPositions.id}
-              and ${lmsUsers.isActiveFlag} = true
-              and ${lmsUsers.traceyTenantId} = ${tid}
-        )`,
-      })
-      .from(lmsPositions)
-      .leftJoin(
-        lmsDepartments,
-        and(eq(lmsDepartments.id, lmsPositions.departmentId), tenantWhere(lmsDepartments, tid)),
-      )
-      .where(tenantWhere(lmsPositions, tid))
-      .orderBy(asc(lmsPositions.sortOrder), asc(lmsPositions.name)),
-    db
-      .select()
-      .from(lmsDepartments)
-      .where(tenantWhere(lmsDepartments, tid))
-      .orderBy(asc(lmsDepartments.name)),
+    ctx.db.run((tx) =>
+      tx
+        .select({
+          id: lmsPositions.id,
+          name: lmsPositions.name,
+          parentId: lmsPositions.parentId,
+          departmentId: lmsPositions.departmentId,
+          sortOrder: lmsPositions.sortOrder,
+          departmentName: lmsDepartments.name,
+          headcount: sql<number>`(
+            select count(*)::int from ${lmsUsers}
+              where ${lmsUsers.positionId} = ${lmsPositions.id}
+                and ${lmsUsers.isActiveFlag} = true
+                and ${lmsUsers.traceyTenantId} = ${tid}
+          )`,
+        })
+        .from(lmsPositions)
+        .leftJoin(
+          lmsDepartments,
+          and(eq(lmsDepartments.id, lmsPositions.departmentId), tenantWhere(lmsDepartments, tid)),
+        )
+        .where(tenantWhere(lmsPositions, tid))
+        .orderBy(asc(lmsPositions.sortOrder), asc(lmsPositions.name)),
+    ),
+    ctx.db.run((tx) =>
+      tx
+        .select()
+        .from(lmsDepartments)
+        .where(tenantWhere(lmsDepartments, tid))
+        .orderBy(asc(lmsDepartments.name)),
+    ),
   ]);
 
   const positionLookup = new Map(positions.map((p) => [p.id, p.name]));

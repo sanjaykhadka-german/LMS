@@ -2,18 +2,37 @@
 
 import { useEffect } from "react";
 
+// In production: register /sw.js so the app is installable offline.
+// In development: forcibly *unregister* any existing SW and wipe its caches.
+// Turbopack rotates /_next/static chunk hashes on every code edit, so a
+// cache-first SW from a prior session yields "module factory not available"
+// runtime errors when the new HTML references chunks that no longer exist.
+const ENABLED = process.env.NODE_ENV === "production";
+
 export function RegisterServiceWorker() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!("serviceWorker" in navigator)) return;
-    // Defer past the first paint so we don't compete with hydration.
+
+    if (!ENABLED) {
+      void navigator.serviceWorker
+        .getRegistrations()
+        .then((regs) => Promise.all(regs.map((r) => r.unregister())))
+        .catch(() => undefined);
+      if ("caches" in window) {
+        void caches
+          .keys()
+          .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+          .catch(() => undefined);
+      }
+      return;
+    }
+
+    // Production: defer past first paint so we don't compete with hydration.
     const onLoad = () => {
       navigator.serviceWorker
         .register("/sw.js", { scope: "/" })
-        .catch(() => {
-          // Swallow — registration can legitimately fail in dev (HTTP, private
-          // window) and there's nothing the user can do about it.
-        });
+        .catch(() => undefined);
     };
     if (document.readyState === "complete") {
       onLoad();

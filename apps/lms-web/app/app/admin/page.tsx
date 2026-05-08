@@ -67,52 +67,74 @@ export default async function AdminOverviewPage({
     modules,
     model,
   ] = await Promise.all([
-    db
-      .select({ employeeCount: sql<number>`count(*)::int` })
-      .from(lmsUsers)
-      .where(eq(lmsUsers.traceyTenantId, tid)),
-    db
-      .select({ activeCount: sql<number>`count(*)::int` })
-      .from(lmsUsers)
-      .where(and(eq(lmsUsers.isActiveFlag, true), eq(lmsUsers.traceyTenantId, tid))),
-    db
-      .select({ deptCount: sql<number>`count(*)::int` })
-      .from(lmsDepartments)
-      .where(tenantWhere(lmsDepartments, tid)),
-    db
-      .select({ employerCount: sql<number>`count(*)::int` })
-      .from(lmsEmployers)
-      .where(tenantWhere(lmsEmployers, tid)),
-    db
-      .select({ machineCount: sql<number>`count(*)::int` })
-      .from(lmsMachines)
-      .where(tenantWhere(lmsMachines, tid)),
-    db
-      .select({ positionCount: sql<number>`count(*)::int` })
-      .from(lmsPositions)
-      .where(tenantWhere(lmsPositions, tid)),
-    db
-      .select({ moduleCount: sql<number>`count(*)::int` })
-      .from(lmsModules)
-      .where(tenantWhere(lmsModules, tid)),
-    db
-      .select({ assignmentCount: sql<number>`count(*)::int` })
-      .from(lmsAssignments)
-      .where(tenantWhere(lmsAssignments, tid)),
-    db
-      .select({ attemptCount: sql<number>`count(*)::int` })
-      .from(lmsAttempts)
-      .where(tenantWhere(lmsAttempts, tid)),
-    db
-      .select({ id: lmsDepartments.id, name: lmsDepartments.name })
-      .from(lmsDepartments)
-      .where(tenantWhere(lmsDepartments, tid))
-      .orderBy(asc(lmsDepartments.name)),
-    db
-      .select({ id: lmsModules.id, title: lmsModules.title })
-      .from(lmsModules)
-      .where(tenantWhere(lmsModules, tid))
-      .orderBy(asc(lmsModules.title)),
+    ctx.db.run((tx) =>
+      tx
+        .select({ employeeCount: sql<number>`count(*)::int` })
+        .from(lmsUsers)
+        .where(eq(lmsUsers.traceyTenantId, tid)),
+    ),
+    ctx.db.run((tx) =>
+      tx
+        .select({ activeCount: sql<number>`count(*)::int` })
+        .from(lmsUsers)
+        .where(and(eq(lmsUsers.isActiveFlag, true), eq(lmsUsers.traceyTenantId, tid))),
+    ),
+    ctx.db.run((tx) =>
+      tx
+        .select({ deptCount: sql<number>`count(*)::int` })
+        .from(lmsDepartments)
+        .where(tenantWhere(lmsDepartments, tid)),
+    ),
+    ctx.db.run((tx) =>
+      tx
+        .select({ employerCount: sql<number>`count(*)::int` })
+        .from(lmsEmployers)
+        .where(tenantWhere(lmsEmployers, tid)),
+    ),
+    ctx.db.run((tx) =>
+      tx
+        .select({ machineCount: sql<number>`count(*)::int` })
+        .from(lmsMachines)
+        .where(tenantWhere(lmsMachines, tid)),
+    ),
+    ctx.db.run((tx) =>
+      tx
+        .select({ positionCount: sql<number>`count(*)::int` })
+        .from(lmsPositions)
+        .where(tenantWhere(lmsPositions, tid)),
+    ),
+    ctx.db.run((tx) =>
+      tx
+        .select({ moduleCount: sql<number>`count(*)::int` })
+        .from(lmsModules)
+        .where(tenantWhere(lmsModules, tid)),
+    ),
+    ctx.db.run((tx) =>
+      tx
+        .select({ assignmentCount: sql<number>`count(*)::int` })
+        .from(lmsAssignments)
+        .where(tenantWhere(lmsAssignments, tid)),
+    ),
+    ctx.db.run((tx) =>
+      tx
+        .select({ attemptCount: sql<number>`count(*)::int` })
+        .from(lmsAttempts)
+        .where(tenantWhere(lmsAttempts, tid)),
+    ),
+    ctx.db.run((tx) =>
+      tx
+        .select({ id: lmsDepartments.id, name: lmsDepartments.name })
+        .from(lmsDepartments)
+        .where(tenantWhere(lmsDepartments, tid))
+        .orderBy(asc(lmsDepartments.name)),
+    ),
+    ctx.db.run((tx) =>
+      tx
+        .select({ id: lmsModules.id, title: lmsModules.title })
+        .from(lmsModules)
+        .where(tenantWhere(lmsModules, tid))
+        .orderBy(asc(lmsModules.title)),
+    ),
     buildDashboardModel({ tid, from, to, deptId, moduleId }),
   ]);
 

@@ -1,5 +1,6 @@
 import "server-only";
 import { redirect } from "next/navigation";
+import { forTenant } from "@tracey/db";
 import { requireTenant } from "./current";
 import { getOrProvisionLmsUser, type LearnerContext } from "~/lib/lms/learner";
 
@@ -31,5 +32,6 @@ export async function requireAdmin(): Promise<LearnerContext & { role: "owner" |
     traceyTenantId: tenant.id,
     lmsUser,
     role,
+    db: forTenant(tenant.id),
   };
 }

@@ -1,7 +1,7 @@
 import "server-only";
 import { and, desc, eq, gte, inArray, isNotNull, lt, sql } from "drizzle-orm";
 import {
-  db,
+  forTenant,
   lmsAssignments,
   lmsAttempts,
   lmsDepartments,
@@ -90,7 +90,8 @@ export type DashboardModel = {
 export async function latestAttemptsByUserModule(
   tid: string,
 ): Promise<Map<number, Map<number, boolean>>> {
-  const rows = (await db.execute(sql`
+  const rows = (await forTenant(tid).run((tx) =>
+    tx.execute(sql`
     select user_id, module_id, passed
     from (
       select user_id, module_id, passed,
@@ -99,7 +100,8 @@ export async function latestAttemptsByUserModule(
       where tracey_tenant_id = ${tid}
     ) t
     where rn = 1
-  `)) as unknown as Array<{ user_id: number; module_id: number; passed: boolean | null }>;
+  `),
+  )) as unknown as Array<{ user_id: number; module_id: number; passed: boolean | null }>;
 
   const out = new Map<number, Map<number, boolean>>();
   for (const r of rows) {
@@ -116,118 +118,129 @@ export async function latestAttemptsByUserModule(
 export async function buildDashboardModel(
   f: DashboardFilters,
 ): Promise<DashboardModel> {
-  // 1) Resolve scoped users (always — we need names + dept for charts/tables).
-  const userRows = await db
-    .select({
-      id: lmsUsers.id,
-      name: lmsUsers.name,
-      departmentId: lmsUsers.departmentId,
-      isActive: lmsUsers.isActiveFlag,
-    })
-    .from(lmsUsers)
-    .where(
-      and(
-        eq(lmsUsers.traceyTenantId, f.tid),
-        ...(f.deptId != null ? [eq(lmsUsers.departmentId, f.deptId)] : []),
-      ),
-    );
+  // All five queries share a single tenant-scoped transaction so RLS sees
+  // `app.tenant_id` once and queries can run sequentially / in parallel
+  // against the same connection without re-establishing the GUC.
+  const userScope = f.deptId != null;
+  const { userRows, deptRows, moduleRows, windowAttempts, scopedAssignments, recentRows } =
+    await forTenant(f.tid).run(async (tx) => {
+      // 1) Resolve scoped users (always — we need names + dept for charts/tables).
+      const userRows = await tx
+        .select({
+          id: lmsUsers.id,
+          name: lmsUsers.name,
+          departmentId: lmsUsers.departmentId,
+          isActive: lmsUsers.isActiveFlag,
+        })
+        .from(lmsUsers)
+        .where(
+          and(
+            eq(lmsUsers.traceyTenantId, f.tid),
+            ...(f.deptId != null ? [eq(lmsUsers.departmentId, f.deptId)] : []),
+          ),
+        );
+      const scopedUserIds = userRows.map((u) => u.id);
+
+      // 2) Departments + modules (for charting joins).
+      const [deptRows, moduleRows] = await Promise.all([
+        tx
+          .select({ id: lmsDepartments.id, name: lmsDepartments.name })
+          .from(lmsDepartments)
+          .where(eq(lmsDepartments.traceyTenantId, f.tid)),
+        tx
+          .select({
+            id: lmsModules.id,
+            title: lmsModules.title,
+            validForDays: lmsModules.validForDays,
+          })
+          .from(lmsModules)
+          .where(eq(lmsModules.traceyTenantId, f.tid)),
+      ]);
+
+      // 3) Attempts in window — fetch full rows then aggregate in JS.
+      const attemptWindowFilters = [
+        eq(lmsAttempts.traceyTenantId, f.tid),
+        gte(lmsAttempts.createdAt, f.from),
+        lt(lmsAttempts.createdAt, f.to),
+      ];
+      if (f.moduleId != null) {
+        attemptWindowFilters.push(eq(lmsAttempts.moduleId, f.moduleId));
+      }
+      if (userScope) {
+        if (scopedUserIds.length === 0) {
+          attemptWindowFilters.push(sql`false`);
+        } else {
+          attemptWindowFilters.push(inArray(lmsAttempts.userId, scopedUserIds));
+        }
+      }
+      const windowAttempts = await tx
+        .select({
+          id: lmsAttempts.id,
+          userId: lmsAttempts.userId,
+          moduleId: lmsAttempts.moduleId,
+          passed: lmsAttempts.passed,
+          score: lmsAttempts.score,
+          createdAt: lmsAttempts.createdAt,
+        })
+        .from(lmsAttempts)
+        .where(and(...attemptWindowFilters));
+
+      // 4) Assignments in scope (no time window — compliance is point-in-time).
+      const assignmentFilters = [eq(lmsAssignments.traceyTenantId, f.tid)];
+      if (f.moduleId != null) {
+        assignmentFilters.push(eq(lmsAssignments.moduleId, f.moduleId));
+      }
+      if (userScope) {
+        if (scopedUserIds.length === 0) {
+          assignmentFilters.push(sql`false`);
+        } else {
+          assignmentFilters.push(inArray(lmsAssignments.userId, scopedUserIds));
+        }
+      }
+      const scopedAssignments = await tx
+        .select({
+          id: lmsAssignments.id,
+          userId: lmsAssignments.userId,
+          moduleId: lmsAssignments.moduleId,
+          dueAt: lmsAssignments.dueAt,
+          completedAt: lmsAssignments.completedAt,
+        })
+        .from(lmsAssignments)
+        .where(and(...assignmentFilters));
+
+      // 5) Recent attempts (last 10, all-time, scope-aware).
+      const recentFilters = [eq(lmsAttempts.traceyTenantId, f.tid)];
+      if (f.moduleId != null) recentFilters.push(eq(lmsAttempts.moduleId, f.moduleId));
+      if (userScope) {
+        if (scopedUserIds.length === 0) recentFilters.push(sql`false`);
+        else recentFilters.push(inArray(lmsAttempts.userId, scopedUserIds));
+      }
+      const recentRows = await tx
+        .select({
+          id: lmsAttempts.id,
+          userId: lmsAttempts.userId,
+          moduleId: lmsAttempts.moduleId,
+          score: lmsAttempts.score,
+          passed: lmsAttempts.passed,
+          createdAt: lmsAttempts.createdAt,
+          userName: lmsUsers.name,
+          moduleTitle: lmsModules.title,
+        })
+        .from(lmsAttempts)
+        .innerJoin(lmsUsers, eq(lmsUsers.id, lmsAttempts.userId))
+        .innerJoin(lmsModules, eq(lmsModules.id, lmsAttempts.moduleId))
+        .where(and(...recentFilters, isNotNull(lmsAttempts.createdAt)))
+        .orderBy(desc(lmsAttempts.createdAt))
+        .limit(10);
+
+      return { userRows, deptRows, moduleRows, windowAttempts, scopedAssignments, recentRows };
+    });
+
   const userById = new Map(userRows.map((u) => [u.id, u]));
   const scopedUserIds = userRows.map((u) => u.id);
-  const userScope = f.deptId != null;
-
-  // 2) Departments + modules (for charting joins).
-  const [deptRows, moduleRows] = await Promise.all([
-    db
-      .select({ id: lmsDepartments.id, name: lmsDepartments.name })
-      .from(lmsDepartments)
-      .where(eq(lmsDepartments.traceyTenantId, f.tid)),
-    db
-      .select({
-        id: lmsModules.id,
-        title: lmsModules.title,
-        validForDays: lmsModules.validForDays,
-      })
-      .from(lmsModules)
-      .where(eq(lmsModules.traceyTenantId, f.tid)),
-  ]);
+  void scopedUserIds;
   const deptById = new Map(deptRows.map((d) => [d.id, d]));
   const moduleById = new Map(moduleRows.map((m) => [m.id, m]));
-
-  // 3) Attempts in window — fetch full rows then aggregate in JS.
-  const attemptWindowFilters = [
-    eq(lmsAttempts.traceyTenantId, f.tid),
-    gte(lmsAttempts.createdAt, f.from),
-    lt(lmsAttempts.createdAt, f.to),
-  ];
-  if (f.moduleId != null) {
-    attemptWindowFilters.push(eq(lmsAttempts.moduleId, f.moduleId));
-  }
-  if (userScope) {
-    if (scopedUserIds.length === 0) {
-      attemptWindowFilters.push(sql`false`);
-    } else {
-      attemptWindowFilters.push(inArray(lmsAttempts.userId, scopedUserIds));
-    }
-  }
-  const windowAttempts = await db
-    .select({
-      id: lmsAttempts.id,
-      userId: lmsAttempts.userId,
-      moduleId: lmsAttempts.moduleId,
-      passed: lmsAttempts.passed,
-      score: lmsAttempts.score,
-      createdAt: lmsAttempts.createdAt,
-    })
-    .from(lmsAttempts)
-    .where(and(...attemptWindowFilters));
-
-  // 4) Assignments in scope (no time window — compliance is point-in-time).
-  const assignmentFilters = [eq(lmsAssignments.traceyTenantId, f.tid)];
-  if (f.moduleId != null) {
-    assignmentFilters.push(eq(lmsAssignments.moduleId, f.moduleId));
-  }
-  if (userScope) {
-    if (scopedUserIds.length === 0) {
-      assignmentFilters.push(sql`false`);
-    } else {
-      assignmentFilters.push(inArray(lmsAssignments.userId, scopedUserIds));
-    }
-  }
-  const scopedAssignments = await db
-    .select({
-      id: lmsAssignments.id,
-      userId: lmsAssignments.userId,
-      moduleId: lmsAssignments.moduleId,
-      dueAt: lmsAssignments.dueAt,
-      completedAt: lmsAssignments.completedAt,
-    })
-    .from(lmsAssignments)
-    .where(and(...assignmentFilters));
-
-  // 5) Recent attempts (last 10, all-time, scope-aware).
-  const recentFilters = [eq(lmsAttempts.traceyTenantId, f.tid)];
-  if (f.moduleId != null) recentFilters.push(eq(lmsAttempts.moduleId, f.moduleId));
-  if (userScope) {
-    if (scopedUserIds.length === 0) recentFilters.push(sql`false`);
-    else recentFilters.push(inArray(lmsAttempts.userId, scopedUserIds));
-  }
-  const recentRows = await db
-    .select({
-      id: lmsAttempts.id,
-      userId: lmsAttempts.userId,
-      moduleId: lmsAttempts.moduleId,
-      score: lmsAttempts.score,
-      passed: lmsAttempts.passed,
-      createdAt: lmsAttempts.createdAt,
-      userName: lmsUsers.name,
-      moduleTitle: lmsModules.title,
-    })
-    .from(lmsAttempts)
-    .innerJoin(lmsUsers, eq(lmsUsers.id, lmsAttempts.userId))
-    .innerJoin(lmsModules, eq(lmsModules.id, lmsAttempts.moduleId))
-    .where(and(...recentFilters, isNotNull(lmsAttempts.createdAt)))
-    .orderBy(desc(lmsAttempts.createdAt))
-    .limit(10);
 
   // ---------- Aggregations ----------
   const attemptsInWindow = windowAttempts.length;

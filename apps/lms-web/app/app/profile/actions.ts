@@ -66,10 +66,11 @@ export async function updateProfileAction(
     }
   } else if (removePhoto && lmsUser.photoFilename) {
     nextPhotoFilename = null;
-    await deleteStoredPhoto(lmsUser.photoFilename);
+    await deleteStoredPhoto(lmsUser.photoFilename, tid);
   }
 
   const fullName = `${data.firstName} ${data.lastName}`.trim();
+  // allow-cross-tenant: public.users is excluded from RLS in 0004; updating own row by PK.
   await db
     .update(lmsUsers)
     .set({
@@ -84,6 +85,7 @@ export async function updateProfileAction(
     .where(eq(lmsUsers.id, lmsUser.id));
 
   // Mirror the display name into Auth.js so the topbar greeting stays in sync.
+  // allow-cross-tenant: Tracey app.users; uuid-keyed, not RLS-covered.
   await db
     .update(users)
     .set({ name: fullName, updatedAt: new Date() })
@@ -131,6 +133,7 @@ export async function changePasswordAction(
   }
   const data = parsed.data;
 
+  // allow-cross-tenant: Tracey app.users; uuid-keyed, not RLS-covered.
   const [authUser] = await db
     .select({ id: users.id, passwordHash: users.passwordHash })
     .from(users)
@@ -154,6 +157,7 @@ export async function changePasswordAction(
   }
 
   const hash = await hashPassword(data.next);
+  // allow-cross-tenant: Tracey app.users; updating the caller's own row by uuid.
   await db
     .update(users)
     .set({ passwordHash: hash, updatedAt: new Date() })

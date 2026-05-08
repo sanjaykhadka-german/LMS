@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import {
-  db,
+  forTenant,
   lmsContentItems,
   lmsContentItemMedia,
   lmsModuleMedia,
@@ -32,11 +32,13 @@ const updateSchema = z.object({
 });
 
 async function ownedModule(id: number, tid: string) {
-  const [row] = await db
-    .select()
-    .from(lmsModules)
-    .where(and(eq(lmsModules.id, id), tenantWhere(lmsModules, tid)))
-    .limit(1);
+  const [row] = await forTenant(tid).run((tx) =>
+    tx
+      .select()
+      .from(lmsModules)
+      .where(and(eq(lmsModules.id, id), tenantWhere(lmsModules, tid)))
+      .limit(1),
+  );
   return row ?? null;
 }
 
@@ -60,15 +62,17 @@ export async function updateModuleAction(formData: FormData): Promise<void> {
       ? parseInt(parsed.data.validForDays, 10)
       : null;
 
-  await db
-    .update(lmsModules)
-    .set({
-      title: parsed.data.title,
-      description: parsed.data.description ?? "",
-      validForDays,
-      isPublished: parsed.data.isPublished === "1",
-    })
-    .where(and(eq(lmsModules.id, parsed.data.id), tenantWhere(lmsModules, tid)));
+  await ctx.db.run((tx) =>
+    tx
+      .update(lmsModules)
+      .set({
+        title: parsed.data.title,
+        description: parsed.data.description ?? "",
+        validForDays,
+        isPublished: parsed.data.isPublished === "1",
+      })
+      .where(and(eq(lmsModules.id, parsed.data.id), tenantWhere(lmsModules, tid))),
+  );
 
   await logAuditEvent({
     tenantId: tid,
@@ -114,11 +118,13 @@ export async function setModuleCoverAction(formData: FormData): Promise<void> {
   }
 
   const previous = target.coverPath ?? "";
-  await db
-    .update(lmsModules)
-    .set({ coverPath: stored })
-    .where(and(eq(lmsModules.id, id), tenantWhere(lmsModules, tid)));
-  if (previous && previous !== stored) await deleteStoredPhoto(previous);
+  await ctx.db.run((tx) =>
+    tx
+      .update(lmsModules)
+      .set({ coverPath: stored })
+      .where(and(eq(lmsModules.id, id), tenantWhere(lmsModules, tid))),
+  );
+  if (previous && previous !== stored) await deleteStoredPhoto(previous, tid);
 
   await logAuditEvent({
     tenantId: tid,
@@ -141,11 +147,13 @@ export async function clearModuleCoverAction(formData: FormData): Promise<void> 
   if (!target) throw new Error("Module not found");
 
   const previous = target.coverPath ?? "";
-  await db
-    .update(lmsModules)
-    .set({ coverPath: "" })
-    .where(and(eq(lmsModules.id, id), tenantWhere(lmsModules, tid)));
-  if (previous) await deleteStoredPhoto(previous);
+  await ctx.db.run((tx) =>
+    tx
+      .update(lmsModules)
+      .set({ coverPath: "" })
+      .where(and(eq(lmsModules.id, id), tenantWhere(lmsModules, tid))),
+  );
+  if (previous) await deleteStoredPhoto(previous, tid);
 
   revalidatePath(`/app/admin/modules/${id}`);
 }
@@ -183,13 +191,15 @@ export async function addModuleMediaAction(formData: FormData): Promise<void> {
   const ext = dot >= 0 ? stored.slice(dot + 1).toLowerCase() : "";
   const kind = ["mp4", "mov", "webm"].includes(ext) ? "video" : "image";
 
-  await db.insert(lmsModuleMedia).values({
-    moduleId: id,
-    filePath: stored,
-    kind,
-    position: 0,
-    traceyTenantId: tid,
-  });
+  await ctx.db.run((tx) =>
+    tx.insert(lmsModuleMedia).values({
+      moduleId: id,
+      filePath: stored,
+      kind,
+      position: 0,
+      traceyTenantId: tid,
+    }),
+  );
   revalidatePath(`/app/admin/modules/${id}`);
 }
 
@@ -201,19 +211,21 @@ export async function removeModuleMediaAction(formData: FormData): Promise<void>
   if (!Number.isFinite(moduleId) || !Number.isFinite(mediaId)) throw new Error("Bad id");
   if (!(await ownedModule(moduleId, tid))) throw new Error("Module not found");
 
-  const [target] = await db
-    .select()
-    .from(lmsModuleMedia)
-    .where(and(eq(lmsModuleMedia.id, mediaId), tenantWhere(lmsModuleMedia, tid)))
-    .limit(1);
+  const [target] = await ctx.db.run((tx) =>
+    tx
+      .select()
+      .from(lmsModuleMedia)
+      .where(and(eq(lmsModuleMedia.id, mediaId), tenantWhere(lmsModuleMedia, tid)))
+      .limit(1),
+  );
   if (!target) return;
 
-  await db.transaction(async (tx) => {
-    await tx
+  await ctx.db.run((tx) =>
+    tx
       .delete(lmsModuleMedia)
-      .where(and(eq(lmsModuleMedia.id, mediaId), tenantWhere(lmsModuleMedia, tid)));
-  });
-  if (target.filePath) await deleteStoredPhoto(target.filePath);
+      .where(and(eq(lmsModuleMedia.id, mediaId), tenantWhere(lmsModuleMedia, tid))),
+  );
+  if (target.filePath) await deleteStoredPhoto(target.filePath, tid);
 
   void ctx;
   revalidatePath(`/app/admin/modules/${moduleId}`);
@@ -231,43 +243,49 @@ export async function saveModuleVersionAction(formData: FormData): Promise<void>
   if (!m) throw new Error("Module not found");
 
   // Build the snapshot — same shape as Flask build_module_snapshot (app.py:666).
-  const [contentItems, mediaItems, questions] = await Promise.all([
-    db
-      .select()
-      .from(lmsContentItems)
-      .where(and(eq(lmsContentItems.moduleId, id), tenantWhere(lmsContentItems, tid)))
-      .orderBy(lmsContentItems.position),
-    db
-      .select()
-      .from(lmsModuleMedia)
-      .where(and(eq(lmsModuleMedia.moduleId, id), tenantWhere(lmsModuleMedia, tid)))
-      .orderBy(lmsModuleMedia.position),
-    db
-      .select()
-      .from(lmsQuestions)
-      .where(and(eq(lmsQuestions.moduleId, id), tenantWhere(lmsQuestions, tid)))
-      .orderBy(lmsQuestions.position),
-  ]);
-  const ciIds = contentItems.map((c) => c.id);
-  const ciMedia = ciIds.length
-    ? await db
-        .select()
-        .from(lmsContentItemMedia)
-        .where(tenantWhere(lmsContentItemMedia, tid))
-    : [];
+  // All five queries share one tenant-scoped transaction.
+  const { contentItems, mediaItems, questions, ciMedia, choices } = await ctx.db.run(
+    async (tx) => {
+      const [contentItems, mediaItems, questions] = await Promise.all([
+        tx
+          .select()
+          .from(lmsContentItems)
+          .where(and(eq(lmsContentItems.moduleId, id), tenantWhere(lmsContentItems, tid)))
+          .orderBy(lmsContentItems.position),
+        tx
+          .select()
+          .from(lmsModuleMedia)
+          .where(and(eq(lmsModuleMedia.moduleId, id), tenantWhere(lmsModuleMedia, tid)))
+          .orderBy(lmsModuleMedia.position),
+        tx
+          .select()
+          .from(lmsQuestions)
+          .where(and(eq(lmsQuestions.moduleId, id), tenantWhere(lmsQuestions, tid)))
+          .orderBy(lmsQuestions.position),
+      ]);
+      const ciIds = contentItems.map((c) => c.id);
+      const ciMedia = ciIds.length
+        ? await tx
+            .select()
+            .from(lmsContentItemMedia)
+            .where(tenantWhere(lmsContentItemMedia, tid))
+        : [];
+      const qIds = questions.map((q) => q.id);
+      const choices = qIds.length
+        ? await tx
+            .select()
+            .from(lmsChoices)
+            .where(tenantWhere(lmsChoices, tid))
+        : [];
+      return { contentItems, mediaItems, questions, ciMedia, choices };
+    },
+  );
   const ciMediaByItem = new Map<number, typeof ciMedia>();
   for (const x of ciMedia) {
     const arr = ciMediaByItem.get(x.contentItemId) ?? [];
     arr.push(x);
     ciMediaByItem.set(x.contentItemId, arr);
   }
-  const qIds = questions.map((q) => q.id);
-  const choices = qIds.length
-    ? await db
-        .select()
-        .from(lmsChoices)
-        .where(tenantWhere(lmsChoices, tid))
-    : [];
   const choicesByQ = new Map<number, typeof choices>();
   for (const c of choices) {
     const arr = choicesByQ.get(c.questionId) ?? [];
@@ -308,24 +326,28 @@ export async function saveModuleVersionAction(formData: FormData): Promise<void>
   };
 
   // Auto-increment version_number per module.
-  const [latest] = await db
-    .select({ versionNumber: lmsModuleVersions.versionNumber })
-    .from(lmsModuleVersions)
-    .where(
-      and(eq(lmsModuleVersions.moduleId, id), tenantWhere(lmsModuleVersions, tid)),
-    )
-    .orderBy(desc(lmsModuleVersions.versionNumber))
-    .limit(1);
+  const [latest] = await ctx.db.run((tx) =>
+    tx
+      .select({ versionNumber: lmsModuleVersions.versionNumber })
+      .from(lmsModuleVersions)
+      .where(
+        and(eq(lmsModuleVersions.moduleId, id), tenantWhere(lmsModuleVersions, tid)),
+      )
+      .orderBy(desc(lmsModuleVersions.versionNumber))
+      .limit(1),
+  );
   const nextNumber = (latest?.versionNumber ?? 0) + 1;
 
-  await db.insert(lmsModuleVersions).values({
-    moduleId: id,
-    versionNumber: nextNumber,
-    snapshotJson: JSON.stringify(snapshot),
-    createdById: ctx.lmsUser.id,
-    summary,
-    traceyTenantId: tid,
-  });
+  await ctx.db.run((tx) =>
+    tx.insert(lmsModuleVersions).values({
+      moduleId: id,
+      versionNumber: nextNumber,
+      snapshotJson: JSON.stringify(snapshot),
+      createdById: ctx.lmsUser.id,
+      summary,
+      traceyTenantId: tid,
+    }),
+  );
 
   await logAuditEvent({
     tenantId: tid,

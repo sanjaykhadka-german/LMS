@@ -2,7 +2,6 @@ import Link from "next/link";
 import { Upload } from "lucide-react";
 import { asc, desc, eq } from "drizzle-orm";
 import {
-  db,
   lmsDepartments,
   lmsEmployers,
   lmsPositions,
@@ -28,38 +27,46 @@ export default async function EmployeesPage({
   const tid = ctx.traceyTenantId;
 
   const [employees, departments, employers, positions] = await Promise.all([
-    db
-      .select({
-        id: lmsUsers.id,
-        name: lmsUsers.name,
-        email: lmsUsers.email,
-        role: lmsUsers.role,
-        isActiveFlag: lmsUsers.isActiveFlag,
-        departmentName: lmsDepartments.name,
-        employerName: lmsEmployers.name,
-        positionName: lmsPositions.name,
-      })
-      .from(lmsUsers)
-      .leftJoin(lmsDepartments, eq(lmsDepartments.id, lmsUsers.departmentId))
-      .leftJoin(lmsEmployers, eq(lmsEmployers.id, lmsUsers.employerId))
-      .leftJoin(lmsPositions, eq(lmsPositions.id, lmsUsers.positionId))
-      .where(eq(lmsUsers.traceyTenantId, tid))
-      .orderBy(desc(lmsUsers.role), asc(lmsUsers.name)),
-    db
-      .select()
-      .from(lmsDepartments)
-      .where(tenantWhere(lmsDepartments, tid))
-      .orderBy(asc(lmsDepartments.name)),
-    db
-      .select()
-      .from(lmsEmployers)
-      .where(tenantWhere(lmsEmployers, tid))
-      .orderBy(asc(lmsEmployers.name)),
-    db
-      .select({ id: lmsPositions.id, name: lmsPositions.name })
-      .from(lmsPositions)
-      .where(tenantWhere(lmsPositions, tid))
-      .orderBy(asc(lmsPositions.name)),
+    ctx.db.run((tx) =>
+      tx
+        .select({
+          id: lmsUsers.id,
+          name: lmsUsers.name,
+          email: lmsUsers.email,
+          role: lmsUsers.role,
+          isActiveFlag: lmsUsers.isActiveFlag,
+          departmentName: lmsDepartments.name,
+          employerName: lmsEmployers.name,
+          positionName: lmsPositions.name,
+        })
+        .from(lmsUsers)
+        .leftJoin(lmsDepartments, eq(lmsDepartments.id, lmsUsers.departmentId))
+        .leftJoin(lmsEmployers, eq(lmsEmployers.id, lmsUsers.employerId))
+        .leftJoin(lmsPositions, eq(lmsPositions.id, lmsUsers.positionId))
+        .where(eq(lmsUsers.traceyTenantId, tid))
+        .orderBy(desc(lmsUsers.role), asc(lmsUsers.name)),
+    ),
+    ctx.db.run((tx) =>
+      tx
+        .select()
+        .from(lmsDepartments)
+        .where(tenantWhere(lmsDepartments, tid))
+        .orderBy(asc(lmsDepartments.name)),
+    ),
+    ctx.db.run((tx) =>
+      tx
+        .select()
+        .from(lmsEmployers)
+        .where(tenantWhere(lmsEmployers, tid))
+        .orderBy(asc(lmsEmployers.name)),
+    ),
+    ctx.db.run((tx) =>
+      tx
+        .select({ id: lmsPositions.id, name: lmsPositions.name })
+        .from(lmsPositions)
+        .where(tenantWhere(lmsPositions, tid))
+        .orderBy(asc(lmsPositions.name)),
+    ),
   ]);
 
   const activeCount = employees.filter((e) => e.isActiveFlag).length;

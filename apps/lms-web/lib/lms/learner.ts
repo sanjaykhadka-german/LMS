@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
 import {
   db,
+  forTenant,
   lmsAssignments,
   lmsAttempts,
   lmsChoices,
@@ -19,6 +20,7 @@ import {
   type LmsAssignment,
   type LmsModule,
   type LmsUser,
+  type TenantDb,
 } from "@tracey/db";
 import { requireTenant, requireUser } from "~/lib/auth/current";
 import {
@@ -65,6 +67,11 @@ export interface LearnerContext {
   traceyUserId: string;
   traceyTenantId: string;
   lmsUser: LmsUser;
+  /** Tenant-scoped transaction runner. Use `ctx.db.run(tx => ...)` for any
+   *  query that touches a `tracey_tenant_id`-bearing table — it injects
+   *  `set_config('app.tenant_id', tid, true)` so Postgres RLS policies can
+   *  enforce isolation as a backstop to the explicit tenantWhere() filter. */
+  db: TenantDb;
 }
 
 // ─── Provisioning ─────────────────────────────────────────────────────────
@@ -81,6 +88,9 @@ export async function getOrProvisionLmsUser(opts: {
   const email = opts.email.toLowerCase().trim();
   const name = (opts.name ?? email).trim();
 
+  // public.users excluded from RLS in 0004; provision path runs at sign-in
+  // BEFORE any tenant context is set; lookups by uuid or unique email.
+  // allow-cross-tenant: pre-tenant-context provision on RLS-excluded table.
   const bySub = await db
     .select()
     .from(lmsUsers)
@@ -90,12 +100,14 @@ export async function getOrProvisionLmsUser(opts: {
 
   // Existing legacy row (admin imported the user before SSO ever ran).
   // Link tracey_user_id and return.
+  // allow-cross-tenant: same reason as above.
   const byEmail = await db
     .select()
     .from(lmsUsers)
     .where(eq(lmsUsers.email, email))
     .limit(1);
   if (byEmail[0]) {
+    // allow-cross-tenant: linking PK uuid to existing public.users row.
     const linked = await db
       .update(lmsUsers)
       .set({ traceyUserId: opts.traceyUserId, traceyTenantId: opts.traceyTenantId })
@@ -111,6 +123,7 @@ export async function getOrProvisionLmsUser(opts: {
   const last = rest.join(" ");
   const passwordHash = await bcrypt.hash(crypto.randomBytes(24).toString("base64url"), 12);
 
+  // allow-cross-tenant: public.users insert at sign-in pre-tenant-context.
   const inserted = await db
     .insert(lmsUsers)
     .values({
@@ -129,6 +142,7 @@ export async function getOrProvisionLmsUser(opts: {
   if (inserted[0]) return inserted[0];
 
   // Lost the race against another concurrent provision — refetch.
+  // allow-cross-tenant: same reason as the bySub/byEmail lookups above.
   const refetch = await db
     .select()
     .from(lmsUsers)
@@ -156,7 +170,12 @@ export async function requireLearner(): Promise<LearnerContext> {
     // Match Flask: a deactivated learner can't proceed.
     redirect("/sign-in?reason=deactivated");
   }
-  return { traceyUserId: user.id, traceyTenantId: tenant.id, lmsUser };
+  return {
+    traceyUserId: user.id,
+    traceyTenantId: tenant.id,
+    lmsUser,
+    db: forTenant(tenant.id),
+  };
 }
 
 // ─── Reads ────────────────────────────────────────────────────────────────
@@ -169,53 +188,61 @@ export interface AssignmentRow {
   lastAttemptAt: Date | null;
 }
 
-export async function listAssignmentsForUser(lmsUserId: number): Promise<AssignmentRow[]> {
-  const rows = await db
-    .select({ assignment: lmsAssignments, module: lmsModules })
-    .from(lmsAssignments)
-    .innerJoin(lmsModules, eq(lmsModules.id, lmsAssignments.moduleId))
-    .where(eq(lmsAssignments.userId, lmsUserId))
-    .orderBy(desc(lmsAssignments.assignedAt));
+export async function listAssignmentsForUser(
+  lmsUserId: number,
+  traceyTenantId: string,
+): Promise<AssignmentRow[]> {
+  return forTenant(traceyTenantId).run(async (tx) => {
+    const rows = await tx
+      .select({ assignment: lmsAssignments, module: lmsModules })
+      .from(lmsAssignments)
+      .innerJoin(lmsModules, eq(lmsModules.id, lmsAssignments.moduleId))
+      .where(eq(lmsAssignments.userId, lmsUserId))
+      .orderBy(desc(lmsAssignments.assignedAt));
 
-  if (rows.length === 0) return [];
+    if (rows.length === 0) return [];
 
-  const moduleIds = rows.map((r) => r.module.id);
-  const aggs = await db
-    .select({
-      moduleId: lmsAttempts.moduleId,
-      attempts: sql<number>`count(*)::int`,
-      bestScore: sql<number | null>`max(${lmsAttempts.score})`,
-      lastAt: sql<Date | null>`max(${lmsAttempts.createdAt})`,
-    })
-    .from(lmsAttempts)
-    .where(and(eq(lmsAttempts.userId, lmsUserId), inArray(lmsAttempts.moduleId, moduleIds)))
-    .groupBy(lmsAttempts.moduleId);
+    const moduleIds = rows.map((r) => r.module.id);
+    const aggs = await tx
+      .select({
+        moduleId: lmsAttempts.moduleId,
+        attempts: sql<number>`count(*)::int`,
+        bestScore: sql<number | null>`max(${lmsAttempts.score})`,
+        lastAt: sql<Date | null>`max(${lmsAttempts.createdAt})`,
+      })
+      .from(lmsAttempts)
+      .where(and(eq(lmsAttempts.userId, lmsUserId), inArray(lmsAttempts.moduleId, moduleIds)))
+      .groupBy(lmsAttempts.moduleId);
 
-  const aggByModule = new Map(aggs.map((a) => [a.moduleId, a]));
+    const aggByModule = new Map(aggs.map((a) => [a.moduleId, a]));
 
-  return rows.map((r) => {
-    const a = aggByModule.get(r.module.id);
-    return {
-      assignment: r.assignment,
-      module: r.module,
-      attempts: a?.attempts ?? 0,
-      bestScore: a?.bestScore ?? null,
-      lastAttemptAt: a?.lastAt ?? null,
-    };
+    return rows.map((r) => {
+      const a = aggByModule.get(r.module.id);
+      return {
+        assignment: r.assignment,
+        module: r.module,
+        attempts: a?.attempts ?? 0,
+        bestScore: a?.bestScore ?? null,
+        lastAttemptAt: a?.lastAt ?? null,
+      };
+    });
   });
 }
 
 export async function getAttemptAggregates(
   lmsUserId: number,
+  traceyTenantId: string,
 ): Promise<{ total: number; avgScore: number; passRate: number }> {
-  const rows = await db
-    .select({
-      total: sql<number>`count(*)::int`,
-      avg: sql<number>`coalesce(avg(${lmsAttempts.score}), 0)::float`,
-      passed: sql<number>`count(*) filter (where ${lmsAttempts.passed} = true)::int`,
-    })
-    .from(lmsAttempts)
-    .where(eq(lmsAttempts.userId, lmsUserId));
+  const rows = await forTenant(traceyTenantId).run((tx) =>
+    tx
+      .select({
+        total: sql<number>`count(*)::int`,
+        avg: sql<number>`coalesce(avg(${lmsAttempts.score}), 0)::float`,
+        passed: sql<number>`count(*) filter (where ${lmsAttempts.passed} = true)::int`,
+      })
+      .from(lmsAttempts)
+      .where(eq(lmsAttempts.userId, lmsUserId)),
+  );
   const total = rows[0]?.total ?? 0;
   if (total === 0) return { total: 0, avgScore: 0, passRate: 0 };
   return {
@@ -227,22 +254,25 @@ export async function getAttemptAggregates(
 
 export async function listRecentAttempts(
   lmsUserId: number,
+  traceyTenantId: string,
   limit = 5,
 ): Promise<Array<{ id: number; moduleId: number; moduleTitle: string | null; score: number; passed: boolean; createdAt: Date }>> {
-  const rows = await db
-    .select({
-      id: lmsAttempts.id,
-      moduleId: lmsAttempts.moduleId,
-      moduleTitle: lmsModules.title,
-      score: lmsAttempts.score,
-      passed: lmsAttempts.passed,
-      createdAt: lmsAttempts.createdAt,
-    })
-    .from(lmsAttempts)
-    .leftJoin(lmsModules, eq(lmsModules.id, lmsAttempts.moduleId))
-    .where(eq(lmsAttempts.userId, lmsUserId))
-    .orderBy(desc(lmsAttempts.createdAt))
-    .limit(limit);
+  const rows = await forTenant(traceyTenantId).run((tx) =>
+    tx
+      .select({
+        id: lmsAttempts.id,
+        moduleId: lmsAttempts.moduleId,
+        moduleTitle: lmsModules.title,
+        score: lmsAttempts.score,
+        passed: lmsAttempts.passed,
+        createdAt: lmsAttempts.createdAt,
+      })
+      .from(lmsAttempts)
+      .leftJoin(lmsModules, eq(lmsModules.id, lmsAttempts.moduleId))
+      .where(eq(lmsAttempts.userId, lmsUserId))
+      .orderBy(desc(lmsAttempts.createdAt))
+      .limit(limit),
+  );
   return rows.map((r) => ({
     id: r.id,
     moduleId: r.moduleId,
@@ -256,50 +286,63 @@ export async function listRecentAttempts(
 export async function getAssignmentForLearner(
   lmsUserId: number,
   moduleId: number,
+  traceyTenantId: string,
 ): Promise<{ assignment: LmsAssignment; module: LmsModule } | null> {
-  const rows = await db
-    .select({ assignment: lmsAssignments, module: lmsModules })
-    .from(lmsAssignments)
-    .innerJoin(lmsModules, eq(lmsModules.id, lmsAssignments.moduleId))
-    .where(and(eq(lmsAssignments.userId, lmsUserId), eq(lmsAssignments.moduleId, moduleId)))
-    .limit(1);
+  const rows = await forTenant(traceyTenantId).run((tx) =>
+    tx
+      .select({ assignment: lmsAssignments, module: lmsModules })
+      .from(lmsAssignments)
+      .innerJoin(lmsModules, eq(lmsModules.id, lmsAssignments.moduleId))
+      .where(and(eq(lmsAssignments.userId, lmsUserId), eq(lmsAssignments.moduleId, moduleId)))
+      .limit(1),
+  );
   return rows[0] ?? null;
 }
 
 /** Port of module_for_assignment (app.py:716): returns the pinned snapshot
  *  if the assignment has a version_id, otherwise the live module. Falls
- *  back to live on JSON parse error (matches Flask try/except). */
+ *  back to live on JSON parse error (matches Flask try/except). Tenant
+ *  context is read from the assignment row that the caller already loaded. */
 export async function getModuleForAssignment(opts: {
   assignment: LmsAssignment;
   liveModule: LmsModule;
 }): Promise<LearnerModule> {
-  if (opts.assignment.versionId !== null && opts.assignment.versionId !== undefined) {
-    const snap = await db
-      .select()
-      .from(lmsModuleVersions)
-      .where(eq(lmsModuleVersions.id, opts.assignment.versionId))
-      .limit(1);
-    if (snap[0]) {
-      const hydrated = tryHydrateSnapshot(snap[0].snapshotJson, opts.liveModule);
-      if (hydrated) return hydrated;
+  const tid = opts.assignment.traceyTenantId;
+  return forTenant(tid).run(async (tx) => {
+    if (opts.assignment.versionId !== null && opts.assignment.versionId !== undefined) {
+      const snap = await tx
+        .select()
+        .from(lmsModuleVersions)
+        .where(eq(lmsModuleVersions.id, opts.assignment.versionId))
+        .limit(1);
+      if (snap[0]) {
+        const hydrated = tryHydrateSnapshot(snap[0].snapshotJson, opts.liveModule);
+        if (hydrated) return hydrated;
+      }
     }
-  }
-  return loadLiveModule(opts.liveModule);
+    return loadLiveModuleTx(tx, opts.liveModule);
+  });
 }
 
-async function loadLiveModule(m: LmsModule): Promise<LearnerModule> {
+// Internal: takes a tx so callers control the tenant transaction. The
+// public-facing `loadLiveModule(m)` (kept below as a thin wrapper for any
+// out-of-tree caller) opens its own transaction from m.traceyTenantId.
+async function loadLiveModuleTx(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  m: LmsModule,
+): Promise<LearnerModule> {
   const [contentItems, mediaItems, questions] = await Promise.all([
-    db
+    tx
       .select()
       .from(lmsContentItems)
       .where(eq(lmsContentItems.moduleId, m.id))
       .orderBy(lmsContentItems.position),
-    db
+    tx
       .select()
       .from(lmsModuleMedia)
       .where(eq(lmsModuleMedia.moduleId, m.id))
       .orderBy(lmsModuleMedia.position),
-    db
+    tx
       .select()
       .from(lmsQuestions)
       .where(eq(lmsQuestions.moduleId, m.id))
@@ -308,7 +351,7 @@ async function loadLiveModule(m: LmsModule): Promise<LearnerModule> {
 
   const ciIds = contentItems.map((c) => c.id);
   const ciMedia = ciIds.length
-    ? await db
+    ? await tx
         .select()
         .from(lmsContentItemMedia)
         .where(inArray(lmsContentItemMedia.contentItemId, ciIds))
@@ -323,7 +366,7 @@ async function loadLiveModule(m: LmsModule): Promise<LearnerModule> {
 
   const qIds = questions.map((q) => q.id);
   const choices = qIds.length
-    ? await db
+    ? await tx
         .select()
         .from(lmsChoices)
         .where(inArray(lmsChoices.questionId, qIds))
@@ -477,7 +520,7 @@ export async function submitAttempt(opts: {
   // attempt with the same tenant so cross-tenant queries stay honest.
   const tid = opts.assignment.traceyTenantId;
 
-  const attemptId = await db.transaction(async (tx) => {
+  const attemptId = await forTenant(tid).run(async (tx) => {
     const inserted = await tx
       .insert(lmsAttempts)
       .values({
@@ -520,37 +563,46 @@ export async function submitAttempt(opts: {
 export async function getAttemptForLearner(
   attemptId: number,
   lmsUserId: number,
+  traceyTenantId: string,
 ): Promise<{
   attempt: typeof lmsAttempts.$inferSelect;
   module: LearnerModule;
   review: ReviewEntry[];
 } | null> {
-  const rows = await db
-    .select()
-    .from(lmsAttempts)
-    .where(eq(lmsAttempts.id, attemptId))
-    .limit(1);
-  const attempt = rows[0];
-  if (!attempt) return null;
-  if (attempt.userId !== lmsUserId) return null; // 403 collapsed to 404 for the learner UI
+  const result = await forTenant(traceyTenantId).run(async (tx) => {
+    const rows = await tx
+      .select()
+      .from(lmsAttempts)
+      .where(eq(lmsAttempts.id, attemptId))
+      .limit(1);
+    const attempt = rows[0];
+    if (!attempt) return null;
+    if (attempt.userId !== lmsUserId) return null; // 403 → 404
 
-  const moduleRow = await db
-    .select()
-    .from(lmsModules)
-    .where(eq(lmsModules.id, attempt.moduleId))
-    .limit(1);
-  if (!moduleRow[0]) return null;
+    const moduleRow = await tx
+      .select()
+      .from(lmsModules)
+      .where(eq(lmsModules.id, attempt.moduleId))
+      .limit(1);
+    if (!moduleRow[0]) return null;
 
-  const module = await loadLiveModule(moduleRow[0]);
+    const module = await loadLiveModuleTx(tx, moduleRow[0]);
+    return { attempt, module };
+  });
+  if (!result) return null;
 
   let answers: AnswersMap = {};
   try {
-    const parsed = JSON.parse(attempt.answersJson ?? "{}");
+    const parsed = JSON.parse(result.attempt.answersJson ?? "{}");
     if (parsed && typeof parsed === "object") answers = parsed as AnswersMap;
   } catch {
     // empty
   }
-  return { attempt, module, review: attemptReview(module.questions, answers) };
+  return {
+    attempt: result.attempt,
+    module: result.module,
+    review: attemptReview(result.module.questions, answers),
+  };
 }
 
 // ─── Uploads helpers ──────────────────────────────────────────────────────
@@ -561,24 +613,27 @@ export async function getAttemptForLearner(
 export async function getUploadForLearner(
   filename: string,
   lmsUserId: number,
+  traceyTenantId: string,
 ): Promise<typeof lmsUploadedFiles.$inferSelect | null> {
-  const assignedModuleIds = (
-    await db
-      .select({ moduleId: lmsAssignments.moduleId })
-      .from(lmsAssignments)
-      .where(eq(lmsAssignments.userId, lmsUserId))
-  ).map((r) => r.moduleId);
-  if (assignedModuleIds.length === 0) return null;
+  return forTenant(traceyTenantId).run(async (tx) => {
+    const assignedModuleIds = (
+      await tx
+        .select({ moduleId: lmsAssignments.moduleId })
+        .from(lmsAssignments)
+        .where(eq(lmsAssignments.userId, lmsUserId))
+    ).map((r) => r.moduleId);
+    if (assignedModuleIds.length === 0) return null;
 
-  const referenced = await isFileReferencedByModules(filename, assignedModuleIds);
-  if (!referenced) return null;
+    const referenced = await isFileReferencedByModulesTx(tx, filename, assignedModuleIds);
+    if (!referenced) return null;
 
-  const file = await db
-    .select()
-    .from(lmsUploadedFiles)
-    .where(eq(lmsUploadedFiles.filename, filename))
-    .limit(1);
-  return file[0] ?? null;
+    const file = await tx
+      .select()
+      .from(lmsUploadedFiles)
+      .where(eq(lmsUploadedFiles.filename, filename))
+      .limit(1);
+    return file[0] ?? null;
+  });
 }
 
 /** Admin viewer: any file referenced by any module OR by any user
@@ -588,45 +643,48 @@ export async function getUploadForAdmin(
   filename: string,
   traceyTenantId: string,
 ): Promise<typeof lmsUploadedFiles.$inferSelect | null> {
-  // user.photo_filename for any user in the tenant?
-  const photoHit = await db
-    .select({ id: lmsUsers.id })
-    .from(lmsUsers)
-    .where(
-      and(
-        eq(lmsUsers.photoFilename, filename),
-        eq(lmsUsers.traceyTenantId, traceyTenantId),
-      ),
-    )
-    .limit(1);
-  if (!photoHit[0]) {
-    // Fall back to checking module-referenced files for any module the
-    // tenant has staff assigned to. Cheap to do via assignments → users.
-    const moduleIds = (
-      await db
-        .selectDistinct({ moduleId: lmsAssignments.moduleId })
-        .from(lmsAssignments)
-        .innerJoin(lmsUsers, eq(lmsUsers.id, lmsAssignments.userId))
-        .where(eq(lmsUsers.traceyTenantId, traceyTenantId))
-    ).map((r) => r.moduleId);
-    if (moduleIds.length === 0) return null;
-    const referenced = await isFileReferencedByModules(filename, moduleIds);
-    if (!referenced) return null;
-  }
-  const file = await db
-    .select()
-    .from(lmsUploadedFiles)
-    .where(eq(lmsUploadedFiles.filename, filename))
-    .limit(1);
-  return file[0] ?? null;
+  return forTenant(traceyTenantId).run(async (tx) => {
+    // user.photo_filename for any user in the tenant?
+    const photoHit = await tx
+      .select({ id: lmsUsers.id })
+      .from(lmsUsers)
+      .where(
+        and(
+          eq(lmsUsers.photoFilename, filename),
+          eq(lmsUsers.traceyTenantId, traceyTenantId),
+        ),
+      )
+      .limit(1);
+    if (!photoHit[0]) {
+      // Fall back to checking module-referenced files for any module the
+      // tenant has staff assigned to. Cheap to do via assignments → users.
+      const moduleIds = (
+        await tx
+          .selectDistinct({ moduleId: lmsAssignments.moduleId })
+          .from(lmsAssignments)
+          .innerJoin(lmsUsers, eq(lmsUsers.id, lmsAssignments.userId))
+          .where(eq(lmsUsers.traceyTenantId, traceyTenantId))
+      ).map((r) => r.moduleId);
+      if (moduleIds.length === 0) return null;
+      const referenced = await isFileReferencedByModulesTx(tx, filename, moduleIds);
+      if (!referenced) return null;
+    }
+    const file = await tx
+      .select()
+      .from(lmsUploadedFiles)
+      .where(eq(lmsUploadedFiles.filename, filename))
+      .limit(1);
+    return file[0] ?? null;
+  });
 }
 
-async function isFileReferencedByModules(
+async function isFileReferencedByModulesTx(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
   filename: string,
   moduleIds: number[],
 ): Promise<boolean> {
   // Check Module.cover_path
-  const cover = await db
+  const cover = await tx
     .select({ id: lmsModules.id })
     .from(lmsModules)
     .where(and(eq(lmsModules.coverPath, filename), inArray(lmsModules.id, moduleIds)))
@@ -634,7 +692,7 @@ async function isFileReferencedByModules(
   if (cover[0]) return true;
 
   // Check ModuleMedia.file_path
-  const modMedia = await db
+  const modMedia = await tx
     .select({ id: lmsModuleMedia.id })
     .from(lmsModuleMedia)
     .where(
@@ -644,7 +702,7 @@ async function isFileReferencedByModules(
   if (modMedia[0]) return true;
 
   // Check ContentItem.file_path (legacy single slot)
-  const ci = await db
+  const ci = await tx
     .select({ id: lmsContentItems.id })
     .from(lmsContentItems)
     .where(
@@ -657,7 +715,7 @@ async function isFileReferencedByModules(
   if (ci[0]) return true;
 
   // Check ContentItemMedia.file_path (one extra join through content_items)
-  const ciMedia = await db
+  const ciMedia = await tx
     .select({ id: lmsContentItemMedia.id })
     .from(lmsContentItemMedia)
     .innerJoin(

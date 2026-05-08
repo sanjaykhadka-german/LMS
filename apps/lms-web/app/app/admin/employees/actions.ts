@@ -8,6 +8,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import {
   db,
+  forTenant,
   lmsEmployers,
   lmsMachines,
   lmsUserMachines,
@@ -63,17 +64,19 @@ const createSchema = z.object({
 async function getOrCreateEmployer(name: string, tenantId: string): Promise<number> {
   const trimmed = name.trim();
   if (!trimmed) throw new Error("Employer name required");
-  const existing = await db
-    .select({ id: lmsEmployers.id })
-    .from(lmsEmployers)
-    .where(and(eq(lmsEmployers.name, trimmed), tenantWhere(lmsEmployers, tenantId)))
-    .limit(1);
-  if (existing[0]) return existing[0].id;
-  const [row] = await db
-    .insert(lmsEmployers)
-    .values({ name: trimmed, traceyTenantId: tenantId })
-    .returning({ id: lmsEmployers.id });
-  return row!.id;
+  return forTenant(tenantId).run(async (tx) => {
+    const existing = await tx
+      .select({ id: lmsEmployers.id })
+      .from(lmsEmployers)
+      .where(and(eq(lmsEmployers.name, trimmed), tenantWhere(lmsEmployers, tenantId)))
+      .limit(1);
+    if (existing[0]) return existing[0].id;
+    const [row] = await tx
+      .insert(lmsEmployers)
+      .values({ name: trimmed, traceyTenantId: tenantId })
+      .returning({ id: lmsEmployers.id });
+    return row!.id;
+  });
 }
 
 function generateTempPassword(): string {
@@ -128,6 +131,8 @@ export async function createEmployeeAction(_prev: FormState, formData: FormData)
   // users.email has a global UNIQUE constraint (Phase-2 SSO contract). Two
   // tenants therefore cannot share an email — surface that as a duplicate
   // error rather than silently failing on the constraint.
+  // allow-cross-tenant: public.users excluded from RLS; cross-tenant email
+  // lookup is intentional to detect collisions across workspaces.
   const dupe = await db
     .select({ id: lmsUsers.id, traceyTenantId: lmsUsers.traceyTenantId })
     .from(lmsUsers)
@@ -148,26 +153,28 @@ export async function createEmployeeAction(_prev: FormState, formData: FormData)
   const tempPw = generateTempPassword();
   const passwordHash = await bcrypt.hash(tempPw, 12);
 
-  const [row] = await db
-    .insert(lmsUsers)
-    .values({
-      email: data.email,
-      name: fullName,
-      firstName: data.firstName,
-      lastName: data.lastName,
-      passwordHash,
-      role,
-      isActiveFlag: true,
-      phone: data.phone,
-      departmentId: data.departmentId,
-      employerId,
-      startDate: data.startDate ?? null,
-      terminationDate: data.terminationDate ?? null,
-      jobTitle: data.jobTitle ?? "",
-      positionId: data.positionId,
-      traceyTenantId: tid,
-    })
-    .returning({ id: lmsUsers.id });
+  const [row] = await ctx.db.run((tx) =>
+    tx
+      .insert(lmsUsers)
+      .values({
+        email: data.email,
+        name: fullName,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        passwordHash,
+        role,
+        isActiveFlag: true,
+        phone: data.phone,
+        departmentId: data.departmentId,
+        employerId,
+        startDate: data.startDate ?? null,
+        terminationDate: data.terminationDate ?? null,
+        jobTitle: data.jobTitle ?? "",
+        positionId: data.positionId,
+        traceyTenantId: tid,
+      })
+      .returning({ id: lmsUsers.id }),
+  );
 
   await logAuditEvent({
     tenantId: tid,
@@ -211,11 +218,13 @@ export async function toggleEmployeeActiveAction(formData: FormData): Promise<vo
   const id = parseInt(String(formData.get("id") ?? ""), 10);
   if (!Number.isFinite(id)) throw new Error("Bad id");
 
-  const [target] = await db
-    .select()
-    .from(lmsUsers)
-    .where(and(eq(lmsUsers.id, id), eq(lmsUsers.traceyTenantId, tid)))
-    .limit(1);
+  const [target] = await ctx.db.run((tx) =>
+    tx
+      .select()
+      .from(lmsUsers)
+      .where(and(eq(lmsUsers.id, id), eq(lmsUsers.traceyTenantId, tid)))
+      .limit(1),
+  );
   if (!target) throw new Error("User not found");
 
   // Match Flask's "can't disable yourself" guard.
@@ -228,10 +237,12 @@ export async function toggleEmployeeActiveAction(formData: FormData): Promise<vo
   }
 
   const next = !target.isActiveFlag;
-  await db
-    .update(lmsUsers)
-    .set({ isActiveFlag: next })
-    .where(and(eq(lmsUsers.id, id), eq(lmsUsers.traceyTenantId, tid)));
+  await ctx.db.run((tx) =>
+    tx
+      .update(lmsUsers)
+      .set({ isActiveFlag: next })
+      .where(and(eq(lmsUsers.id, id), eq(lmsUsers.traceyTenantId, tid))),
+  );
 
   await logAuditEvent({
     tenantId: tid,
@@ -265,11 +276,13 @@ export async function changeEmployeeRoleAction(formData: FormData): Promise<void
     redirect("/app/admin/employees?error=forbidden");
   }
 
-  const [target] = await db
-    .select()
-    .from(lmsUsers)
-    .where(and(eq(lmsUsers.id, parsed.data.id), eq(lmsUsers.traceyTenantId, tid)))
-    .limit(1);
+  const [target] = await ctx.db.run((tx) =>
+    tx
+      .select()
+      .from(lmsUsers)
+      .where(and(eq(lmsUsers.id, parsed.data.id), eq(lmsUsers.traceyTenantId, tid)))
+      .limit(1),
+  );
   if (!target) throw new Error("User not found");
   if (target.id === ctx.lmsUser.id) {
     redirect("/app/admin/employees?error=self_role");
@@ -279,10 +292,12 @@ export async function changeEmployeeRoleAction(formData: FormData): Promise<void
     redirect("/app/admin/employees?error=forbidden");
   }
 
-  await db
-    .update(lmsUsers)
-    .set({ role: parsed.data.role })
-    .where(and(eq(lmsUsers.id, parsed.data.id), eq(lmsUsers.traceyTenantId, tid)));
+  await ctx.db.run((tx) =>
+    tx
+      .update(lmsUsers)
+      .set({ role: parsed.data.role })
+      .where(and(eq(lmsUsers.id, parsed.data.id), eq(lmsUsers.traceyTenantId, tid))),
+  );
 
   await logAuditEvent({
     tenantId: tid,
@@ -302,11 +317,13 @@ export async function resetEmployeePasswordAction(formData: FormData): Promise<v
   const id = parseInt(String(formData.get("id") ?? ""), 10);
   if (!Number.isFinite(id)) throw new Error("Bad id");
 
-  const [target] = await db
-    .select()
-    .from(lmsUsers)
-    .where(and(eq(lmsUsers.id, id), eq(lmsUsers.traceyTenantId, tid)))
-    .limit(1);
+  const [target] = await ctx.db.run((tx) =>
+    tx
+      .select()
+      .from(lmsUsers)
+      .where(and(eq(lmsUsers.id, id), eq(lmsUsers.traceyTenantId, tid)))
+      .limit(1),
+  );
   if (!target) throw new Error("User not found");
   if (target.role === "admin" && ctx.role !== "owner") {
     redirect("/app/admin/employees?error=forbidden");
@@ -314,10 +331,12 @@ export async function resetEmployeePasswordAction(formData: FormData): Promise<v
 
   const tempPw = generateTempPassword();
   const hash = await bcrypt.hash(tempPw, 12);
-  await db
-    .update(lmsUsers)
-    .set({ passwordHash: hash })
-    .where(and(eq(lmsUsers.id, id), eq(lmsUsers.traceyTenantId, tid)));
+  await ctx.db.run((tx) =>
+    tx
+      .update(lmsUsers)
+      .set({ passwordHash: hash })
+      .where(and(eq(lmsUsers.id, id), eq(lmsUsers.traceyTenantId, tid))),
+  );
 
   await logAuditEvent({
     tenantId: tid,
@@ -384,11 +403,13 @@ export async function updateEmployeeAction(formData: FormData): Promise<void> {
   }
   const data = parsed.data;
 
-  const [target] = await db
-    .select()
-    .from(lmsUsers)
-    .where(and(eq(lmsUsers.id, data.id), eq(lmsUsers.traceyTenantId, tid)))
-    .limit(1);
+  const [target] = await ctx.db.run((tx) =>
+    tx
+      .select()
+      .from(lmsUsers)
+      .where(and(eq(lmsUsers.id, data.id), eq(lmsUsers.traceyTenantId, tid)))
+      .limit(1),
+  );
   if (!target) throw new Error("User not found");
   if (target.role === "admin" && ctx.role !== "owner") {
     redirect("/app/admin/employees?error=forbidden");
@@ -423,10 +444,10 @@ export async function updateEmployeeAction(formData: FormData): Promise<void> {
     }
   } else if (removePhoto && target.photoFilename) {
     nextPhotoFilename = null;
-    await deleteStoredPhoto(target.photoFilename);
+    await deleteStoredPhoto(target.photoFilename, tid);
   }
 
-  await db.transaction(async (tx) => {
+  await ctx.db.run(async (tx) => {
     await tx
       .update(lmsUsers)
       .set({

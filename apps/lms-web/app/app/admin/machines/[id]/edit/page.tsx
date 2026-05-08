@@ -2,7 +2,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, asc, eq } from "drizzle-orm";
 import {
-  db,
   lmsDepartments,
   lmsMachineModules,
   lmsMachines,
@@ -33,31 +32,38 @@ export default async function EditMachinePage({
   const ctx = await requireAdmin();
   const tid = ctx.traceyTenantId;
 
-  const [machine] = await db
-    .select()
-    .from(lmsMachines)
-    .where(and(eq(lmsMachines.id, machineId), tenantWhere(lmsMachines, tid)))
-    .limit(1);
-  if (!machine) notFound();
-
-  const [departments, modules, links] = await Promise.all([
-    db
-      .select()
-      .from(lmsDepartments)
-      .where(tenantWhere(lmsDepartments, tid))
-      .orderBy(asc(lmsDepartments.name)),
-    db
-      .select({ id: lmsModules.id, title: lmsModules.title })
-      .from(lmsModules)
-      .where(and(eq(lmsModules.isPublished, true), tenantWhere(lmsModules, tid)))
-      .orderBy(asc(lmsModules.title)),
-    db
-      .select({ moduleId: lmsMachineModules.moduleId })
-      .from(lmsMachineModules)
-      .where(
-        and(eq(lmsMachineModules.machineId, machineId), tenantWhere(lmsMachineModules, tid)),
-      ),
+  const [[machine], departments, modules, links] = await Promise.all([
+    ctx.db.run((tx) =>
+      tx
+        .select()
+        .from(lmsMachines)
+        .where(and(eq(lmsMachines.id, machineId), tenantWhere(lmsMachines, tid)))
+        .limit(1),
+    ),
+    ctx.db.run((tx) =>
+      tx
+        .select()
+        .from(lmsDepartments)
+        .where(tenantWhere(lmsDepartments, tid))
+        .orderBy(asc(lmsDepartments.name)),
+    ),
+    ctx.db.run((tx) =>
+      tx
+        .select({ id: lmsModules.id, title: lmsModules.title })
+        .from(lmsModules)
+        .where(and(eq(lmsModules.isPublished, true), tenantWhere(lmsModules, tid)))
+        .orderBy(asc(lmsModules.title)),
+    ),
+    ctx.db.run((tx) =>
+      tx
+        .select({ moduleId: lmsMachineModules.moduleId })
+        .from(lmsMachineModules)
+        .where(
+          and(eq(lmsMachineModules.machineId, machineId), tenantWhere(lmsMachineModules, tid)),
+        ),
+    ),
   ]);
+  if (!machine) notFound();
   const linkedModuleIds = new Set(links.map((l) => l.moduleId));
 
   return (

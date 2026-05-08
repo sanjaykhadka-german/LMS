@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { and, asc, eq, sql } from "drizzle-orm";
-import { db, lmsDepartments, lmsPositions, lmsUsers } from "@tracey/db";
+import { lmsDepartments, lmsPositions, lmsUsers } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
@@ -18,27 +18,29 @@ interface ChartNode {
 export default async function OrgChartPage() {
   const ctx = await requireAdmin();
   const tid = ctx.traceyTenantId;
-  const rows = await db
-    .select({
-      id: lmsPositions.id,
-      name: lmsPositions.name,
-      parentId: lmsPositions.parentId,
-      sortOrder: lmsPositions.sortOrder,
-      departmentName: lmsDepartments.name,
-      headcount: sql<number>`(
-        select count(*)::int from ${lmsUsers}
-          where ${lmsUsers.positionId} = ${lmsPositions.id}
-            and ${lmsUsers.isActiveFlag} = true
-            and ${lmsUsers.traceyTenantId} = ${tid}
-      )`,
-    })
-    .from(lmsPositions)
-    .leftJoin(
-      lmsDepartments,
-      and(eq(lmsDepartments.id, lmsPositions.departmentId), tenantWhere(lmsDepartments, tid)),
-    )
-    .where(tenantWhere(lmsPositions, tid))
-    .orderBy(asc(lmsPositions.sortOrder), asc(lmsPositions.name));
+  const rows = await ctx.db.run((tx) =>
+    tx
+      .select({
+        id: lmsPositions.id,
+        name: lmsPositions.name,
+        parentId: lmsPositions.parentId,
+        sortOrder: lmsPositions.sortOrder,
+        departmentName: lmsDepartments.name,
+        headcount: sql<number>`(
+          select count(*)::int from ${lmsUsers}
+            where ${lmsUsers.positionId} = ${lmsPositions.id}
+              and ${lmsUsers.isActiveFlag} = true
+              and ${lmsUsers.traceyTenantId} = ${tid}
+        )`,
+      })
+      .from(lmsPositions)
+      .leftJoin(
+        lmsDepartments,
+        and(eq(lmsDepartments.id, lmsPositions.departmentId), tenantWhere(lmsDepartments, tid)),
+      )
+      .where(tenantWhere(lmsPositions, tid))
+      .orderBy(asc(lmsPositions.sortOrder), asc(lmsPositions.name)),
+  );
 
   // Build tree. Anything whose parent_id is unknown (e.g. a deleted parent)
   // surfaces as a root.
@@ -63,14 +65,16 @@ export default async function OrgChartPage() {
   }
 
   // Unassigned active staff (no position).
-  const unassignedRows = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(lmsUsers)
-    .where(
-      sql`${lmsUsers.positionId} is null
-            and ${lmsUsers.isActiveFlag} = true
-            and ${lmsUsers.traceyTenantId} = ${tid}`,
-    );
+  const unassignedRows = await ctx.db.run((tx) =>
+    tx
+      .select({ count: sql<number>`count(*)::int` })
+      .from(lmsUsers)
+      .where(
+        sql`${lmsUsers.positionId} is null
+              and ${lmsUsers.isActiveFlag} = true
+              and ${lmsUsers.traceyTenantId} = ${tid}`,
+      ),
+  );
   const unassignedCount = unassignedRows[0]?.count ?? 0;
 
   return (

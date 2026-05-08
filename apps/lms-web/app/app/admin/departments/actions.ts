@@ -3,10 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
-import { db, lmsDepartments, lmsUsers } from "@tracey/db";
+import { lmsDepartments, lmsUsers } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
 import { logAuditEvent } from "~/lib/audit";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
+
+// Worked example for the tenant-scoped query pattern. All db work for
+// LMS tables runs through `ctx.db.run((tx) => ...)` so the transaction
+// has `app.tenant_id` set for Postgres RLS (migration 0004). The
+// explicit tenantWhere() filters are kept as belt-and-suspenders.
 
 export type FormState =
   | { status: "idle" }
@@ -30,19 +35,23 @@ export async function createDepartmentAction(_prev: FormState, formData: FormDat
   }
   const name = parsed.data.name;
 
-  const existing = await db
-    .select({ id: lmsDepartments.id })
-    .from(lmsDepartments)
-    .where(and(eq(lmsDepartments.name, name), tenantWhere(lmsDepartments, tid)))
-    .limit(1);
-  if (existing[0]) {
+  const row = await ctx.db.run(async (tx) => {
+    const existing = await tx
+      .select({ id: lmsDepartments.id })
+      .from(lmsDepartments)
+      .where(and(eq(lmsDepartments.name, name), tenantWhere(lmsDepartments, tid)))
+      .limit(1);
+    if (existing[0]) return null;
+
+    const [created] = await tx
+      .insert(lmsDepartments)
+      .values({ name, traceyTenantId: tid })
+      .returning({ id: lmsDepartments.id });
+    return created ?? null;
+  });
+  if (!row) {
     return { status: "error", message: `Department '${name}' already exists.` };
   }
-
-  const [row] = await db
-    .insert(lmsDepartments)
-    .values({ name, traceyTenantId: tid })
-    .returning({ id: lmsDepartments.id });
 
   await logAuditEvent({
     tenantId: tid,
@@ -63,16 +72,15 @@ export async function deleteDepartmentAction(formData: FormData): Promise<void> 
   const id = parseInt(String(formData.get("id") ?? ""), 10);
   if (!Number.isFinite(id)) throw new Error("Bad id");
 
-  const [target] = await db
-    .select({ id: lmsDepartments.id, name: lmsDepartments.name })
-    .from(lmsDepartments)
-    .where(and(eq(lmsDepartments.id, id), tenantWhere(lmsDepartments, tid)))
-    .limit(1);
-  if (!target) throw new Error("Department not found");
-
   // Reassign users with this department to NULL — matches Flask delete path
   // (app.py:3351). Done in one tx so a partial fail leaves nothing dangling.
-  await db.transaction(async (tx) => {
+  const target = await ctx.db.run(async (tx) => {
+    const [found] = await tx
+      .select({ id: lmsDepartments.id, name: lmsDepartments.name })
+      .from(lmsDepartments)
+      .where(and(eq(lmsDepartments.id, id), tenantWhere(lmsDepartments, tid)))
+      .limit(1);
+    if (!found) return null;
     await tx
       .update(lmsUsers)
       .set({ departmentId: null })
@@ -80,7 +88,9 @@ export async function deleteDepartmentAction(formData: FormData): Promise<void> 
     await tx
       .delete(lmsDepartments)
       .where(and(eq(lmsDepartments.id, id), tenantWhere(lmsDepartments, tid)));
+    return found;
   });
+  if (!target) throw new Error("Department not found");
 
   await logAuditEvent({
     tenantId: tid,

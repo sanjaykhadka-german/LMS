@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { and, asc, eq, ilike, or } from "drizzle-orm";
-import { db, lmsModules, lmsUsers } from "@tracey/db";
+import { forTenant, lmsModules, lmsUsers } from "@tracey/db";
 import { getAuthorAccess } from "~/lib/auth/author";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
 
@@ -25,36 +25,41 @@ export async function GET(req: Request) {
   // search but modules were visible to all authors (app.py:1742).
   const includeUsers = access.membershipRole === "owner" || access.membershipRole === "admin";
 
+  const tdb = forTenant(tid);
   const [userRows, moduleRows] = await Promise.all([
     includeUsers
-      ? db
-          .select({
-            id: lmsUsers.id,
-            name: lmsUsers.name,
-            email: lmsUsers.email,
-          })
-          .from(lmsUsers)
-          .where(
-            and(
-              tenantWhere(lmsUsers, tid),
-              eq(lmsUsers.isActiveFlag, true),
-              or(
-                ilike(lmsUsers.name, like),
-                ilike(lmsUsers.firstName, like),
-                ilike(lmsUsers.lastName, like),
-                ilike(lmsUsers.email, like),
+      ? tdb.run((tx) =>
+          tx
+            .select({
+              id: lmsUsers.id,
+              name: lmsUsers.name,
+              email: lmsUsers.email,
+            })
+            .from(lmsUsers)
+            .where(
+              and(
+                tenantWhere(lmsUsers, tid),
+                eq(lmsUsers.isActiveFlag, true),
+                or(
+                  ilike(lmsUsers.name, like),
+                  ilike(lmsUsers.firstName, like),
+                  ilike(lmsUsers.lastName, like),
+                  ilike(lmsUsers.email, like),
+                ),
               ),
-            ),
-          )
-          .orderBy(asc(lmsUsers.name))
-          .limit(8)
+            )
+            .orderBy(asc(lmsUsers.name))
+            .limit(8),
+        )
       : Promise.resolve([] as Array<{ id: number; name: string; email: string }>),
-    db
-      .select({ id: lmsModules.id, title: lmsModules.title })
-      .from(lmsModules)
-      .where(and(tenantWhere(lmsModules, tid), ilike(lmsModules.title, like)))
-      .orderBy(asc(lmsModules.title))
-      .limit(8),
+    tdb.run((tx) =>
+      tx
+        .select({ id: lmsModules.id, title: lmsModules.title })
+        .from(lmsModules)
+        .where(and(tenantWhere(lmsModules, tid), ilike(lmsModules.title, like)))
+        .orderBy(asc(lmsModules.title))
+        .limit(8),
+    ),
   ]);
 
   return NextResponse.json({

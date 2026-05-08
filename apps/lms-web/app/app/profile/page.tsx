@@ -18,19 +18,25 @@ export default async function ProfilePage() {
 
   const [department, employer] = await Promise.all([
     lmsUser.departmentId
-      ? db
-          .select({ name: lmsDepartments.name })
-          .from(lmsDepartments)
-          .where(eq(lmsDepartments.id, lmsUser.departmentId))
-          .limit(1)
+      ? ctx.db
+          .run((tx) =>
+            tx
+              .select({ name: lmsDepartments.name })
+              .from(lmsDepartments)
+              .where(eq(lmsDepartments.id, lmsUser.departmentId!))
+              .limit(1),
+          )
           .then((r) => r[0]?.name ?? null)
       : Promise.resolve(null),
     lmsUser.employerId
-      ? db
-          .select({ name: lmsEmployers.name })
-          .from(lmsEmployers)
-          .where(eq(lmsEmployers.id, lmsUser.employerId))
-          .limit(1)
+      ? ctx.db
+          .run((tx) =>
+            tx
+              .select({ name: lmsEmployers.name })
+              .from(lmsEmployers)
+              .where(eq(lmsEmployers.id, lmsUser.employerId!))
+              .limit(1),
+          )
           .then((r) => r[0]?.name ?? null)
       : Promise.resolve(null),
   ]);

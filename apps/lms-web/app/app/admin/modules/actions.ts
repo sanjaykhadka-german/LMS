@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
-import { db, lmsModules } from "@tracey/db";
+import { lmsModules } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
 import { logAuditEvent } from "~/lib/audit";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
@@ -26,15 +26,17 @@ export async function createModuleAction(_prev: FormState, formData: FormData): 
     };
   }
 
-  const [row] = await db
-    .insert(lmsModules)
-    .values({
-      title: parsed.data.title,
-      isPublished: false,
-      createdById: ctx.lmsUser.id,
-      traceyTenantId: tid,
-    })
-    .returning({ id: lmsModules.id });
+  const [row] = await ctx.db.run((tx) =>
+    tx
+      .insert(lmsModules)
+      .values({
+        title: parsed.data.title,
+        isPublished: false,
+        createdById: ctx.lmsUser.id,
+        traceyTenantId: tid,
+      })
+      .returning({ id: lmsModules.id }),
+  );
 
   await logAuditEvent({
     tenantId: tid,
@@ -56,17 +58,20 @@ export async function deleteModuleAction(formData: FormData): Promise<void> {
   const id = parseInt(String(formData.get("id") ?? ""), 10);
   if (!Number.isFinite(id)) throw new Error("Bad id");
 
-  const [target] = await db
-    .select({ id: lmsModules.id, title: lmsModules.title })
-    .from(lmsModules)
-    .where(and(eq(lmsModules.id, id), tenantWhere(lmsModules, tid)))
-    .limit(1);
+  const target = await ctx.db.run(async (tx) => {
+    const [t] = await tx
+      .select({ id: lmsModules.id, title: lmsModules.title })
+      .from(lmsModules)
+      .where(and(eq(lmsModules.id, id), tenantWhere(lmsModules, tid)))
+      .limit(1);
+    if (!t) return null;
+    // FK cascades on content_items, questions, assignments, etc.
+    await tx
+      .delete(lmsModules)
+      .where(and(eq(lmsModules.id, id), tenantWhere(lmsModules, tid)));
+    return t;
+  });
   if (!target) throw new Error("Module not found");
-
-  // FK cascades on content_items, questions, assignments, etc. drop their rows.
-  await db
-    .delete(lmsModules)
-    .where(and(eq(lmsModules.id, id), tenantWhere(lmsModules, tid)));
 
   await logAuditEvent({
     tenantId: tid,

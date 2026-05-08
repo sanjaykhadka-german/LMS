@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { and, asc, desc, eq } from "drizzle-orm";
-import { db, lmsUsers, lmsWhsRecords } from "@tracey/db";
+import { lmsUsers, lmsWhsRecords } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
 import { Badge } from "~/components/ui/badge";
@@ -39,23 +39,25 @@ export default async function WhsPage({
     ? eq(lmsWhsRecords.kind, sp.kind)
     : undefined;
 
-  const records = await db
-    .select({
-      id: lmsWhsRecords.id,
-      kind: lmsWhsRecords.kind,
-      title: lmsWhsRecords.title,
-      issuedOn: lmsWhsRecords.issuedOn,
-      expiresOn: lmsWhsRecords.expiresOn,
-      severity: lmsWhsRecords.severity,
-      incidentDate: lmsWhsRecords.incidentDate,
-      userName: lmsUsers.name,
-    })
-    .from(lmsWhsRecords)
-    .leftJoin(lmsUsers, eq(lmsUsers.id, lmsWhsRecords.userId))
-    .where(
-      baseFilter ? and(baseFilter, tenantWhere(lmsWhsRecords, tid)) : tenantWhere(lmsWhsRecords, tid),
-    )
-    .orderBy(desc(lmsWhsRecords.expiresOn), asc(lmsWhsRecords.title));
+  const records = await ctx.db.run((tx) =>
+    tx
+      .select({
+        id: lmsWhsRecords.id,
+        kind: lmsWhsRecords.kind,
+        title: lmsWhsRecords.title,
+        issuedOn: lmsWhsRecords.issuedOn,
+        expiresOn: lmsWhsRecords.expiresOn,
+        severity: lmsWhsRecords.severity,
+        incidentDate: lmsWhsRecords.incidentDate,
+        userName: lmsUsers.name,
+      })
+      .from(lmsWhsRecords)
+      .leftJoin(lmsUsers, eq(lmsUsers.id, lmsWhsRecords.userId))
+      .where(
+        baseFilter ? and(baseFilter, tenantWhere(lmsWhsRecords, tid)) : tenantWhere(lmsWhsRecords, tid),
+      )
+      .orderBy(desc(lmsWhsRecords.expiresOn), asc(lmsWhsRecords.title)),
+  );
 
   const today = new Date();
   const soonMs = 30 * 24 * 60 * 60 * 1000;

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { and, eq } from "drizzle-orm";
-import { db, lmsAssignments, lmsModules } from "@tracey/db";
+import { lmsAssignments, lmsModules } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
 import { logAuditEvent } from "~/lib/audit";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
@@ -16,11 +16,13 @@ export async function bulkAssignModuleAction(formData: FormData): Promise<void> 
   const moduleId = parseInt(String(formData.get("module_id") ?? ""), 10);
   if (!Number.isFinite(moduleId)) throw new Error("Bad module id");
 
-  const [module] = await db
-    .select()
-    .from(lmsModules)
-    .where(and(eq(lmsModules.id, moduleId), tenantWhere(lmsModules, tid)))
-    .limit(1);
+  const [module] = await ctx.db.run((tx) =>
+    tx
+      .select()
+      .from(lmsModules)
+      .where(and(eq(lmsModules.id, moduleId), tenantWhere(lmsModules, tid)))
+      .limit(1),
+  );
   if (!module) throw new Error("Module not found");
 
   const userIds = formData
@@ -38,19 +40,21 @@ export async function bulkAssignModuleAction(formData: FormData): Promise<void> 
 
   // Bulk insert with ON CONFLICT DO NOTHING so existing (user, module) pairs
   // are skipped silently.
-  const inserted = await db
-    .insert(lmsAssignments)
-    .values(
-      userIds.map((userId) => ({
-        userId,
-        moduleId,
-        assignedAt: now,
-        dueAt,
-        traceyTenantId: tid,
-      })),
-    )
-    .onConflictDoNothing({ target: [lmsAssignments.userId, lmsAssignments.moduleId] })
-    .returning({ id: lmsAssignments.id });
+  const inserted = await ctx.db.run((tx) =>
+    tx
+      .insert(lmsAssignments)
+      .values(
+        userIds.map((userId) => ({
+          userId,
+          moduleId,
+          assignedAt: now,
+          dueAt,
+          traceyTenantId: tid,
+        })),
+      )
+      .onConflictDoNothing({ target: [lmsAssignments.userId, lmsAssignments.moduleId] })
+      .returning({ id: lmsAssignments.id }),
+  );
 
   await logAuditEvent({
     tenantId: tid,
@@ -74,15 +78,17 @@ export async function unassignModuleAction(formData: FormData): Promise<void> {
   const assignmentId = parseInt(String(formData.get("id") ?? ""), 10);
   if (!Number.isFinite(moduleId) || !Number.isFinite(assignmentId)) throw new Error("Bad id");
 
-  await db
-    .delete(lmsAssignments)
-    .where(
-      and(
-        eq(lmsAssignments.id, assignmentId),
-        eq(lmsAssignments.moduleId, moduleId),
-        tenantWhere(lmsAssignments, tid),
+  await ctx.db.run((tx) =>
+    tx
+      .delete(lmsAssignments)
+      .where(
+        and(
+          eq(lmsAssignments.id, assignmentId),
+          eq(lmsAssignments.moduleId, moduleId),
+          tenantWhere(lmsAssignments, tid),
+        ),
       ),
-    );
+  );
 
   await logAuditEvent({
     tenantId: tid,

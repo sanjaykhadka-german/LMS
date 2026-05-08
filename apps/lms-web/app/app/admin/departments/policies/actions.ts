@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 import {
-  db,
   lmsDepartmentModulePolicies,
   lmsDepartments,
   lmsModules,
@@ -21,14 +20,20 @@ export async function saveDepartmentPoliciesAction(formData: FormData): Promise<
   const ctx = await requireAdmin();
   const tid = ctx.traceyTenantId;
 
-  const departments = await db
-    .select({ id: lmsDepartments.id })
-    .from(lmsDepartments)
-    .where(tenantWhere(lmsDepartments, tid));
-  const moduleRows = await db
-    .select({ id: lmsModules.id })
-    .from(lmsModules)
-    .where(and(eq(lmsModules.isPublished, true), tenantWhere(lmsModules, tid)));
+  const [departments, moduleRows] = await Promise.all([
+    ctx.db.run((tx) =>
+      tx
+        .select({ id: lmsDepartments.id })
+        .from(lmsDepartments)
+        .where(tenantWhere(lmsDepartments, tid)),
+    ),
+    ctx.db.run((tx) =>
+      tx
+        .select({ id: lmsModules.id })
+        .from(lmsModules)
+        .where(and(eq(lmsModules.isPublished, true), tenantWhere(lmsModules, tid))),
+    ),
+  ]);
   const validDepartmentIds = new Set(departments.map((d) => d.id));
   const validModuleIds = new Set(moduleRows.map((m) => m.id));
 
@@ -46,14 +51,16 @@ export async function saveDepartmentPoliciesAction(formData: FormData): Promise<
     }
   }
 
-  const existingRows = await db
-    .select({
-      id: lmsDepartmentModulePolicies.id,
-      departmentId: lmsDepartmentModulePolicies.departmentId,
-      moduleId: lmsDepartmentModulePolicies.moduleId,
-    })
-    .from(lmsDepartmentModulePolicies)
-    .where(tenantWhere(lmsDepartmentModulePolicies, tid));
+  const existingRows = await ctx.db.run((tx) =>
+    tx
+      .select({
+        id: lmsDepartmentModulePolicies.id,
+        departmentId: lmsDepartmentModulePolicies.departmentId,
+        moduleId: lmsDepartmentModulePolicies.moduleId,
+      })
+      .from(lmsDepartmentModulePolicies)
+      .where(tenantWhere(lmsDepartmentModulePolicies, tid)),
+  );
   const existing = new Map<string, number>();
   for (const r of existingRows) {
     existing.set(`${r.departmentId}:${r.moduleId}`, r.id);
@@ -75,7 +82,7 @@ export async function saveDepartmentPoliciesAction(formData: FormData): Promise<
     redirect("/app/admin/departments/policies?info=nochange");
   }
 
-  await db.transaction(async (tx) => {
+  await ctx.db.run(async (tx) => {
     if (toAdd.length > 0) {
       await tx
         .insert(lmsDepartmentModulePolicies)

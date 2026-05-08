@@ -283,9 +283,21 @@ After every legacy user has signed in once (when
 `SELECT count(*) FROM public.users WHERE tracey_user_id IS NULL`
 returns 0), the pbkdf2 path can be removed in a Phase 5 cleanup.
 
-Phase 4 is now feature-complete. Phase 5 will retire the Flask service
-and remove the `LMS_ALLOWED_TENANT_ID` single-tenant gate. Phase 5 retires Flask. Each phase/slice is its own session
+Phase 4 is now feature-complete. Each phase/slice is its own session
 and its own sequence of PRs.
+
+**Phase 5 — Flask retired (2026-05-08)** moves the Flask app into a
+quarantined `legacy-flask/` directory and stops the `lms` Render service
+(`autoDeploy: false`, manually stopped in the dashboard). All routes are
+now served by `apps/lms-web/`. The `0004_enable_rls.sql` migration is
+applied to harden tenant isolation, with `public.users` deliberately
+excluded so the legacy werkzeug bridge in
+`apps/lms-web/lib/auth/legacy-bridge.ts` can keep onboarding unmigrated
+Flask users transparently. A new daily Render cron
+(`lms-whs-reminders`) replaces Flask's lazy WHS reminder pass.
+See `legacy-flask/README.md` for rollback details and the cleanup
+preconditions for a future Phase 5.x where the quarantine actually gets
+deleted.
 
 `LMS_PASS_THRESHOLD` (default `80`) controls the quiz pass mark. Set the
 same value on both Flask and `lms-web` so a learner who passes on one app

@@ -14,11 +14,11 @@ import { ModuleCard, type ModuleStatus } from "../_components/ModuleCard";
 export const metadata = { title: "My training" };
 
 export default async function MyModulesPage() {
-  const { lmsUser } = await requireLearner();
+  const { lmsUser, traceyTenantId } = await requireLearner();
   const [rows, recent, agg] = await Promise.all([
-    listAssignmentsForUser(lmsUser.id),
-    listRecentAttempts(lmsUser.id, 5),
-    getAttemptAggregates(lmsUser.id),
+    listAssignmentsForUser(lmsUser.id, traceyTenantId),
+    listRecentAttempts(lmsUser.id, traceyTenantId, 5),
+    getAttemptAggregates(lmsUser.id, traceyTenantId),
   ]);
 
   const now = Date.now();

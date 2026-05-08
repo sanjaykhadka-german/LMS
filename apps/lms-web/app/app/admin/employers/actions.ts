@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
-import { db, lmsEmployers, lmsUsers } from "@tracey/db";
+import { lmsEmployers, lmsUsers } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
 import { logAuditEvent } from "~/lib/audit";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
@@ -26,19 +26,22 @@ export async function createEmployerAction(_prev: FormState, formData: FormData)
   }
   const name = parsed.data.name;
 
-  const existing = await db
-    .select({ id: lmsEmployers.id })
-    .from(lmsEmployers)
-    .where(and(eq(lmsEmployers.name, name), tenantWhere(lmsEmployers, tid)))
-    .limit(1);
-  if (existing[0]) {
+  const row = await ctx.db.run(async (tx) => {
+    const existing = await tx
+      .select({ id: lmsEmployers.id })
+      .from(lmsEmployers)
+      .where(and(eq(lmsEmployers.name, name), tenantWhere(lmsEmployers, tid)))
+      .limit(1);
+    if (existing[0]) return null;
+    const [r] = await tx
+      .insert(lmsEmployers)
+      .values({ name, traceyTenantId: tid })
+      .returning({ id: lmsEmployers.id });
+    return r ?? null;
+  });
+  if (!row) {
     return { status: "error", message: `Employer '${name}' already exists.` };
   }
-
-  const [row] = await db
-    .insert(lmsEmployers)
-    .values({ name, traceyTenantId: tid })
-    .returning({ id: lmsEmployers.id });
 
   await logAuditEvent({
     tenantId: tid,
@@ -59,14 +62,14 @@ export async function deleteEmployerAction(formData: FormData): Promise<void> {
   const id = parseInt(String(formData.get("id") ?? ""), 10);
   if (!Number.isFinite(id)) throw new Error("Bad id");
 
-  const [target] = await db
-    .select({ id: lmsEmployers.id, name: lmsEmployers.name })
-    .from(lmsEmployers)
-    .where(and(eq(lmsEmployers.id, id), tenantWhere(lmsEmployers, tid)))
-    .limit(1);
-  if (!target) throw new Error("Employer not found");
+  const target = await ctx.db.run(async (tx) => {
+    const [t] = await tx
+      .select({ id: lmsEmployers.id, name: lmsEmployers.name })
+      .from(lmsEmployers)
+      .where(and(eq(lmsEmployers.id, id), tenantWhere(lmsEmployers, tid)))
+      .limit(1);
+    if (!t) return null;
 
-  await db.transaction(async (tx) => {
     await tx
       .update(lmsUsers)
       .set({ employerId: null })
@@ -74,7 +77,9 @@ export async function deleteEmployerAction(formData: FormData): Promise<void> {
     await tx
       .delete(lmsEmployers)
       .where(and(eq(lmsEmployers.id, id), tenantWhere(lmsEmployers, tid)));
+    return t;
   });
+  if (!target) throw new Error("Employer not found");
 
   await logAuditEvent({
     tenantId: tid,

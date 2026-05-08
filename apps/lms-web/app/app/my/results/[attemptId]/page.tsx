@@ -17,8 +17,8 @@ export default async function ResultPage({
   const id = parseInt(attemptId, 10);
   if (!Number.isFinite(id)) notFound();
 
-  const { lmsUser } = await requireLearner();
-  const data = await getAttemptForLearner(id, lmsUser.id);
+  const { lmsUser, traceyTenantId } = await requireLearner();
+  const data = await getAttemptForLearner(id, lmsUser.id, traceyTenantId);
   if (!data) notFound();
   const { attempt, module, review } = data;
   const passed = attempt.passed ?? false;

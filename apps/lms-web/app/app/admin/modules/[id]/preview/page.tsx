@@ -2,8 +2,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import {
-  db,
-  lmsChoices,
   lmsContentItemMedia,
   lmsContentItems,
   lmsModuleMedia,
@@ -29,43 +27,53 @@ export default async function ModulePreviewPage({
   const ctx = await requireAdmin();
   const tid = ctx.traceyTenantId;
 
-  const [module] = await db
-    .select()
-    .from(lmsModules)
-    .where(and(eq(lmsModules.id, moduleId), tenantWhere(lmsModules, tid)))
-    .limit(1);
+  const [module] = await ctx.db.run((tx) =>
+    tx
+      .select()
+      .from(lmsModules)
+      .where(and(eq(lmsModules.id, moduleId), tenantWhere(lmsModules, tid)))
+      .limit(1),
+  );
   if (!module) notFound();
 
   const [contentItems, mediaItems, questions] = await Promise.all([
-    db
-      .select()
-      .from(lmsContentItems)
-      .where(and(eq(lmsContentItems.moduleId, moduleId), tenantWhere(lmsContentItems, tid)))
-      .orderBy(asc(lmsContentItems.position)),
-    db
-      .select()
-      .from(lmsModuleMedia)
-      .where(and(eq(lmsModuleMedia.moduleId, moduleId), tenantWhere(lmsModuleMedia, tid)))
-      .orderBy(asc(lmsModuleMedia.position)),
-    db
-      .select()
-      .from(lmsQuestions)
-      .where(and(eq(lmsQuestions.moduleId, moduleId), tenantWhere(lmsQuestions, tid)))
-      .orderBy(asc(lmsQuestions.position)),
+    ctx.db.run((tx) =>
+      tx
+        .select()
+        .from(lmsContentItems)
+        .where(and(eq(lmsContentItems.moduleId, moduleId), tenantWhere(lmsContentItems, tid)))
+        .orderBy(asc(lmsContentItems.position)),
+    ),
+    ctx.db.run((tx) =>
+      tx
+        .select()
+        .from(lmsModuleMedia)
+        .where(and(eq(lmsModuleMedia.moduleId, moduleId), tenantWhere(lmsModuleMedia, tid)))
+        .orderBy(asc(lmsModuleMedia.position)),
+    ),
+    ctx.db.run((tx) =>
+      tx
+        .select()
+        .from(lmsQuestions)
+        .where(and(eq(lmsQuestions.moduleId, moduleId), tenantWhere(lmsQuestions, tid)))
+        .orderBy(asc(lmsQuestions.position)),
+    ),
   ]);
 
   const ciIds = contentItems.map((c) => c.id);
   const ciMedia = ciIds.length
-    ? await db
-        .select()
-        .from(lmsContentItemMedia)
-        .where(
-          and(
-            inArray(lmsContentItemMedia.contentItemId, ciIds),
-            tenantWhere(lmsContentItemMedia, tid),
-          ),
-        )
-        .orderBy(asc(lmsContentItemMedia.position))
+    ? await ctx.db.run((tx) =>
+        tx
+          .select()
+          .from(lmsContentItemMedia)
+          .where(
+            and(
+              inArray(lmsContentItemMedia.contentItemId, ciIds),
+              tenantWhere(lmsContentItemMedia, tid),
+            ),
+          )
+          .orderBy(asc(lmsContentItemMedia.position)),
+      )
     : [];
   const ciMediaByItem = new Map<number, typeof ciMedia>();
   for (const m of ciMedia) {

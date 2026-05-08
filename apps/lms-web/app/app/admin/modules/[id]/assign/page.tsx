@@ -2,7 +2,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, asc, eq } from "drizzle-orm";
 import {
-  db,
   lmsAssignments,
   lmsDepartments,
   lmsModules,
@@ -31,45 +30,51 @@ export default async function AssignModulePage({
   const ctx = await requireAdmin();
   const tid = ctx.traceyTenantId;
 
-  const [module] = await db
-    .select()
-    .from(lmsModules)
-    .where(and(eq(lmsModules.id, moduleId), tenantWhere(lmsModules, tid)))
-    .limit(1);
+  const [module] = await ctx.db.run((tx) =>
+    tx
+      .select()
+      .from(lmsModules)
+      .where(and(eq(lmsModules.id, moduleId), tenantWhere(lmsModules, tid)))
+      .limit(1),
+  );
   if (!module) notFound();
 
   const [employees, currentRows] = await Promise.all([
-    db
-      .select({
-        id: lmsUsers.id,
-        name: lmsUsers.name,
-        email: lmsUsers.email,
-        isActiveFlag: lmsUsers.isActiveFlag,
-        departmentName: lmsDepartments.name,
-      })
-      .from(lmsUsers)
-      .leftJoin(lmsDepartments, eq(lmsDepartments.id, lmsUsers.departmentId))
-      .where(eq(lmsUsers.traceyTenantId, tid))
-      .orderBy(asc(lmsUsers.name)),
-    db
-      .select({
-        id: lmsAssignments.id,
-        userId: lmsAssignments.userId,
-        userName: lmsUsers.name,
-        userEmail: lmsUsers.email,
-        assignedAt: lmsAssignments.assignedAt,
-        dueAt: lmsAssignments.dueAt,
-        completedAt: lmsAssignments.completedAt,
-      })
-      .from(lmsAssignments)
-      .innerJoin(lmsUsers, eq(lmsUsers.id, lmsAssignments.userId))
-      .where(
-        and(
-          eq(lmsAssignments.moduleId, moduleId),
-          tenantWhere(lmsAssignments, tid),
-        ),
-      )
-      .orderBy(asc(lmsUsers.name)),
+    ctx.db.run((tx) =>
+      tx
+        .select({
+          id: lmsUsers.id,
+          name: lmsUsers.name,
+          email: lmsUsers.email,
+          isActiveFlag: lmsUsers.isActiveFlag,
+          departmentName: lmsDepartments.name,
+        })
+        .from(lmsUsers)
+        .leftJoin(lmsDepartments, eq(lmsDepartments.id, lmsUsers.departmentId))
+        .where(eq(lmsUsers.traceyTenantId, tid))
+        .orderBy(asc(lmsUsers.name)),
+    ),
+    ctx.db.run((tx) =>
+      tx
+        .select({
+          id: lmsAssignments.id,
+          userId: lmsAssignments.userId,
+          userName: lmsUsers.name,
+          userEmail: lmsUsers.email,
+          assignedAt: lmsAssignments.assignedAt,
+          dueAt: lmsAssignments.dueAt,
+          completedAt: lmsAssignments.completedAt,
+        })
+        .from(lmsAssignments)
+        .innerJoin(lmsUsers, eq(lmsUsers.id, lmsAssignments.userId))
+        .where(
+          and(
+            eq(lmsAssignments.moduleId, moduleId),
+            tenantWhere(lmsAssignments, tid),
+          ),
+        )
+        .orderBy(asc(lmsUsers.name)),
+    ),
   ]);
   const alreadyAssigned = new Set(currentRows.map((r) => r.userId));
 

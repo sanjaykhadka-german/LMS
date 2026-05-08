@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { asc, sql } from "drizzle-orm";
-import { db, lmsAssignments, lmsModules, lmsQuestions } from "@tracey/db";
+import { lmsAssignments, lmsModules, lmsQuestions } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
 import { Badge } from "~/components/ui/badge";
@@ -16,25 +16,27 @@ export default async function ModulesPage() {
   const ctx = await requireAdmin();
   const tid = ctx.traceyTenantId;
 
-  const modules = await db
-    .select({
-      id: lmsModules.id,
-      title: lmsModules.title,
-      description: lmsModules.description,
-      isPublished: lmsModules.isPublished,
-      createdAt: lmsModules.createdAt,
-      questionCount: sql<number>`(
-        select count(*)::int from ${lmsQuestions}
-          where ${lmsQuestions.moduleId} = ${lmsModules.id}
-      )`,
-      assignmentCount: sql<number>`(
-        select count(*)::int from ${lmsAssignments}
-          where ${lmsAssignments.moduleId} = ${lmsModules.id}
-      )`,
-    })
-    .from(lmsModules)
-    .where(tenantWhere(lmsModules, tid))
-    .orderBy(asc(lmsModules.title));
+  const modules = await ctx.db.run((tx) =>
+    tx
+      .select({
+        id: lmsModules.id,
+        title: lmsModules.title,
+        description: lmsModules.description,
+        isPublished: lmsModules.isPublished,
+        createdAt: lmsModules.createdAt,
+        questionCount: sql<number>`(
+          select count(*)::int from ${lmsQuestions}
+            where ${lmsQuestions.moduleId} = ${lmsModules.id}
+        )`,
+        assignmentCount: sql<number>`(
+          select count(*)::int from ${lmsAssignments}
+            where ${lmsAssignments.moduleId} = ${lmsModules.id}
+        )`,
+      })
+      .from(lmsModules)
+      .where(tenantWhere(lmsModules, tid))
+      .orderBy(asc(lmsModules.title)),
+  );
 
   return (
     <div className="space-y-6">

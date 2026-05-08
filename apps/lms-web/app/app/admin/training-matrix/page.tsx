@@ -32,18 +32,22 @@ export default async function TrainingMatrixPage({
 
   // Dropdown sources + axis sources.
   const [departments, allModules] = await Promise.all([
-    db
-      .select({ id: lmsDepartments.id, name: lmsDepartments.name })
-      .from(lmsDepartments)
-      .where(tenantWhere(lmsDepartments, tid))
-      .orderBy(asc(lmsDepartments.name)),
-    db
-      .select({ id: lmsModules.id, title: lmsModules.title })
-      .from(lmsModules)
-      .where(
-        and(tenantWhere(lmsModules, tid), eq(lmsModules.isPublished, true)),
-      )
-      .orderBy(asc(lmsModules.title)),
+    ctx.db.run((tx) =>
+      tx
+        .select({ id: lmsDepartments.id, name: lmsDepartments.name })
+        .from(lmsDepartments)
+        .where(tenantWhere(lmsDepartments, tid))
+        .orderBy(asc(lmsDepartments.name)),
+    ),
+    ctx.db.run((tx) =>
+      tx
+        .select({ id: lmsModules.id, title: lmsModules.title })
+        .from(lmsModules)
+        .where(
+          and(tenantWhere(lmsModules, tid), eq(lmsModules.isPublished, true)),
+        )
+        .orderBy(asc(lmsModules.title)),
+    ),
   ]);
   const modules =
     moduleFilter != null
@@ -63,21 +67,23 @@ export default async function TrainingMatrixPage({
     const orExpr = or(ilike(lmsUsers.name, pat), ilike(lmsUsers.email, pat));
     if (orExpr) userFilters.push(orExpr);
   }
-  const users = await db
-    .select({
-      id: lmsUsers.id,
-      name: lmsUsers.name,
-      email: lmsUsers.email,
-      departmentId: lmsUsers.departmentId,
-      departmentName: lmsDepartments.name,
-    })
-    .from(lmsUsers)
-    .leftJoin(lmsDepartments, eq(lmsDepartments.id, lmsUsers.departmentId))
-    .where(and(...userFilters))
-    .orderBy(
-      sql`coalesce(${lmsDepartments.name}, '') asc`,
-      asc(lmsUsers.name),
-    );
+  const users = await ctx.db.run((tx) =>
+    tx
+      .select({
+        id: lmsUsers.id,
+        name: lmsUsers.name,
+        email: lmsUsers.email,
+        departmentId: lmsUsers.departmentId,
+        departmentName: lmsDepartments.name,
+      })
+      .from(lmsUsers)
+      .leftJoin(lmsDepartments, eq(lmsDepartments.id, lmsUsers.departmentId))
+      .where(and(...userFilters))
+      .orderBy(
+        sql`coalesce(${lmsDepartments.name}, '') asc`,
+        asc(lmsUsers.name),
+      ),
+  );
 
   // Assignments (for "•" state).
   const userIds = users.map((u) => u.id);
@@ -89,13 +95,15 @@ export default async function TrainingMatrixPage({
       inArray(lmsAssignments.userId, userIds),
       inArray(lmsAssignments.moduleId, moduleIds),
     ];
-    const rows = await db
-      .select({
-        userId: lmsAssignments.userId,
-        moduleId: lmsAssignments.moduleId,
-      })
-      .from(lmsAssignments)
-      .where(and(...assignFilters));
+    const rows = await ctx.db.run((tx) =>
+      tx
+        .select({
+          userId: lmsAssignments.userId,
+          moduleId: lmsAssignments.moduleId,
+        })
+        .from(lmsAssignments)
+        .where(and(...assignFilters)),
+    );
     for (const r of rows) assignmentSet.add(`${r.userId}|${r.moduleId}`);
   }
 

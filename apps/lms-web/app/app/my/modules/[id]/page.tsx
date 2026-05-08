@@ -19,8 +19,8 @@ export default async function MyModulePage({
   const moduleId = parseInt(id, 10);
   if (!Number.isFinite(moduleId)) notFound();
 
-  const { lmsUser } = await requireLearner();
-  const row = await getAssignmentForLearner(lmsUser.id, moduleId);
+  const { lmsUser, traceyTenantId } = await requireLearner();
+  const row = await getAssignmentForLearner(lmsUser.id, moduleId, traceyTenantId);
   if (!row) notFound();
 
   const module = await getModuleForAssignment({

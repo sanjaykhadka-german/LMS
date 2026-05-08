@@ -14,7 +14,9 @@
     "test:e2e": "playwright test",
     "test:e2e:install": "playwright install chromium",
     "reconcile:stripe": "tsx scripts/reconcile-stripe.ts",
-    "icons:pwa": "node scripts/generate-pwa-icons.mjs"
+    "cron:whs-reminders": "tsx scripts/run-whs-reminders.ts",
+    "icons:pwa": "node scripts/generate-pwa-icons.mjs",
+    "check-tenant-scope": "node scripts/check-tenant-scope.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.0",

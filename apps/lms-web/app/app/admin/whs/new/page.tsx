@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { asc, eq } from "drizzle-orm";
-import { db, lmsUsers } from "@tracey/db";
+import { lmsUsers } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
 import { WhsForm } from "../_form";
 import { createWhsRecordAction } from "../actions";
@@ -15,11 +15,13 @@ export default async function NewWhsRecordPage({
   const sp = await searchParams;
   const ctx = await requireAdmin();
 
-  const staff = await db
-    .select({ id: lmsUsers.id, name: lmsUsers.name })
-    .from(lmsUsers)
-    .where(eq(lmsUsers.traceyTenantId, ctx.traceyTenantId))
-    .orderBy(asc(lmsUsers.name));
+  const staff = await ctx.db.run((tx) =>
+    tx
+      .select({ id: lmsUsers.id, name: lmsUsers.name })
+      .from(lmsUsers)
+      .where(eq(lmsUsers.traceyTenantId, ctx.traceyTenantId))
+      .orderBy(asc(lmsUsers.name)),
+  );
 
   const banner =
     sp.error === "date"

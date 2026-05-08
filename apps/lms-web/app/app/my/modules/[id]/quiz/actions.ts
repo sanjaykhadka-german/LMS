@@ -13,8 +13,8 @@ export async function submitQuizAction(formData: FormData): Promise<void> {
   const moduleId = parseInt(String(formData.get("moduleId") ?? ""), 10);
   if (!Number.isFinite(moduleId)) throw new Error("Bad moduleId");
 
-  const { lmsUser } = await requireLearner();
-  const row = await getAssignmentForLearner(lmsUser.id, moduleId);
+  const { lmsUser, traceyTenantId } = await requireLearner();
+  const row = await getAssignmentForLearner(lmsUser.id, moduleId, traceyTenantId);
   if (!row) throw new Error("Assignment not found");
 
   const module = await getModuleForAssignment({

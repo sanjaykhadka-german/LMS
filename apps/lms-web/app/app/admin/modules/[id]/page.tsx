@@ -2,7 +2,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, asc, desc, eq } from "drizzle-orm";
 import {
-  db,
   lmsAssignments,
   lmsChoices,
   lmsContentItemMedia,
@@ -76,59 +75,73 @@ export default async function ModuleEditPage({
   const ctx = await requireAdmin();
   const tid = ctx.traceyTenantId;
 
-  const [module] = await db
-    .select()
-    .from(lmsModules)
-    .where(and(eq(lmsModules.id, moduleId), tenantWhere(lmsModules, tid)))
-    .limit(1);
+  const [module] = await ctx.db.run((tx) =>
+    tx
+      .select()
+      .from(lmsModules)
+      .where(and(eq(lmsModules.id, moduleId), tenantWhere(lmsModules, tid)))
+      .limit(1),
+  );
   if (!module) notFound();
 
   const [contentItems, moduleMedia, questions, versions, assignmentRows] = await Promise.all([
-    db
-      .select()
-      .from(lmsContentItems)
-      .where(and(eq(lmsContentItems.moduleId, moduleId), tenantWhere(lmsContentItems, tid)))
-      .orderBy(asc(lmsContentItems.position)),
-    db
-      .select()
-      .from(lmsModuleMedia)
-      .where(and(eq(lmsModuleMedia.moduleId, moduleId), tenantWhere(lmsModuleMedia, tid)))
-      .orderBy(asc(lmsModuleMedia.position)),
-    db
-      .select()
-      .from(lmsQuestions)
-      .where(and(eq(lmsQuestions.moduleId, moduleId), tenantWhere(lmsQuestions, tid)))
-      .orderBy(asc(lmsQuestions.position)),
-    db
-      .select({
-        id: lmsModuleVersions.id,
-        versionNumber: lmsModuleVersions.versionNumber,
-        summary: lmsModuleVersions.summary,
-        createdAt: lmsModuleVersions.createdAt,
-      })
-      .from(lmsModuleVersions)
-      .where(and(eq(lmsModuleVersions.moduleId, moduleId), tenantWhere(lmsModuleVersions, tid)))
-      .orderBy(desc(lmsModuleVersions.versionNumber))
-      .limit(10),
-    db
-      .select({ count: lmsAssignments.id })
-      .from(lmsAssignments)
-      .innerJoin(lmsUsers, eq(lmsUsers.id, lmsAssignments.userId))
-      .where(
-        and(
-          eq(lmsAssignments.moduleId, moduleId),
-          tenantWhere(lmsAssignments, tid),
+    ctx.db.run((tx) =>
+      tx
+        .select()
+        .from(lmsContentItems)
+        .where(and(eq(lmsContentItems.moduleId, moduleId), tenantWhere(lmsContentItems, tid)))
+        .orderBy(asc(lmsContentItems.position)),
+    ),
+    ctx.db.run((tx) =>
+      tx
+        .select()
+        .from(lmsModuleMedia)
+        .where(and(eq(lmsModuleMedia.moduleId, moduleId), tenantWhere(lmsModuleMedia, tid)))
+        .orderBy(asc(lmsModuleMedia.position)),
+    ),
+    ctx.db.run((tx) =>
+      tx
+        .select()
+        .from(lmsQuestions)
+        .where(and(eq(lmsQuestions.moduleId, moduleId), tenantWhere(lmsQuestions, tid)))
+        .orderBy(asc(lmsQuestions.position)),
+    ),
+    ctx.db.run((tx) =>
+      tx
+        .select({
+          id: lmsModuleVersions.id,
+          versionNumber: lmsModuleVersions.versionNumber,
+          summary: lmsModuleVersions.summary,
+          createdAt: lmsModuleVersions.createdAt,
+        })
+        .from(lmsModuleVersions)
+        .where(and(eq(lmsModuleVersions.moduleId, moduleId), tenantWhere(lmsModuleVersions, tid)))
+        .orderBy(desc(lmsModuleVersions.versionNumber))
+        .limit(10),
+    ),
+    ctx.db.run((tx) =>
+      tx
+        .select({ count: lmsAssignments.id })
+        .from(lmsAssignments)
+        .innerJoin(lmsUsers, eq(lmsUsers.id, lmsAssignments.userId))
+        .where(
+          and(
+            eq(lmsAssignments.moduleId, moduleId),
+            tenantWhere(lmsAssignments, tid),
+          ),
         ),
-      ),
+    ),
   ]);
 
   const ciIds = contentItems.map((c) => c.id);
   const ciMedia = ciIds.length
-    ? await db
-        .select()
-        .from(lmsContentItemMedia)
-        .where(tenantWhere(lmsContentItemMedia, tid))
-        .orderBy(asc(lmsContentItemMedia.position))
+    ? await ctx.db.run((tx) =>
+        tx
+          .select()
+          .from(lmsContentItemMedia)
+          .where(tenantWhere(lmsContentItemMedia, tid))
+          .orderBy(asc(lmsContentItemMedia.position)),
+      )
     : [];
   const ciMediaByItem = new Map<number, typeof ciMedia>();
   for (const m of ciMedia) {
@@ -139,11 +152,13 @@ export default async function ModuleEditPage({
 
   const qIds = questions.map((q) => q.id);
   const choices = qIds.length
-    ? await db
-        .select()
-        .from(lmsChoices)
-        .where(tenantWhere(lmsChoices, tid))
-        .orderBy(asc(lmsChoices.position))
+    ? await ctx.db.run((tx) =>
+        tx
+          .select()
+          .from(lmsChoices)
+          .where(tenantWhere(lmsChoices, tid))
+          .orderBy(asc(lmsChoices.position)),
+      )
     : [];
   const choicesByQ = new Map<number, typeof choices>();
   for (const c of choices) {

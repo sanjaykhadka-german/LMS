@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { and, asc, eq } from "drizzle-orm";
 import {
-  db,
   lmsDepartmentModulePolicies,
   lmsDepartments,
   lmsModules,
@@ -24,23 +23,29 @@ export default async function DepartmentPoliciesPage({
   const tid = ctx.traceyTenantId;
 
   const [departments, modules, policies] = await Promise.all([
-    db
-      .select()
-      .from(lmsDepartments)
-      .where(tenantWhere(lmsDepartments, tid))
-      .orderBy(asc(lmsDepartments.name)),
-    db
-      .select({ id: lmsModules.id, title: lmsModules.title })
-      .from(lmsModules)
-      .where(and(eq(lmsModules.isPublished, true), tenantWhere(lmsModules, tid)))
-      .orderBy(asc(lmsModules.title)),
-    db
-      .select({
-        departmentId: lmsDepartmentModulePolicies.departmentId,
-        moduleId: lmsDepartmentModulePolicies.moduleId,
-      })
-      .from(lmsDepartmentModulePolicies)
-      .where(tenantWhere(lmsDepartmentModulePolicies, tid)),
+    ctx.db.run((tx) =>
+      tx
+        .select()
+        .from(lmsDepartments)
+        .where(tenantWhere(lmsDepartments, tid))
+        .orderBy(asc(lmsDepartments.name)),
+    ),
+    ctx.db.run((tx) =>
+      tx
+        .select({ id: lmsModules.id, title: lmsModules.title })
+        .from(lmsModules)
+        .where(and(eq(lmsModules.isPublished, true), tenantWhere(lmsModules, tid)))
+        .orderBy(asc(lmsModules.title)),
+    ),
+    ctx.db.run((tx) =>
+      tx
+        .select({
+          departmentId: lmsDepartmentModulePolicies.departmentId,
+          moduleId: lmsDepartmentModulePolicies.moduleId,
+        })
+        .from(lmsDepartmentModulePolicies)
+        .where(tenantWhere(lmsDepartmentModulePolicies, tid)),
+    ),
   ]);
   const policySet = new Set(policies.map((p) => `${p.departmentId}:${p.moduleId}`));
 

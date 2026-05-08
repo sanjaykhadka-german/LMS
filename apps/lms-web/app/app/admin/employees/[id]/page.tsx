@@ -2,7 +2,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import {
-  db,
   lmsAssignments,
   lmsAttempts,
   lmsDepartments,
@@ -37,66 +36,73 @@ export default async function EmployeeDetailPage({
   const ctx = await requireAdmin();
   const tid = ctx.traceyTenantId;
 
-  const [user] = await db
-    .select({
-      id: lmsUsers.id,
-      name: lmsUsers.name,
-      email: lmsUsers.email,
-      role: lmsUsers.role,
-      phone: lmsUsers.phone,
-      isActiveFlag: lmsUsers.isActiveFlag,
-      jobTitle: lmsUsers.jobTitle,
-      photoFilename: lmsUsers.photoFilename,
-      startDate: lmsUsers.startDate,
-      terminationDate: lmsUsers.terminationDate,
-      departmentName: lmsDepartments.name,
-      employerName: lmsEmployers.name,
-      positionName: lmsPositions.name,
-    })
-    .from(lmsUsers)
-    .leftJoin(lmsDepartments, eq(lmsDepartments.id, lmsUsers.departmentId))
-    .leftJoin(lmsEmployers, eq(lmsEmployers.id, lmsUsers.employerId))
-    .leftJoin(lmsPositions, eq(lmsPositions.id, lmsUsers.positionId))
-    .where(and(eq(lmsUsers.id, userId), eq(lmsUsers.traceyTenantId, tid)))
-    .limit(1);
-  if (!user) notFound();
-
-  const [assignments, attempts, userMachineRows] = await Promise.all([
-    db
-      .select({
-        id: lmsAssignments.id,
-        moduleId: lmsAssignments.moduleId,
-        moduleTitle: lmsModules.title,
-        assignedAt: lmsAssignments.assignedAt,
-        dueAt: lmsAssignments.dueAt,
-        completedAt: lmsAssignments.completedAt,
-      })
-      .from(lmsAssignments)
-      .innerJoin(lmsModules, eq(lmsModules.id, lmsAssignments.moduleId))
-      .where(and(eq(lmsAssignments.userId, userId), tenantWhere(lmsAssignments, tid))),
-    db
-      .select({
-        id: lmsAttempts.id,
-        moduleId: lmsAttempts.moduleId,
-        moduleTitle: lmsModules.title,
-        score: lmsAttempts.score,
-        passed: lmsAttempts.passed,
-        createdAt: lmsAttempts.createdAt,
-      })
-      .from(lmsAttempts)
-      .leftJoin(lmsModules, eq(lmsModules.id, lmsAttempts.moduleId))
-      .where(and(eq(lmsAttempts.userId, userId), tenantWhere(lmsAttempts, tid)))
-      .orderBy(desc(lmsAttempts.createdAt)),
-    db
-      .select({
-        machineId: lmsUserMachines.machineId,
-        machineName: lmsMachines.name,
-      })
-      .from(lmsUserMachines)
-      .innerJoin(lmsMachines, eq(lmsMachines.id, lmsUserMachines.machineId))
-      .where(and(eq(lmsUserMachines.userId, userId), tenantWhere(lmsUserMachines, tid)))
-      .orderBy(asc(lmsMachines.name)),
+  const [[user], assignments, attempts, userMachineRows] = await Promise.all([
+    ctx.db.run((tx) =>
+      tx
+        .select({
+          id: lmsUsers.id,
+          name: lmsUsers.name,
+          email: lmsUsers.email,
+          role: lmsUsers.role,
+          phone: lmsUsers.phone,
+          isActiveFlag: lmsUsers.isActiveFlag,
+          jobTitle: lmsUsers.jobTitle,
+          photoFilename: lmsUsers.photoFilename,
+          startDate: lmsUsers.startDate,
+          terminationDate: lmsUsers.terminationDate,
+          departmentName: lmsDepartments.name,
+          employerName: lmsEmployers.name,
+          positionName: lmsPositions.name,
+        })
+        .from(lmsUsers)
+        .leftJoin(lmsDepartments, eq(lmsDepartments.id, lmsUsers.departmentId))
+        .leftJoin(lmsEmployers, eq(lmsEmployers.id, lmsUsers.employerId))
+        .leftJoin(lmsPositions, eq(lmsPositions.id, lmsUsers.positionId))
+        .where(and(eq(lmsUsers.id, userId), eq(lmsUsers.traceyTenantId, tid)))
+        .limit(1),
+    ),
+    ctx.db.run((tx) =>
+      tx
+        .select({
+          id: lmsAssignments.id,
+          moduleId: lmsAssignments.moduleId,
+          moduleTitle: lmsModules.title,
+          assignedAt: lmsAssignments.assignedAt,
+          dueAt: lmsAssignments.dueAt,
+          completedAt: lmsAssignments.completedAt,
+        })
+        .from(lmsAssignments)
+        .innerJoin(lmsModules, eq(lmsModules.id, lmsAssignments.moduleId))
+        .where(and(eq(lmsAssignments.userId, userId), tenantWhere(lmsAssignments, tid))),
+    ),
+    ctx.db.run((tx) =>
+      tx
+        .select({
+          id: lmsAttempts.id,
+          moduleId: lmsAttempts.moduleId,
+          moduleTitle: lmsModules.title,
+          score: lmsAttempts.score,
+          passed: lmsAttempts.passed,
+          createdAt: lmsAttempts.createdAt,
+        })
+        .from(lmsAttempts)
+        .leftJoin(lmsModules, eq(lmsModules.id, lmsAttempts.moduleId))
+        .where(and(eq(lmsAttempts.userId, userId), tenantWhere(lmsAttempts, tid)))
+        .orderBy(desc(lmsAttempts.createdAt)),
+    ),
+    ctx.db.run((tx) =>
+      tx
+        .select({
+          machineId: lmsUserMachines.machineId,
+          machineName: lmsMachines.name,
+        })
+        .from(lmsUserMachines)
+        .innerJoin(lmsMachines, eq(lmsMachines.id, lmsUserMachines.machineId))
+        .where(and(eq(lmsUserMachines.userId, userId), tenantWhere(lmsUserMachines, tid)))
+        .orderBy(asc(lmsMachines.name)),
+    ),
   ]);
+  if (!user) notFound();
 
   // Group attempts by module.
   const attemptsByModule = new Map<number, typeof attempts>();
@@ -179,20 +185,22 @@ export default async function EmployeeDetailPage({
   // ignores the valid_for_days expiry — that's a slice-2c refinement).
   const machineIds = userMachineRows.map((r) => r.machineId);
   const machineLinks = machineIds.length
-    ? await db
-        .select({
-          machineId: lmsMachineModules.machineId,
-          moduleId: lmsMachineModules.moduleId,
-          isPublished: lmsModules.isPublished,
-        })
-        .from(lmsMachineModules)
-        .innerJoin(lmsModules, eq(lmsModules.id, lmsMachineModules.moduleId))
-        .where(
-          and(
-            inArray(lmsMachineModules.machineId, machineIds),
-            tenantWhere(lmsMachineModules, tid),
+    ? await ctx.db.run((tx) =>
+        tx
+          .select({
+            machineId: lmsMachineModules.machineId,
+            moduleId: lmsMachineModules.moduleId,
+            isPublished: lmsModules.isPublished,
+          })
+          .from(lmsMachineModules)
+          .innerJoin(lmsModules, eq(lmsModules.id, lmsMachineModules.moduleId))
+          .where(
+            and(
+              inArray(lmsMachineModules.machineId, machineIds),
+              tenantWhere(lmsMachineModules, tid),
+            ),
           ),
-        )
+      )
     : [];
   const passedModuleIds = new Set(
     attempts.filter((a) => a.passed).map((a) => a.moduleId),

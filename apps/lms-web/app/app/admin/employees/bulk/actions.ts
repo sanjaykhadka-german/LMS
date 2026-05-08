@@ -7,6 +7,7 @@ import bcrypt from "bcryptjs";
 import { and, eq } from "drizzle-orm";
 import {
   db,
+  forTenant,
   lmsDepartments,
   lmsEmployers,
   lmsMachines,
@@ -55,56 +56,64 @@ function parseUserDate(raw: string): string | null {
 
 async function getOrCreateDepartment(name: string, tid: string): Promise<number> {
   const trimmed = name.trim();
-  const existing = await db
-    .select({ id: lmsDepartments.id })
-    .from(lmsDepartments)
-    .where(and(eq(lmsDepartments.name, trimmed), tenantWhere(lmsDepartments, tid)))
-    .limit(1);
-  if (existing[0]) return existing[0].id;
-  const [row] = await db
-    .insert(lmsDepartments)
-    .values({ name: trimmed, traceyTenantId: tid })
-    .returning({ id: lmsDepartments.id });
-  return row!.id;
+  return forTenant(tid).run(async (tx) => {
+    const existing = await tx
+      .select({ id: lmsDepartments.id })
+      .from(lmsDepartments)
+      .where(and(eq(lmsDepartments.name, trimmed), tenantWhere(lmsDepartments, tid)))
+      .limit(1);
+    if (existing[0]) return existing[0].id;
+    const [row] = await tx
+      .insert(lmsDepartments)
+      .values({ name: trimmed, traceyTenantId: tid })
+      .returning({ id: lmsDepartments.id });
+    return row!.id;
+  });
 }
 
 async function getOrCreateEmployer(name: string, tid: string): Promise<number> {
   const trimmed = name.trim();
-  const existing = await db
-    .select({ id: lmsEmployers.id })
-    .from(lmsEmployers)
-    .where(and(eq(lmsEmployers.name, trimmed), tenantWhere(lmsEmployers, tid)))
-    .limit(1);
-  if (existing[0]) return existing[0].id;
-  const [row] = await db
-    .insert(lmsEmployers)
-    .values({ name: trimmed, traceyTenantId: tid })
-    .returning({ id: lmsEmployers.id });
-  return row!.id;
+  return forTenant(tid).run(async (tx) => {
+    const existing = await tx
+      .select({ id: lmsEmployers.id })
+      .from(lmsEmployers)
+      .where(and(eq(lmsEmployers.name, trimmed), tenantWhere(lmsEmployers, tid)))
+      .limit(1);
+    if (existing[0]) return existing[0].id;
+    const [row] = await tx
+      .insert(lmsEmployers)
+      .values({ name: trimmed, traceyTenantId: tid })
+      .returning({ id: lmsEmployers.id });
+    return row!.id;
+  });
 }
 
 async function getOrCreateMachine(name: string, tid: string): Promise<number> {
   const trimmed = name.trim();
-  const existing = await db
-    .select({ id: lmsMachines.id })
-    .from(lmsMachines)
-    .where(and(eq(lmsMachines.name, trimmed), tenantWhere(lmsMachines, tid)))
-    .limit(1);
-  if (existing[0]) return existing[0].id;
-  const [row] = await db
-    .insert(lmsMachines)
-    .values({ name: trimmed, traceyTenantId: tid })
-    .returning({ id: lmsMachines.id });
-  return row!.id;
+  return forTenant(tid).run(async (tx) => {
+    const existing = await tx
+      .select({ id: lmsMachines.id })
+      .from(lmsMachines)
+      .where(and(eq(lmsMachines.name, trimmed), tenantWhere(lmsMachines, tid)))
+      .limit(1);
+    if (existing[0]) return existing[0].id;
+    const [row] = await tx
+      .insert(lmsMachines)
+      .values({ name: trimmed, traceyTenantId: tid })
+      .returning({ id: lmsMachines.id });
+    return row!.id;
+  });
 }
 
 async function findPositionIdByName(name: string, tid: string): Promise<number | null> {
   const lower = name.trim().toLowerCase();
   if (!lower) return null;
-  const all = await db
-    .select({ id: lmsPositions.id, name: lmsPositions.name })
-    .from(lmsPositions)
-    .where(tenantWhere(lmsPositions, tid));
+  const all = await forTenant(tid).run((tx) =>
+    tx
+      .select({ id: lmsPositions.id, name: lmsPositions.name })
+      .from(lmsPositions)
+      .where(tenantWhere(lmsPositions, tid)),
+  );
   const hit = all.find((p) => p.name.toLowerCase() === lower);
   return hit?.id ?? null;
 }
@@ -213,6 +222,8 @@ export async function bulkUploadEmployeesAction(formData: FormData): Promise<voi
     }
     // users.email is globally unique; reject any prior occurrence regardless
     // of tenant (cross-tenant collisions become "already used elsewhere").
+    // allow-cross-tenant: public.users excluded from RLS; cross-tenant email
+    // lookup is intentional (deliberately spans tenants).
     const dupe = await db
       .select({ id: lmsUsers.id, traceyTenantId: lmsUsers.traceyTenantId })
       .from(lmsUsers)
@@ -260,26 +271,28 @@ export async function bulkUploadEmployeesAction(formData: FormData): Promise<voi
 
     let newId: number | undefined;
     try {
-      const [inserted] = await db
-        .insert(lmsUsers)
-        .values({
-          email,
-          name: fullName,
-          firstName,
-          lastName,
-          passwordHash,
-          role,
-          isActiveFlag: true,
-          phone,
-          departmentId,
-          employerId,
-          startDate,
-          terminationDate: termDate,
-          jobTitle,
-          positionId,
-          traceyTenantId: tid,
-        })
-        .returning({ id: lmsUsers.id });
+      const [inserted] = await ctx.db.run((tx) =>
+        tx
+          .insert(lmsUsers)
+          .values({
+            email,
+            name: fullName,
+            firstName,
+            lastName,
+            passwordHash,
+            role,
+            isActiveFlag: true,
+            phone,
+            departmentId,
+            employerId,
+            startDate,
+            terminationDate: termDate,
+            jobTitle,
+            positionId,
+            traceyTenantId: tid,
+          })
+          .returning({ id: lmsUsers.id }),
+      );
       newId = inserted?.id;
     } catch {
       reject("This email is already in the system", email);
@@ -289,8 +302,10 @@ export async function bulkUploadEmployeesAction(formData: FormData): Promise<voi
     seenEmails.add(email);
 
     if (newId && machineIds.length > 0) {
-      await db.insert(lmsUserMachines).values(
-        machineIds.map((machineId) => ({ userId: newId!, machineId, traceyTenantId: tid })),
+      await ctx.db.run((tx) =>
+        tx.insert(lmsUserMachines).values(
+          machineIds.map((machineId) => ({ userId: newId!, machineId, traceyTenantId: tid })),
+        ),
       );
     }
 

@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { asc, eq } from "drizzle-orm";
 import {
-  db,
   lmsDepartments,
   lmsEmployers,
   lmsPositions,
@@ -18,27 +17,29 @@ export default async function StaffRegisterPage() {
   const ctx = await requireAdmin();
   const tid = ctx.traceyTenantId;
 
-  const rows = await db
-    .select({
-      id: lmsUsers.id,
-      name: lmsUsers.name,
-      email: lmsUsers.email,
-      phone: lmsUsers.phone,
-      role: lmsUsers.role,
-      isActiveFlag: lmsUsers.isActiveFlag,
-      jobTitle: lmsUsers.jobTitle,
-      startDate: lmsUsers.startDate,
-      terminationDate: lmsUsers.terminationDate,
-      departmentName: lmsDepartments.name,
-      employerName: lmsEmployers.name,
-      positionName: lmsPositions.name,
-    })
-    .from(lmsUsers)
-    .leftJoin(lmsDepartments, eq(lmsDepartments.id, lmsUsers.departmentId))
-    .leftJoin(lmsEmployers, eq(lmsEmployers.id, lmsUsers.employerId))
-    .leftJoin(lmsPositions, eq(lmsPositions.id, lmsUsers.positionId))
-    .where(eq(lmsUsers.traceyTenantId, tid))
-    .orderBy(asc(lmsUsers.name));
+  const rows = await ctx.db.run((tx) =>
+    tx
+      .select({
+        id: lmsUsers.id,
+        name: lmsUsers.name,
+        email: lmsUsers.email,
+        phone: lmsUsers.phone,
+        role: lmsUsers.role,
+        isActiveFlag: lmsUsers.isActiveFlag,
+        jobTitle: lmsUsers.jobTitle,
+        startDate: lmsUsers.startDate,
+        terminationDate: lmsUsers.terminationDate,
+        departmentName: lmsDepartments.name,
+        employerName: lmsEmployers.name,
+        positionName: lmsPositions.name,
+      })
+      .from(lmsUsers)
+      .leftJoin(lmsDepartments, eq(lmsDepartments.id, lmsUsers.departmentId))
+      .leftJoin(lmsEmployers, eq(lmsEmployers.id, lmsUsers.employerId))
+      .leftJoin(lmsPositions, eq(lmsPositions.id, lmsUsers.positionId))
+      .where(eq(lmsUsers.traceyTenantId, tid))
+      .orderBy(asc(lmsUsers.name)),
+  );
 
   return (
     <div className="space-y-6">

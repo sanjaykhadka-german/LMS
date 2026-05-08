@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, asc, eq } from "drizzle-orm";
-import { db, lmsUsers, lmsWhsRecords } from "@tracey/db";
+import { lmsUsers, lmsWhsRecords } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
 import { WhsForm } from "../../_form";
@@ -24,18 +24,23 @@ export default async function EditWhsRecordPage({
   const ctx = await requireAdmin();
   const tid = ctx.traceyTenantId;
 
-  const [record] = await db
-    .select()
-    .from(lmsWhsRecords)
-    .where(and(eq(lmsWhsRecords.id, recordId), tenantWhere(lmsWhsRecords, tid)))
-    .limit(1);
+  const [[record], staff] = await Promise.all([
+    ctx.db.run((tx) =>
+      tx
+        .select()
+        .from(lmsWhsRecords)
+        .where(and(eq(lmsWhsRecords.id, recordId), tenantWhere(lmsWhsRecords, tid)))
+        .limit(1),
+    ),
+    ctx.db.run((tx) =>
+      tx
+        .select({ id: lmsUsers.id, name: lmsUsers.name })
+        .from(lmsUsers)
+        .where(eq(lmsUsers.traceyTenantId, tid))
+        .orderBy(asc(lmsUsers.name)),
+    ),
+  ]);
   if (!record) notFound();
-
-  const staff = await db
-    .select({ id: lmsUsers.id, name: lmsUsers.name })
-    .from(lmsUsers)
-    .where(eq(lmsUsers.traceyTenantId, tid))
-    .orderBy(asc(lmsUsers.name));
 
   const banner =
     sp.error === "date"

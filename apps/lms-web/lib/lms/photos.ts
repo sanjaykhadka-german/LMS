@@ -2,7 +2,7 @@ import "server-only";
 import crypto from "node:crypto";
 import sharp from "sharp";
 import { eq } from "drizzle-orm";
-import { db, lmsUploadedFiles } from "@tracey/db";
+import { forTenant, lmsUploadedFiles } from "@tracey/db";
 
 // Accepts a multipart-form `File`, normalizes via sharp (auto-rotate, resize
 // max 800x800, re-encode to JPEG so EXIF stripping is automatic), and stores
@@ -64,7 +64,7 @@ export async function saveUserPhoto(opts: SavePhotoOpts): Promise<string> {
   }
 
   const stored = `photo_${crypto.randomBytes(8).toString("hex")}.jpg`;
-  await db.transaction(async (tx) => {
+  await forTenant(opts.traceyTenantId).run(async (tx) => {
     await tx.insert(lmsUploadedFiles).values({
       filename: stored,
       mimeType: "image/jpeg",
@@ -74,6 +74,9 @@ export async function saveUserPhoto(opts: SavePhotoOpts): Promise<string> {
       traceyTenantId: opts.traceyTenantId,
     });
     if (opts.previousFilename && opts.previousFilename !== stored) {
+      // The DELETE filters by globally-unique filename (no tenant column on
+      // the predicate), but the GUC is set so RLS still applies — the
+      // delete only succeeds if the row is in this tenant.
       await tx
         .delete(lmsUploadedFiles)
         .where(eq(lmsUploadedFiles.filename, opts.previousFilename));
@@ -84,10 +87,19 @@ export async function saveUserPhoto(opts: SavePhotoOpts): Promise<string> {
 }
 
 /** Mirror clear_user_photo (app.py:657). Deletes the BYTEA row; caller is
- *  responsible for nulling `users.photo_filename`. */
-export async function deleteStoredPhoto(filename: string): Promise<void> {
+ *  responsible for nulling `users.photo_filename`. The filename is a
+ *  globally-unique random hex token (see saveBinaryUpload), but RLS still
+ *  requires `app.tenant_id` to be set or the delete silently affects zero
+ *  rows. Caller passes its tenant id; the policy on uploaded_files double-
+ *  checks that the row really does belong to this tenant. */
+export async function deleteStoredPhoto(
+  filename: string,
+  traceyTenantId: string,
+): Promise<void> {
   if (!filename) return;
-  await db.delete(lmsUploadedFiles).where(eq(lmsUploadedFiles.filename, filename));
+  await forTenant(traceyTenantId).run((tx) =>
+    tx.delete(lmsUploadedFiles).where(eq(lmsUploadedFiles.filename, filename)),
+  );
 }
 
 // ─── General-purpose binary upload (covers, content media, PDFs, etc.) ─────
@@ -136,13 +148,15 @@ export async function saveBinaryUpload(opts: SaveBinaryOpts): Promise<string> {
   const stored = `${opts.prefix}${crypto.randomBytes(8).toString("hex")}.${ext}`;
   const mime = opts.file.type || "application/octet-stream";
 
-  await db.insert(lmsUploadedFiles).values({
-    filename: stored,
-    mimeType: mime,
-    data: buf,
-    size: buf.byteLength,
-    uploadedById: opts.uploadedByLmsUserId ?? null,
-    traceyTenantId: opts.traceyTenantId,
-  });
+  await forTenant(opts.traceyTenantId).run((tx) =>
+    tx.insert(lmsUploadedFiles).values({
+      filename: stored,
+      mimeType: mime,
+      data: buf,
+      size: buf.byteLength,
+      uploadedById: opts.uploadedByLmsUserId ?? null,
+      traceyTenantId: opts.traceyTenantId,
+    }),
+  );
   return stored;
 }

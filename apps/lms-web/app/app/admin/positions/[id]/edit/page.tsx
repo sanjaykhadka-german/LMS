@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, asc, eq, ne } from "drizzle-orm";
-import { db, lmsDepartments, lmsPositions } from "@tracey/db";
+import { lmsDepartments, lmsPositions } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
 import { Button } from "~/components/ui/button";
@@ -27,25 +27,30 @@ export default async function EditPositionPage({
   const ctx = await requireAdmin();
   const tid = ctx.traceyTenantId;
 
-  const [position] = await db
-    .select()
-    .from(lmsPositions)
-    .where(and(eq(lmsPositions.id, positionId), tenantWhere(lmsPositions, tid)))
-    .limit(1);
-  if (!position) notFound();
-
-  const [otherPositions, departments] = await Promise.all([
-    db
-      .select({ id: lmsPositions.id, name: lmsPositions.name })
-      .from(lmsPositions)
-      .where(and(ne(lmsPositions.id, positionId), tenantWhere(lmsPositions, tid)))
-      .orderBy(asc(lmsPositions.name)),
-    db
-      .select()
-      .from(lmsDepartments)
-      .where(tenantWhere(lmsDepartments, tid))
-      .orderBy(asc(lmsDepartments.name)),
+  const [[position], otherPositions, departments] = await Promise.all([
+    ctx.db.run((tx) =>
+      tx
+        .select()
+        .from(lmsPositions)
+        .where(and(eq(lmsPositions.id, positionId), tenantWhere(lmsPositions, tid)))
+        .limit(1),
+    ),
+    ctx.db.run((tx) =>
+      tx
+        .select({ id: lmsPositions.id, name: lmsPositions.name })
+        .from(lmsPositions)
+        .where(and(ne(lmsPositions.id, positionId), tenantWhere(lmsPositions, tid)))
+        .orderBy(asc(lmsPositions.name)),
+    ),
+    ctx.db.run((tx) =>
+      tx
+        .select()
+        .from(lmsDepartments)
+        .where(tenantWhere(lmsDepartments, tid))
+        .orderBy(asc(lmsDepartments.name)),
+    ),
   ]);
+  if (!position) notFound();
 
   return (
     <div className="space-y-4">

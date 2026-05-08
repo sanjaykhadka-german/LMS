@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { asc } from "drizzle-orm";
-import { db, lmsDepartments } from "@tracey/db";
+import { lmsDepartments } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
 import { Button } from "~/components/ui/button";
@@ -13,11 +13,13 @@ export const metadata = { title: "Departments" };
 
 export default async function DepartmentsPage() {
   const ctx = await requireAdmin();
-  const rows = await db
-    .select()
-    .from(lmsDepartments)
-    .where(tenantWhere(lmsDepartments, ctx.traceyTenantId))
-    .orderBy(asc(lmsDepartments.name));
+  const rows = await ctx.db.run((tx) =>
+    tx
+      .select()
+      .from(lmsDepartments)
+      .where(tenantWhere(lmsDepartments, ctx.traceyTenantId))
+      .orderBy(asc(lmsDepartments.name)),
+  );
 
   return (
     <div className="space-y-6">

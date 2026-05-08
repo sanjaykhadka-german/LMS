@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { asc, eq, sql } from "drizzle-orm";
-import { db, lmsDepartments, lmsMachineModules, lmsMachines } from "@tracey/db";
+import { lmsDepartments, lmsMachineModules, lmsMachines } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
 import { Button } from "~/components/ui/button";
@@ -13,21 +13,23 @@ export const metadata = { title: "Machines" };
 
 export default async function MachinesPage() {
   const ctx = await requireAdmin();
-  const machines = await db
-    .select({
-      id: lmsMachines.id,
-      name: lmsMachines.name,
-      departmentId: lmsMachines.departmentId,
-      departmentName: lmsDepartments.name,
-      moduleCount: sql<number>`(
-        select count(*)::int from ${lmsMachineModules}
-          where ${lmsMachineModules.machineId} = ${lmsMachines.id}
-      )`,
-    })
-    .from(lmsMachines)
-    .leftJoin(lmsDepartments, eq(lmsDepartments.id, lmsMachines.departmentId))
-    .where(tenantWhere(lmsMachines, ctx.traceyTenantId))
-    .orderBy(asc(lmsMachines.name));
+  const machines = await ctx.db.run((tx) =>
+    tx
+      .select({
+        id: lmsMachines.id,
+        name: lmsMachines.name,
+        departmentId: lmsMachines.departmentId,
+        departmentName: lmsDepartments.name,
+        moduleCount: sql<number>`(
+          select count(*)::int from ${lmsMachineModules}
+            where ${lmsMachineModules.machineId} = ${lmsMachines.id}
+        )`,
+      })
+      .from(lmsMachines)
+      .leftJoin(lmsDepartments, eq(lmsDepartments.id, lmsMachines.departmentId))
+      .where(tenantWhere(lmsMachines, ctx.traceyTenantId))
+      .orderBy(asc(lmsMachines.name)),
+  );
 
   return (
     <div className="space-y-6">

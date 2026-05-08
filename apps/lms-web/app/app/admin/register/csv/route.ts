@@ -1,6 +1,5 @@
 import { asc, eq } from "drizzle-orm";
 import {
-  db,
   lmsDepartments,
   lmsEmployers,
   lmsPositions,
@@ -35,27 +34,29 @@ function csvRow(cells: Array<string | null | undefined>): string {
 
 export async function GET() {
   const ctx = await requireAdmin();
-  const rows = await db
-    .select({
-      firstName: lmsUsers.firstName,
-      lastName: lmsUsers.lastName,
-      email: lmsUsers.email,
-      phone: lmsUsers.phone,
-      departmentName: lmsDepartments.name,
-      employerName: lmsEmployers.name,
-      positionName: lmsPositions.name,
-      jobTitle: lmsUsers.jobTitle,
-      role: lmsUsers.role,
-      isActiveFlag: lmsUsers.isActiveFlag,
-      startDate: lmsUsers.startDate,
-      terminationDate: lmsUsers.terminationDate,
-    })
-    .from(lmsUsers)
-    .leftJoin(lmsDepartments, eq(lmsDepartments.id, lmsUsers.departmentId))
-    .leftJoin(lmsEmployers, eq(lmsEmployers.id, lmsUsers.employerId))
-    .leftJoin(lmsPositions, eq(lmsPositions.id, lmsUsers.positionId))
-    .where(eq(lmsUsers.traceyTenantId, ctx.traceyTenantId))
-    .orderBy(asc(lmsUsers.name));
+  const rows = await ctx.db.run((tx) =>
+    tx
+      .select({
+        firstName: lmsUsers.firstName,
+        lastName: lmsUsers.lastName,
+        email: lmsUsers.email,
+        phone: lmsUsers.phone,
+        departmentName: lmsDepartments.name,
+        employerName: lmsEmployers.name,
+        positionName: lmsPositions.name,
+        jobTitle: lmsUsers.jobTitle,
+        role: lmsUsers.role,
+        isActiveFlag: lmsUsers.isActiveFlag,
+        startDate: lmsUsers.startDate,
+        terminationDate: lmsUsers.terminationDate,
+      })
+      .from(lmsUsers)
+      .leftJoin(lmsDepartments, eq(lmsDepartments.id, lmsUsers.departmentId))
+      .leftJoin(lmsEmployers, eq(lmsEmployers.id, lmsUsers.employerId))
+      .leftJoin(lmsPositions, eq(lmsPositions.id, lmsUsers.positionId))
+      .where(eq(lmsUsers.traceyTenantId, ctx.traceyTenantId))
+      .orderBy(asc(lmsUsers.name)),
+  );
 
   const lines = [csvRow(HEADERS)];
   for (const r of rows) {

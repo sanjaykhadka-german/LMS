@@ -1,7 +1,7 @@
 import "server-only";
 import { and, eq, isNotNull, isNull, lte, ne, or } from "drizzle-orm";
 import {
-  db,
+  forTenant,
   lmsAssignments,
   lmsModules,
   lmsUsers,
@@ -15,6 +15,10 @@ import {
 
 // Mirror Flask app.py:3537 (admin_send_reminders) + app.py:391 (process_whs_reminders).
 // Both run per-tenant. Returns the count of users emailed.
+//
+// Each DB call is wrapped in `forTenant(tenantId).run(...)` so `app.tenant_id`
+// is set for Postgres RLS (migration 0004). Email I/O happens outside the
+// transaction so it doesn't hold row locks.
 
 const WHS_REMINDER_LOOKAHEAD_DAYS = 30;
 const WHS_REMINDER_COOLDOWN_DAYS = 14;
@@ -26,27 +30,30 @@ const WHS_KIND_SINGULAR: Record<string, string> = {
 };
 
 export async function runAssignmentReminders(tenantId: string): Promise<number> {
+  const tdb = forTenant(tenantId);
   // Gather every active employee in the tenant who has at least one open
   // assignment, plus the module titles, in one round-trip.
-  const rows = await db
-    .select({
-      userId: lmsUsers.id,
-      email: lmsUsers.email,
-      name: lmsUsers.name,
-      moduleTitle: lmsModules.title,
-    })
-    .from(lmsAssignments)
-    .innerJoin(lmsUsers, eq(lmsUsers.id, lmsAssignments.userId))
-    .innerJoin(lmsModules, eq(lmsModules.id, lmsAssignments.moduleId))
-    .where(
-      and(
-        tenantWhere(lmsAssignments, tenantId),
-        eq(lmsUsers.isActiveFlag, true),
-        eq(lmsUsers.role, "employee"),
-        isNull(lmsAssignments.completedAt),
-      ),
-    )
-    .orderBy(lmsUsers.id);
+  const rows = await tdb.run((tx) =>
+    tx
+      .select({
+        userId: lmsUsers.id,
+        email: lmsUsers.email,
+        name: lmsUsers.name,
+        moduleTitle: lmsModules.title,
+      })
+      .from(lmsAssignments)
+      .innerJoin(lmsUsers, eq(lmsUsers.id, lmsAssignments.userId))
+      .innerJoin(lmsModules, eq(lmsModules.id, lmsAssignments.moduleId))
+      .where(
+        and(
+          tenantWhere(lmsAssignments, tenantId),
+          eq(lmsUsers.isActiveFlag, true),
+          eq(lmsUsers.role, "employee"),
+          isNull(lmsAssignments.completedAt),
+        ),
+      )
+      .orderBy(lmsUsers.id),
+  );
 
   // Group by user.
   const byUser = new Map<number, { email: string; name: string; titles: string[] }>();
@@ -79,6 +86,7 @@ export async function runWhsReminders(
   tenantId: string,
   opts: { force?: boolean } = {},
 ): Promise<number> {
+  const tdb = forTenant(tenantId);
   const today = new Date();
   const horizon = new Date(today);
   horizon.setDate(horizon.getDate() + WHS_REMINDER_LOOKAHEAD_DAYS);
@@ -92,28 +100,30 @@ export async function runWhsReminders(
         lte(lmsWhsRecords.lastRemindedAt, cooldownCutoff),
       );
 
-  const records = await db
-    .select({
-      id: lmsWhsRecords.id,
-      kind: lmsWhsRecords.kind,
-      title: lmsWhsRecords.title,
-      expiresOn: lmsWhsRecords.expiresOn,
-      userEmail: lmsUsers.email,
-      userName: lmsUsers.name,
-      userActive: lmsUsers.isActiveFlag,
-    })
-    .from(lmsWhsRecords)
-    .innerJoin(lmsUsers, eq(lmsUsers.id, lmsWhsRecords.userId))
-    .where(
-      and(
-        tenantWhere(lmsWhsRecords, tenantId),
-        ne(lmsWhsRecords.kind, "incident"),
-        isNotNull(lmsWhsRecords.userId),
-        isNotNull(lmsWhsRecords.expiresOn),
-        lte(lmsWhsRecords.expiresOn, horizon.toISOString().slice(0, 10)),
-        ...(cooldownClause ? [cooldownClause] : []),
+  const records = await tdb.run((tx) =>
+    tx
+      .select({
+        id: lmsWhsRecords.id,
+        kind: lmsWhsRecords.kind,
+        title: lmsWhsRecords.title,
+        expiresOn: lmsWhsRecords.expiresOn,
+        userEmail: lmsUsers.email,
+        userName: lmsUsers.name,
+        userActive: lmsUsers.isActiveFlag,
+      })
+      .from(lmsWhsRecords)
+      .innerJoin(lmsUsers, eq(lmsUsers.id, lmsWhsRecords.userId))
+      .where(
+        and(
+          tenantWhere(lmsWhsRecords, tenantId),
+          ne(lmsWhsRecords.kind, "incident"),
+          isNotNull(lmsWhsRecords.userId),
+          isNotNull(lmsWhsRecords.expiresOn),
+          lte(lmsWhsRecords.expiresOn, horizon.toISOString().slice(0, 10)),
+          ...(cooldownClause ? [cooldownClause] : []),
+        ),
       ),
-    );
+  );
 
   let sent = 0;
   for (const r of records) {
@@ -126,10 +136,14 @@ export async function runWhsReminders(
       expiresOn: r.expiresOn,
     });
     if (ok) {
-      await db
-        .update(lmsWhsRecords)
-        .set({ lastRemindedAt: new Date() })
-        .where(eq(lmsWhsRecords.id, r.id));
+      // Each update is its own short transaction with `app.tenant_id` set —
+      // intentional, so a slow email loop doesn't hold a long-running tx.
+      await tdb.run((tx) =>
+        tx
+          .update(lmsWhsRecords)
+          .set({ lastRemindedAt: new Date() })
+          .where(eq(lmsWhsRecords.id, r.id)),
+      );
       sent += 1;
     }
   }

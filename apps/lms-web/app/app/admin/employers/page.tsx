@@ -1,5 +1,5 @@
 import { asc } from "drizzle-orm";
-import { db, lmsEmployers } from "@tracey/db";
+import { lmsEmployers } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
@@ -11,11 +11,13 @@ export const metadata = { title: "Employers" };
 
 export default async function EmployersPage() {
   const ctx = await requireAdmin();
-  const rows = await db
-    .select()
-    .from(lmsEmployers)
-    .where(tenantWhere(lmsEmployers, ctx.traceyTenantId))
-    .orderBy(asc(lmsEmployers.name));
+  const rows = await ctx.db.run((tx) =>
+    tx
+      .select()
+      .from(lmsEmployers)
+      .where(tenantWhere(lmsEmployers, ctx.traceyTenantId))
+      .orderBy(asc(lmsEmployers.name)),
+  );
 
   return (
     <div className="space-y-6">

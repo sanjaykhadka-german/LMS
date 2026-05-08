@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { and, desc, eq } from "drizzle-orm";
 import {
-  db,
   lmsContentItemMedia,
   lmsContentItems,
   lmsModules,
@@ -63,48 +62,48 @@ function serialiseBody(kind: string, formData: FormData): string {
   return bodyText;
 }
 
-async function assertModuleOwned(moduleId: number, tid: string) {
-  const [m] = await db
-    .select({ id: lmsModules.id })
-    .from(lmsModules)
-    .where(and(eq(lmsModules.id, moduleId), tenantWhere(lmsModules, tid)))
-    .limit(1);
-  if (!m) throw new Error("Module not found");
-}
-
 export async function addContentItemAction(formData: FormData): Promise<void> {
   const ctx = await requireAdmin();
   const tid = ctx.traceyTenantId;
   const moduleId = parseInt(String(formData.get("module_id") ?? ""), 10);
   if (!Number.isFinite(moduleId)) throw new Error("Bad module id");
-  await assertModuleOwned(moduleId, tid);
 
   const kind = String(formData.get("kind") ?? "section");
   if (!VALID_KINDS.has(kind)) throw new Error("Invalid kind");
+  const title = String(formData.get("title") ?? "New section").slice(0, 255) || "New section";
 
-  // Compute the next position so the item lands at the bottom.
-  const [last] = await db
-    .select({ position: lmsContentItems.position })
-    .from(lmsContentItems)
-    .where(
-      and(eq(lmsContentItems.moduleId, moduleId), tenantWhere(lmsContentItems, tid)),
-    )
-    .orderBy(desc(lmsContentItems.position))
-    .limit(1);
-  const nextPosition = (last?.position ?? 0) + 10;
+  const newId = await ctx.db.run(async (tx) => {
+    const [m] = await tx
+      .select({ id: lmsModules.id })
+      .from(lmsModules)
+      .where(and(eq(lmsModules.id, moduleId), tenantWhere(lmsModules, tid)))
+      .limit(1);
+    if (!m) throw new Error("Module not found");
 
-  const [row] = await db
-    .insert(lmsContentItems)
-    .values({
-      moduleId,
-      kind,
-      title: String(formData.get("title") ?? "New section").slice(0, 255) || "New section",
-      body: "",
-      filePath: "",
-      position: nextPosition,
-      traceyTenantId: tid,
-    })
-    .returning({ id: lmsContentItems.id });
+    const [last] = await tx
+      .select({ position: lmsContentItems.position })
+      .from(lmsContentItems)
+      .where(
+        and(eq(lmsContentItems.moduleId, moduleId), tenantWhere(lmsContentItems, tid)),
+      )
+      .orderBy(desc(lmsContentItems.position))
+      .limit(1);
+    const nextPosition = (last?.position ?? 0) + 10;
+
+    const [row] = await tx
+      .insert(lmsContentItems)
+      .values({
+        moduleId,
+        kind,
+        title,
+        body: "",
+        filePath: "",
+        position: nextPosition,
+        traceyTenantId: tid,
+      })
+      .returning({ id: lmsContentItems.id });
+    return row?.id;
+  });
 
   await logAuditEvent({
     tenantId: tid,
@@ -112,7 +111,7 @@ export async function addContentItemAction(formData: FormData): Promise<void> {
     actorEmail: ctx.lmsUser.email,
     action: "content.added",
     targetKind: "content_item",
-    targetId: String(row?.id ?? ""),
+    targetId: String(newId ?? ""),
     details: { moduleId, kind },
   });
   revalidatePath(`/app/admin/modules/${moduleId}`);
@@ -124,19 +123,30 @@ export async function updateContentItemAction(formData: FormData): Promise<void>
   const id = parseInt(String(formData.get("id") ?? ""), 10);
   const moduleId = parseInt(String(formData.get("module_id") ?? ""), 10);
   if (!Number.isFinite(id) || !Number.isFinite(moduleId)) throw new Error("Bad id");
-  await assertModuleOwned(moduleId, tid);
 
-  const [target] = await db
-    .select()
-    .from(lmsContentItems)
-    .where(
-      and(
-        eq(lmsContentItems.id, id),
-        eq(lmsContentItems.moduleId, moduleId),
-        tenantWhere(lmsContentItems, tid),
-      ),
-    )
-    .limit(1);
+  // Load target outside the write transaction so we have its filePath for
+  // the optional file replacement before we hold any row locks.
+  const target = await ctx.db.run(async (tx) => {
+    const [m] = await tx
+      .select({ id: lmsModules.id })
+      .from(lmsModules)
+      .where(and(eq(lmsModules.id, moduleId), tenantWhere(lmsModules, tid)))
+      .limit(1);
+    if (!m) throw new Error("Module not found");
+
+    const [row] = await tx
+      .select()
+      .from(lmsContentItems)
+      .where(
+        and(
+          eq(lmsContentItems.id, id),
+          eq(lmsContentItems.moduleId, moduleId),
+          tenantWhere(lmsContentItems, tid),
+        ),
+      )
+      .limit(1);
+    return row;
+  });
   if (!target) throw new Error("Content not found");
 
   const kind = String(formData.get("kind") ?? target.kind);
@@ -165,19 +175,21 @@ export async function updateContentItemAction(formData: FormData): Promise<void>
       throw err;
     }
     if (target.filePath && target.filePath !== filePath) {
-      await deleteStoredPhoto(target.filePath);
+      await deleteStoredPhoto(target.filePath, tid);
     }
   } else if (formData.get("clear_file") === "1" && target.filePath) {
-    await deleteStoredPhoto(target.filePath);
+    await deleteStoredPhoto(target.filePath, tid);
     filePath = "";
   }
 
-  await db
-    .update(lmsContentItems)
-    .set({ kind, title, body, filePath })
-    .where(
-      and(eq(lmsContentItems.id, id), tenantWhere(lmsContentItems, tid)),
-    );
+  await ctx.db.run((tx) =>
+    tx
+      .update(lmsContentItems)
+      .set({ kind, title, body, filePath })
+      .where(
+        and(eq(lmsContentItems.id, id), tenantWhere(lmsContentItems, tid)),
+      ),
+  );
 
   await logAuditEvent({
     tenantId: tid,
@@ -197,40 +209,51 @@ export async function deleteContentItemAction(formData: FormData): Promise<void>
   const id = parseInt(String(formData.get("id") ?? ""), 10);
   const moduleId = parseInt(String(formData.get("module_id") ?? ""), 10);
   if (!Number.isFinite(id) || !Number.isFinite(moduleId)) throw new Error("Bad id");
-  await assertModuleOwned(moduleId, tid);
 
-  const [target] = await db
-    .select()
-    .from(lmsContentItems)
-    .where(
-      and(
-        eq(lmsContentItems.id, id),
-        eq(lmsContentItems.moduleId, moduleId),
-        tenantWhere(lmsContentItems, tid),
-      ),
-    )
-    .limit(1);
-  if (!target) return;
+  const result = await ctx.db.run(async (tx) => {
+    const [m] = await tx
+      .select({ id: lmsModules.id })
+      .from(lmsModules)
+      .where(and(eq(lmsModules.id, moduleId), tenantWhere(lmsModules, tid)))
+      .limit(1);
+    if (!m) throw new Error("Module not found");
 
-  // Cascade-collect file_paths so we can delete the BYTEA rows after the
-  // FK cascade drops the metadata.
-  const media = await db
-    .select({ filePath: lmsContentItemMedia.filePath })
-    .from(lmsContentItemMedia)
-    .where(
-      and(
-        eq(lmsContentItemMedia.contentItemId, id),
-        tenantWhere(lmsContentItemMedia, tid),
-      ),
-    );
+    const [target] = await tx
+      .select()
+      .from(lmsContentItems)
+      .where(
+        and(
+          eq(lmsContentItems.id, id),
+          eq(lmsContentItems.moduleId, moduleId),
+          tenantWhere(lmsContentItems, tid),
+        ),
+      )
+      .limit(1);
+    if (!target) return null;
 
-  await db
-    .delete(lmsContentItems)
-    .where(and(eq(lmsContentItems.id, id), tenantWhere(lmsContentItems, tid)));
+    // Cascade-collect file_paths so we can delete the BYTEA rows after the
+    // FK cascade drops the metadata.
+    const media = await tx
+      .select({ filePath: lmsContentItemMedia.filePath })
+      .from(lmsContentItemMedia)
+      .where(
+        and(
+          eq(lmsContentItemMedia.contentItemId, id),
+          tenantWhere(lmsContentItemMedia, tid),
+        ),
+      );
 
-  if (target.filePath) await deleteStoredPhoto(target.filePath);
-  for (const m of media) {
-    if (m.filePath) await deleteStoredPhoto(m.filePath);
+    await tx
+      .delete(lmsContentItems)
+      .where(and(eq(lmsContentItems.id, id), tenantWhere(lmsContentItems, tid)));
+
+    return { target, media };
+  });
+  if (!result) return;
+
+  if (result.target.filePath) await deleteStoredPhoto(result.target.filePath, tid);
+  for (const m of result.media) {
+    if (m.filePath) await deleteStoredPhoto(m.filePath, tid);
   }
 
   await logAuditEvent({
@@ -253,7 +276,16 @@ export async function addContentMediaAction(formData: FormData): Promise<void> {
   const contentItemId = parseInt(String(formData.get("content_item_id") ?? ""), 10);
   const moduleId = parseInt(String(formData.get("module_id") ?? ""), 10);
   if (!Number.isFinite(contentItemId) || !Number.isFinite(moduleId)) throw new Error("Bad id");
-  await assertModuleOwned(moduleId, tid);
+
+  // Module ownership check before doing the upload.
+  await ctx.db.run(async (tx) => {
+    const [m] = await tx
+      .select({ id: lmsModules.id })
+      .from(lmsModules)
+      .where(and(eq(lmsModules.id, moduleId), tenantWhere(lmsModules, tid)))
+      .limit(1);
+    if (!m) throw new Error("Module not found");
+  });
 
   const file = formData.get("media");
   if (!(file instanceof File) || file.size === 0) {
@@ -280,13 +312,15 @@ export async function addContentMediaAction(formData: FormData): Promise<void> {
   const ext = stored.slice(stored.lastIndexOf(".") + 1).toLowerCase();
   const kind = ["mp4", "mov", "webm"].includes(ext) ? "video" : "image";
 
-  await db.insert(lmsContentItemMedia).values({
-    contentItemId,
-    filePath: stored,
-    kind,
-    position: 0,
-    traceyTenantId: tid,
-  });
+  await ctx.db.run((tx) =>
+    tx.insert(lmsContentItemMedia).values({
+      contentItemId,
+      filePath: stored,
+      kind,
+      position: 0,
+      traceyTenantId: tid,
+    }),
+  );
   revalidatePath(`/app/admin/modules/${moduleId}`);
 }
 
@@ -296,19 +330,29 @@ export async function removeContentMediaAction(formData: FormData): Promise<void
   const id = parseInt(String(formData.get("id") ?? ""), 10);
   const moduleId = parseInt(String(formData.get("module_id") ?? ""), 10);
   if (!Number.isFinite(id) || !Number.isFinite(moduleId)) throw new Error("Bad id");
-  await assertModuleOwned(moduleId, tid);
 
-  const [target] = await db
-    .select()
-    .from(lmsContentItemMedia)
-    .where(and(eq(lmsContentItemMedia.id, id), tenantWhere(lmsContentItemMedia, tid)))
-    .limit(1);
+  const target = await ctx.db.run(async (tx) => {
+    const [m] = await tx
+      .select({ id: lmsModules.id })
+      .from(lmsModules)
+      .where(and(eq(lmsModules.id, moduleId), tenantWhere(lmsModules, tid)))
+      .limit(1);
+    if (!m) throw new Error("Module not found");
+
+    const [row] = await tx
+      .select()
+      .from(lmsContentItemMedia)
+      .where(and(eq(lmsContentItemMedia.id, id), tenantWhere(lmsContentItemMedia, tid)))
+      .limit(1);
+    if (!row) return null;
+
+    await tx
+      .delete(lmsContentItemMedia)
+      .where(and(eq(lmsContentItemMedia.id, id), tenantWhere(lmsContentItemMedia, tid)));
+    return row;
+  });
   if (!target) return;
 
-  await db
-    .delete(lmsContentItemMedia)
-    .where(and(eq(lmsContentItemMedia.id, id), tenantWhere(lmsContentItemMedia, tid)));
-  if (target.filePath) await deleteStoredPhoto(target.filePath);
-  void ctx;
+  if (target.filePath) await deleteStoredPhoto(target.filePath, tid);
   revalidatePath(`/app/admin/modules/${moduleId}`);
 }

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
-import { db, lmsWhsRecords } from "@tracey/db";
+import { lmsWhsRecords } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
 import { logAuditEvent } from "~/lib/audit";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
@@ -70,21 +70,23 @@ export async function createWhsRecordAction(formData: FormData): Promise<void> {
   const data = parsed.data;
   const severity = data.severity && VALID_SEVERITIES.has(data.severity) ? data.severity : null;
 
-  const [row] = await db
-    .insert(lmsWhsRecords)
-    .values({
-      kind: data.kind,
-      title: data.title,
-      userId: intOrNull(formData.get("user_id")),
-      issuedOn: data.issuedOn ?? null,
-      expiresOn: data.expiresOn ?? null,
-      notes: data.notes ?? "",
-      incidentDate: data.incidentDate ?? null,
-      severity,
-      reportedById: intOrNull(formData.get("reported_by_id")),
-      traceyTenantId: tid,
-    })
-    .returning({ id: lmsWhsRecords.id });
+  const [row] = await ctx.db.run((tx) =>
+    tx
+      .insert(lmsWhsRecords)
+      .values({
+        kind: data.kind,
+        title: data.title,
+        userId: intOrNull(formData.get("user_id")),
+        issuedOn: data.issuedOn ?? null,
+        expiresOn: data.expiresOn ?? null,
+        notes: data.notes ?? "",
+        incidentDate: data.incidentDate ?? null,
+        severity,
+        reportedById: intOrNull(formData.get("reported_by_id")),
+        traceyTenantId: tid,
+      })
+      .returning({ id: lmsWhsRecords.id }),
+  );
 
   await logAuditEvent({
     tenantId: tid,
@@ -126,27 +128,30 @@ export async function updateWhsRecordAction(formData: FormData): Promise<void> {
   const data = parsed.data;
   const severity = data.severity && VALID_SEVERITIES.has(data.severity) ? data.severity : null;
 
-  const [target] = await db
-    .select()
-    .from(lmsWhsRecords)
-    .where(and(eq(lmsWhsRecords.id, id), tenantWhere(lmsWhsRecords, tid)))
-    .limit(1);
+  const target = await ctx.db.run(async (tx) => {
+    const [t] = await tx
+      .select()
+      .from(lmsWhsRecords)
+      .where(and(eq(lmsWhsRecords.id, id), tenantWhere(lmsWhsRecords, tid)))
+      .limit(1);
+    if (!t) return null;
+    await tx
+      .update(lmsWhsRecords)
+      .set({
+        kind: data.kind,
+        title: data.title,
+        userId: intOrNull(formData.get("user_id")),
+        issuedOn: data.issuedOn ?? null,
+        expiresOn: data.expiresOn ?? null,
+        notes: data.notes ?? "",
+        incidentDate: data.incidentDate ?? null,
+        severity,
+        reportedById: intOrNull(formData.get("reported_by_id")),
+      })
+      .where(and(eq(lmsWhsRecords.id, id), tenantWhere(lmsWhsRecords, tid)));
+    return t;
+  });
   if (!target) throw new Error("Record not found");
-
-  await db
-    .update(lmsWhsRecords)
-    .set({
-      kind: data.kind,
-      title: data.title,
-      userId: intOrNull(formData.get("user_id")),
-      issuedOn: data.issuedOn ?? null,
-      expiresOn: data.expiresOn ?? null,
-      notes: data.notes ?? "",
-      incidentDate: data.incidentDate ?? null,
-      severity,
-      reportedById: intOrNull(formData.get("reported_by_id")),
-    })
-    .where(and(eq(lmsWhsRecords.id, id), tenantWhere(lmsWhsRecords, tid)));
 
   await logAuditEvent({
     tenantId: tid,
@@ -167,16 +172,19 @@ export async function deleteWhsRecordAction(formData: FormData): Promise<void> {
   const id = intOrNull(formData.get("id"));
   if (!id) throw new Error("Bad id");
 
-  const [target] = await db
-    .select({ title: lmsWhsRecords.title })
-    .from(lmsWhsRecords)
-    .where(and(eq(lmsWhsRecords.id, id), tenantWhere(lmsWhsRecords, tid)))
-    .limit(1);
+  const target = await ctx.db.run(async (tx) => {
+    const [t] = await tx
+      .select({ title: lmsWhsRecords.title })
+      .from(lmsWhsRecords)
+      .where(and(eq(lmsWhsRecords.id, id), tenantWhere(lmsWhsRecords, tid)))
+      .limit(1);
+    if (!t) return null;
+    await tx
+      .delete(lmsWhsRecords)
+      .where(and(eq(lmsWhsRecords.id, id), tenantWhere(lmsWhsRecords, tid)));
+    return t;
+  });
   if (!target) return;
-
-  await db
-    .delete(lmsWhsRecords)
-    .where(and(eq(lmsWhsRecords.id, id), tenantWhere(lmsWhsRecords, tid)));
 
   await logAuditEvent({
     tenantId: tid,

@@ -40,14 +40,14 @@ export async function GET(
     file = await getUploadForAdmin(name, tenant.id);
   }
   if (!file) {
-    const { lmsUser } = await requireLearner();
+    const { lmsUser, traceyTenantId } = await requireLearner();
     // A user may always read their own profile photo, even though it isn't
     // referenced by any module (so getUploadForLearner alone wouldn't allow it).
     if (lmsUser.photoFilename === name) {
       file = await getOwnPhotoUpload(name);
     }
     if (!file) {
-      file = await getUploadForLearner(name, lmsUser.id);
+      file = await getUploadForLearner(name, lmsUser.id, traceyTenantId);
     }
   }
   if (!file) return new NextResponse("Not Found", { status: 404 });
