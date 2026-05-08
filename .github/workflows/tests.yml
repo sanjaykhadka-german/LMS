@@ -1,9 +1,12 @@
 name: tests
 
+# Flask tests are dormant since Phase 5 retirement (2026-05-08). The Flask
+# source lives under legacy-flask/ and isn't deployed any more. Re-enable
+# the auto-trigger by adding `push:` / `pull_request:` keys below, or run
+# manually via the Actions UI's "Run workflow" button for emergency
+# rollback verification.
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_dispatch:
 
 jobs:
   test:
@@ -20,13 +23,15 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
+          pip install -r legacy-flask/requirements-dev.txt
 
       - name: Install Playwright Chromium
         run: python -m playwright install --with-deps chromium
 
       - name: Run backend tests
+        working-directory: legacy-flask
         run: pytest -m backend -v
 
       - name: Run E2E tests
+        working-directory: legacy-flask
         run: pytest -m e2e -v
