@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { lmsModules } from "@tracey/db";
-import { requireAdminAction } from "~/lib/auth/admin";
+import { requireAdmin } from "~/lib/auth/admin";
 import { logAuditEvent } from "~/lib/audit";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
 import type { FormState } from "../_components/NameCrudForm";
@@ -15,7 +15,7 @@ const createSchema = z.object({
 });
 
 export async function createModuleAction(_prev: FormState, formData: FormData): Promise<FormState> {
-  const ctx = await requireAdminAction();
+  const ctx = await requireAdmin();
   const tid = ctx.traceyTenantId;
   const parsed = createSchema.safeParse({ title: formData.get("name") });
   if (!parsed.success) {
@@ -53,7 +53,7 @@ export async function createModuleAction(_prev: FormState, formData: FormData): 
 }
 
 export async function deleteModuleAction(formData: FormData): Promise<void> {
-  const ctx = await requireAdminAction();
+  const ctx = await requireAdmin();
   const tid = ctx.traceyTenantId;
   const id = parseInt(String(formData.get("id") ?? ""), 10);
   if (!Number.isFinite(id)) throw new Error("Bad id");
