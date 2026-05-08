@@ -2,10 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-// Load apps/lms-web/.env.test.local — gitignored, never committed.
-function loadDotEnvTestLocal() {
-  const here = path.dirname(fileURLToPath(import.meta.url));
-  const envPath = path.resolve(here, "..", "..", "..", ".env.test.local");
+function loadDotEnvFile(envPath: string) {
   if (!fs.existsSync(envPath)) return;
   const content = fs.readFileSync(envPath, "utf8");
   for (const raw of content.split(/\r?\n/)) {
@@ -25,12 +22,30 @@ function loadDotEnvTestLocal() {
   }
 }
 
+// Load env files in the same precedence Next dev uses, plus our test-local
+// override. First-wins (we never overwrite existing process.env), so the
+// shell can still override anything by exporting it before invoking pnpm.
+function loadEnvForTests() {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const lmsWebRoot = path.resolve(here, "..", "..", "..");
+  const repoRoot = path.resolve(lmsWebRoot, "..", "..");
+  loadDotEnvFile(path.join(lmsWebRoot, ".env.test.local")); // E2E creds
+  loadDotEnvFile(path.join(lmsWebRoot, ".env.local"));      // Next dev local overrides
+  loadDotEnvFile(path.join(lmsWebRoot, ".env"));            // Next dev defaults
+  loadDotEnvFile(path.join(repoRoot, ".env"));              // monorepo root (DATABASE_URL etc.)
+}
+
 export default async function globalSetup() {
-  loadDotEnvTestLocal();
+  loadEnvForTests();
+  // Warn rather than throw. Specs that depend on E2E_EMAIL/E2E_PASSWORD
+  // (smoke, password-change, profile-edit, …) surface the missing creds in
+  // their own auth fixture with a clearer message. The cross-tenant
+  // isolation spec is self-seeded and doesn't need them, so a hard throw
+  // here would block running just that spec on a fresh checkout.
   if (!process.env.E2E_EMAIL || !process.env.E2E_PASSWORD) {
-    throw new Error(
-      "E2E credentials missing. Create apps/lms-web/.env.test.local with " +
-        "E2E_EMAIL and E2E_PASSWORD (see .env.test.local.example).",
+    console.warn(
+      "[e2e] E2E_EMAIL / E2E_PASSWORD not set — specs that rely on a real " +
+        "admin account will fail. See apps/lms-web/.env.test.local.example.",
     );
   }
 }

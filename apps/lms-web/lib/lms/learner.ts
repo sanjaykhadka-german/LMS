@@ -88,70 +88,73 @@ export async function getOrProvisionLmsUser(opts: {
   const email = opts.email.toLowerCase().trim();
   const name = (opts.name ?? email).trim();
 
-  // public.users excluded from RLS in 0004; provision path runs at sign-in
-  // BEFORE any tenant context is set; lookups by uuid or unique email.
-  // allow-cross-tenant: pre-tenant-context provision on RLS-excluded table.
-  const bySub = await db
-    .select()
-    .from(lmsUsers)
-    .where(eq(lmsUsers.traceyUserId, opts.traceyUserId))
-    .limit(1);
-  if (bySub[0]) return bySub[0];
+  // public.users is RLS-excluded today (0004_enable_rls.sql:105-115) so this
+  // wrap is defensive polish, not strictly required: it puts every legacy
+  // LMS query through the same forTenant() chokepoint, removing breakage
+  // risk if/when users joins RLS coverage in a future Phase 5.x cleanup.
+  // The whole bySub/byEmail/INSERT/refetch dance runs in ONE transaction so
+  // the GUC is set once. Race-safety still holds: under READ COMMITTED, a
+  // concurrent insert that wins the email-uniqueness race becomes visible
+  // to our refetch the moment it commits.
+  return forTenant(opts.traceyTenantId).run(async (tx) => {
+    const bySub = await tx
+      .select()
+      .from(lmsUsers)
+      .where(eq(lmsUsers.traceyUserId, opts.traceyUserId))
+      .limit(1);
+    if (bySub[0]) return bySub[0];
 
-  // Existing legacy row (admin imported the user before SSO ever ran).
-  // Link tracey_user_id and return.
-  // allow-cross-tenant: same reason as above.
-  const byEmail = await db
-    .select()
-    .from(lmsUsers)
-    .where(eq(lmsUsers.email, email))
-    .limit(1);
-  if (byEmail[0]) {
-    // allow-cross-tenant: linking PK uuid to existing public.users row.
-    const linked = await db
-      .update(lmsUsers)
-      .set({ traceyUserId: opts.traceyUserId, traceyTenantId: opts.traceyTenantId })
-      .where(eq(lmsUsers.id, byEmail[0].id))
+    // Existing legacy row (admin imported the user before SSO ever ran).
+    // Link tracey_user_id and return.
+    const byEmail = await tx
+      .select()
+      .from(lmsUsers)
+      .where(eq(lmsUsers.email, email))
+      .limit(1);
+    if (byEmail[0]) {
+      const linked = await tx
+        .update(lmsUsers)
+        .set({ traceyUserId: opts.traceyUserId, traceyTenantId: opts.traceyTenantId })
+        .where(eq(lmsUsers.id, byEmail[0].id))
+        .returning();
+      return linked[0] ?? byEmail[0];
+    }
+
+    // First-time learner. The bcrypt hash is intentionally unreachable —
+    // password login is for legacy Flask-imported admins; SSO learners use
+    // Tracey only.
+    const [first, ...rest] = name.split(/\s+/);
+    const last = rest.join(" ");
+    const passwordHash = await bcrypt.hash(crypto.randomBytes(24).toString("base64url"), 12);
+
+    const inserted = await tx
+      .insert(lmsUsers)
+      .values({
+        email,
+        name,
+        firstName: first ?? "",
+        lastName: last ?? "",
+        passwordHash,
+        role: "employee",
+        isActiveFlag: true,
+        traceyUserId: opts.traceyUserId,
+        traceyTenantId: opts.traceyTenantId,
+      })
+      .onConflictDoNothing({ target: lmsUsers.email })
       .returning();
-    return linked[0] ?? byEmail[0];
-  }
+    if (inserted[0]) return inserted[0];
 
-  // First-time learner. The bcrypt hash is intentionally unreachable —
-  // password login is for legacy Flask-imported admins; SSO learners use
-  // Tracey only.
-  const [first, ...rest] = name.split(/\s+/);
-  const last = rest.join(" ");
-  const passwordHash = await bcrypt.hash(crypto.randomBytes(24).toString("base64url"), 12);
-
-  // allow-cross-tenant: public.users insert at sign-in pre-tenant-context.
-  const inserted = await db
-    .insert(lmsUsers)
-    .values({
-      email,
-      name,
-      firstName: first ?? "",
-      lastName: last ?? "",
-      passwordHash,
-      role: "employee",
-      isActiveFlag: true,
-      traceyUserId: opts.traceyUserId,
-      traceyTenantId: opts.traceyTenantId,
-    })
-    .onConflictDoNothing({ target: lmsUsers.email })
-    .returning();
-  if (inserted[0]) return inserted[0];
-
-  // Lost the race against another concurrent provision — refetch.
-  // allow-cross-tenant: same reason as the bySub/byEmail lookups above.
-  const refetch = await db
-    .select()
-    .from(lmsUsers)
-    .where(eq(lmsUsers.email, email))
-    .limit(1);
-  if (!refetch[0]) {
-    throw new Error("Failed to provision LMS user (race lost and refetch empty).");
-  }
-  return refetch[0];
+    // Lost the race against another concurrent provision — refetch.
+    const refetch = await tx
+      .select()
+      .from(lmsUsers)
+      .where(eq(lmsUsers.email, email))
+      .limit(1);
+    if (!refetch[0]) {
+      throw new Error("Failed to provision LMS user (race lost and refetch empty).");
+    }
+    return refetch[0];
+  });
 }
 
 /** One-stop helper for learner pages: requires Tracey auth + active tenant,
