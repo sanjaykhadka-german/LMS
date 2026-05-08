@@ -27,7 +27,7 @@
 // role, which already has full access. If a separate app role is added
 // later, GRANT statements get added to `appendGrantsSql(tenantId, role)`.
 
-const LMS_TABLES_WITH_ID = [
+export const LMS_TABLES_WITH_ID = [
   "departments",
   "employers",
   "machines",
@@ -250,3 +250,112 @@ export const SCHEMA_EXISTS_SQL = `SELECT 1 FROM pg_namespace WHERE nspname = $1`
  * applied by per-tenant-migrate.ts, ledgered separately.
  */
 export const BASELINE_MIGRATION_NAME = "0006_baseline";
+
+/** Phase 7c — written when `tenant-copy` succeeds. Re-running copy is
+ *  refused unless the operator passes --force (and manually drops the
+ *  schema first). */
+export const DATA_COPY_MIGRATION_NAME = "0007_data_copy";
+
+/** Phase 7c — written when `tenant-freeze` succeeds (REVOKE on public.lms_*).
+ *  Removed by `tenant-unfreeze`. */
+export const FREEZE_MIGRATION_NAME = "0008_freeze";
+
+/**
+ * Phase 7c — INSERT-FROM-SELECT for the tenant's data, plus sequence resync.
+ * Returns an ordered list of SQL statements meant to be executed inside ONE
+ * transaction. Run order:
+ *
+ *   1. SET LOCAL search_path = "tenant_<x>", public  (so unqualified names
+ *      resolve to the per-tenant schema first; the source SELECT uses
+ *      explicit `public.<table>` to bypass the per-tenant resolution).
+ *   2. SET CONSTRAINTS ALL DEFERRED  (the FKs created by provisionSql() are
+ *      DEFERRABLE INITIALLY IMMEDIATE; deferring them lets the 19 INSERTs
+ *      run in any order without intermediate FK violations).
+ *   3. INSERT INTO "tenant_<x>"."<table>" SELECT * FROM public."<table>"
+ *      WHERE tracey_tenant_id = '<id>'   (one per LMS_TABLES; 19 total).
+ *   4. setval each per-tenant sequence to MAX(id) of the now-populated
+ *      table, with `is_called` = (rows existed) so the next nextval emits
+ *      max+1 (or 1 if empty). Postgres-safe even for empty source.
+ *
+ * Reads from `public` are non-mutating; the `public.lms_*` rows are not
+ * modified by this SQL. Writes go only to `tenant_<x>.lms_*`.
+ */
+export function dataCopySql(tenantId: string): string[] {
+  const schema = tenantSchemaName(tenantId);
+  const qSchema = q(schema);
+  const stmts: string[] = [];
+
+  // Search path needs the tenant schema first so unqualified `id` etc.
+  // resolve correctly; the SELECT side uses fully qualified `public.<t>`
+  // to read the source.
+  stmts.push(`SET LOCAL search_path = ${qSchema}, public`);
+
+  // Defer FK validation to commit so we can INSERT in any order.
+  stmts.push(`SET CONSTRAINTS ALL DEFERRED`);
+
+  // Copy each table.
+  for (const table of LMS_TABLES) {
+    stmts.push(
+      `INSERT INTO ${qSchema}.${q(table)} ` +
+        `SELECT * FROM public.${q(table)} ` +
+        `WHERE tracey_tenant_id = ${lit(tenantId)}`,
+    );
+  }
+
+  // Sequence resync — only ID-bearing tables.
+  for (const table of LMS_TABLES_WITH_ID) {
+    const seqName = `${table}_id_seq`;
+    const seqQualified = `${schema}.${seqName}`;
+    // setval(seq, value, is_called):
+    //   - value: MAX(id) if rows exist, else 1.
+    //   - is_called: true if rows exist (next nextval = max+1),
+    //                false if empty (next nextval = 1).
+    // GREATEST(1, ...) protects setval from receiving 0 or negative.
+    stmts.push(
+      `SELECT setval(${lit(seqQualified)}, ` +
+        `GREATEST(1, COALESCE((SELECT MAX(id) FROM ${qSchema}.${q(table)}), 1)), ` +
+        `(SELECT MAX(id) IS NOT NULL FROM ${qSchema}.${q(table)}))`,
+    );
+  }
+
+  return stmts;
+}
+
+/**
+ * Phase 7c — adds a `CHECK (false) NOT VALID` constraint to every
+ * public.lms_* table. After the constraint is in place:
+ *   - Existing rows are not re-validated (NOT VALID skip), so the
+ *     frozen snapshot stays intact.
+ *   - INSERT and UPDATE fail with a CHECK violation — the row would not
+ *     satisfy `false`, and constraint validation catches it.
+ *   - SELECT and DELETE are unaffected.
+ *
+ * Why CHECK and not REVOKE: the connection role on this codebase is the
+ * table owner (root locally, the Render-managed user in prod). Postgres
+ * grants owners implicit ALL privileges that REVOKE cannot remove. CHECK
+ * constraints apply to all roles, including owners.
+ *
+ * Inverse: `unfreezeSql()` drops the constraint.
+ */
+export const FREEZE_CONSTRAINT_NAME = "phase7c_frozen";
+
+export function freezeSql(): string[] {
+  const stmts: string[] = [];
+  for (const table of LMS_TABLES) {
+    stmts.push(
+      `ALTER TABLE public.${q(table)} ADD CONSTRAINT ${q(FREEZE_CONSTRAINT_NAME)} CHECK (false) NOT VALID`,
+    );
+  }
+  return stmts;
+}
+
+/** Phase 7c — inverse of `freezeSql()`. Drops the freeze constraint. */
+export function unfreezeSql(): string[] {
+  const stmts: string[] = [];
+  for (const table of LMS_TABLES) {
+    stmts.push(
+      `ALTER TABLE public.${q(table)} DROP CONSTRAINT IF EXISTS ${q(FREEZE_CONSTRAINT_NAME)}`,
+    );
+  }
+  return stmts;
+}

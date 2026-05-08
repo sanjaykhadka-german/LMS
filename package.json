@@ -18,7 +18,10 @@
     "db:reset": "pnpm --filter @tracey/db run reset",
     "db:studio": "pnpm --filter @tracey/db run studio",
     "db:tenant-backup": "pnpm --filter @tracey/db run tenant-backup",
-    "db:tenant-provision": "pnpm --filter @tracey/db run tenant-provision"
+    "db:tenant-provision": "pnpm --filter @tracey/db run tenant-provision",
+    "db:tenant-copy": "pnpm --filter @tracey/db run tenant-copy",
+    "db:tenant-freeze": "pnpm --filter @tracey/db run tenant-freeze",
+    "db:tenant-unfreeze": "pnpm --filter @tracey/db run tenant-unfreeze"
   },
   "devDependencies": {
     "turbo": "^2.3.3",

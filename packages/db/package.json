@@ -16,6 +16,9 @@
     "migrate-tenants": "tsx src/per-tenant-migrate.ts",
     "tenant-backup": "tsx src/cli/tenant-backup.ts",
     "tenant-provision": "tsx src/cli/tenant-provision.ts",
+    "tenant-copy": "tsx src/cli/tenant-copy.ts",
+    "tenant-freeze": "tsx src/cli/tenant-freeze.ts",
+    "tenant-unfreeze": "tsx src/cli/tenant-unfreeze.ts",
     "reset": "tsx src/reset.ts",
     "studio": "drizzle-kit studio",
     "typecheck": "tsc --noEmit"
