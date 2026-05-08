@@ -8,6 +8,7 @@ import {
 } from "~/lib/auth/current";
 import { siteConfig } from "~/lib/site-config";
 import { getAuthorAccess } from "~/lib/auth/author";
+import { isPlatformAdmin } from "~/lib/auth/platform";
 import { getOrProvisionLmsUser } from "~/lib/lms/learner";
 import { UserMenu } from "./_components/user-menu";
 import { TenantSwitcher } from "./_components/tenant-switcher";
@@ -37,6 +38,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const photoUrl = lmsUser.photoFilename
     ? `/uploads/${lmsUser.photoFilename}`
     : null;
+  const platformAdmin = isPlatformAdmin(user.email);
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -77,6 +79,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               </Link>
               {(membership.role === "owner" || membership.role === "admin") && (
                 <Link
+                  href="/app"
+                  className="rounded-md px-3 py-1.5 text-sm font-medium text-[color:var(--muted-foreground)] transition-colors hover:bg-[color:var(--secondary)] hover:text-[color:var(--foreground)]"
+                >
+                  Billing
+                </Link>
+              )}
+              {(membership.role === "owner" || membership.role === "admin") && (
+                <Link
                   href="/app/admin"
                   className="rounded-md px-3 py-1.5 text-sm font-medium text-[color:var(--muted-foreground)] transition-colors hover:bg-[color:var(--secondary)] hover:text-[color:var(--foreground)]"
                 >
@@ -87,7 +97,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </div>
           <div className="flex items-center gap-2">
             <InstallAppButton />
-            <UserMenu name={user.name} email={user.email} photoUrl={photoUrl} />
+            <UserMenu
+              name={user.name}
+              email={user.email}
+              photoUrl={photoUrl}
+              showPlatformLink={platformAdmin}
+            />
           </div>
         </div>
       </header>

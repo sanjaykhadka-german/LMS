@@ -24,6 +24,9 @@ interface PageProps {
 
 export default async function PlatformTenantDetailPage({ params }: PageProps) {
   const { id } = await params;
+  const stripeBase = process.env.STRIPE_SECRET_KEY?.startsWith("sk_test_")
+    ? "https://dashboard.stripe.com/test"
+    : "https://dashboard.stripe.com";
 
   const [tenant] = await db
     .select({
@@ -123,8 +126,40 @@ export default async function PlatformTenantDetailPage({ params }: PageProps) {
             label="Renews"
             value={tenant.currentPeriodEnd?.toISOString().slice(0, 10) ?? "—"}
           />
-          <Row label="Stripe customer" value={tenant.stripeCustomerId ?? "—"} mono />
-          <Row label="Stripe subscription" value={tenant.stripeSubscriptionId ?? "—"} mono />
+          <Row
+            label="Stripe customer"
+            value={
+              tenant.stripeCustomerId ? (
+                <a
+                  href={`${stripeBase}/customers/${tenant.stripeCustomerId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-mono text-xs underline-offset-2 hover:underline"
+                >
+                  {tenant.stripeCustomerId}
+                </a>
+              ) : (
+                "—"
+              )
+            }
+          />
+          <Row
+            label="Stripe subscription"
+            value={
+              tenant.stripeSubscriptionId ? (
+                <a
+                  href={`${stripeBase}/subscriptions/${tenant.stripeSubscriptionId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-mono text-xs underline-offset-2 hover:underline"
+                >
+                  {tenant.stripeSubscriptionId}
+                </a>
+              ) : (
+                "—"
+              )
+            }
+          />
         </CardContent>
       </Card>
 

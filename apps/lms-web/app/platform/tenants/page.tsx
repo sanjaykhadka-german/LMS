@@ -63,7 +63,9 @@ export default async function PlatformTenantsPage() {
                   <th className="pb-2 pr-3 font-medium">Owner</th>
                   <th className="pb-2 pr-3 font-medium">Plan</th>
                   <th className="pb-2 pr-3 font-medium">Status</th>
+                  <th className="pb-2 pr-3 font-medium">Renews</th>
                   <th className="pb-2 pr-3 font-medium">Members</th>
+                  <th className="pb-2 pr-3 font-medium">Seats</th>
                   <th className="pb-2 pr-3 font-medium">Created</th>
                 </tr>
               </thead>
@@ -90,7 +92,11 @@ export default async function PlatformTenantsPage() {
                         {r.status}
                       </Badge>
                     </td>
+                    <td className="py-3 pr-3 text-[color:var(--muted-foreground)]">
+                      {r.currentPeriodEnd?.toISOString().slice(0, 10) ?? "—"}
+                    </td>
                     <td className="py-3 pr-3">{r.memberCount ?? 0}</td>
+                    <td className="py-3 pr-3">{r.seatsPurchased ?? 0}</td>
                     <td className="py-3 pr-3 text-[color:var(--muted-foreground)]">
                       {r.createdAt.toISOString().slice(0, 10)}
                     </td>
@@ -98,7 +104,7 @@ export default async function PlatformTenantsPage() {
                 ))}
                 {rows.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="py-6 text-center text-[color:var(--muted-foreground)]">
+                    <td colSpan={8} className="py-6 text-center text-[color:var(--muted-foreground)]">
                       No tenants yet.
                     </td>
                   </tr>

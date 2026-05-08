@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { LogOut, User } from "lucide-react";
+import { Building2, LogOut, User } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,10 +16,12 @@ export function UserMenu({
   name,
   email,
   photoUrl,
+  showPlatformLink = false,
 }: {
   name: string | null;
   email: string;
   photoUrl?: string | null;
+  showPlatformLink?: boolean;
 }) {
   const router = useRouter();
   const initials = (name ?? email).slice(0, 2).toUpperCase();
@@ -59,6 +61,18 @@ export function UserMenu({
           <User className="mr-2 h-4 w-4" />
           Profile
         </DropdownMenuItem>
+        {showPlatformLink && (
+          <DropdownMenuItem
+            onSelect={(e) => {
+              e.preventDefault();
+              router.push("/platform");
+            }}
+            className="cursor-pointer"
+          >
+            <Building2 className="mr-2 h-4 w-4" />
+            Tracey Platform
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onSelect={(e) => {
