@@ -10,6 +10,10 @@ import {
 } from "@tracey/db";
 import { Badge } from "~/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
+import {
+  getTenantLmsCounts,
+  getTenantSchemaInfo,
+} from "~/lib/tenancy/cross-schema";
 
 const statusVariant = {
   trialing: "warning",
@@ -89,6 +93,14 @@ export default async function PlatformTenantDetailPage({ params }: PageProps) {
     .orderBy(desc(auditEvents.createdAt))
     .limit(50);
 
+  // Phase 7d — schema/provisioning state + LMS counts.
+  const [allSchemaInfo, allLmsCounts] = await Promise.all([
+    getTenantSchemaInfo(),
+    getTenantLmsCounts(),
+  ]);
+  const schemaInfo = allSchemaInfo.find((s) => s.tenantId === id);
+  const lmsCounts = allLmsCounts.find((c) => c.tenantId === id);
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-10 space-y-6">
       <div>
@@ -117,6 +129,23 @@ export default async function PlatformTenantDetailPage({ params }: PageProps) {
           />
           <Row label="Members" value={String(memberRows.length)} />
           <Row label="Seats" value={String(tenant.seatsPurchased)} />
+          <Row
+            label="Schema"
+            value={
+              <span className="flex items-center gap-2">
+                <Badge variant={schemaInfo?.isProvisioned ? "success" : "secondary"}>
+                  {schemaInfo?.isProvisioned ? "Physical" : "Logical"}
+                </Badge>
+                {schemaInfo?.isProvisioned && schemaInfo.schemaName && (
+                  <code className="font-mono text-xs text-[color:var(--muted-foreground)]">
+                    {schemaInfo.schemaName}
+                  </code>
+                )}
+                {schemaInfo?.isCopied && <Badge variant="outline">copied</Badge>}
+                {schemaInfo?.isFrozen && <Badge variant="outline">frozen</Badge>}
+              </span>
+            }
+          />
           <Row label="Created" value={tenant.createdAt.toISOString().slice(0, 10)} />
           <Row
             label="Trial ends"
@@ -160,6 +189,22 @@ export default async function PlatformTenantDetailPage({ params }: PageProps) {
               )
             }
           />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">LMS data</CardTitle>
+          <CardDescription>
+            {schemaInfo?.isProvisioned
+              ? `Counts read from ${schemaInfo.schemaName} (per-tenant schema). Learners always read from public.users.`
+              : "Counts read from public.lms_* filtered by tracey_tenant_id (logical isolation, RLS-enforced)."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 text-sm sm:grid-cols-3">
+          <Row label="Modules" value={String(lmsCounts?.modules ?? 0)} />
+          <Row label="Content items" value={String(lmsCounts?.contentItems ?? 0)} />
+          <Row label="Learners" value={String(lmsCounts?.learners ?? 0)} />
         </CardContent>
       </Card>
 

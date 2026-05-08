@@ -3,6 +3,10 @@ import { desc, eq, sql } from "drizzle-orm";
 import { db, tenants, members, users } from "@tracey/db";
 import { Badge } from "~/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
+import {
+  getTenantLmsCounts,
+  getTenantSchemaInfo,
+} from "~/lib/tenancy/cross-schema";
 
 const statusVariant = {
   trialing: "warning",
@@ -21,24 +25,30 @@ export default async function PlatformTenantsPage() {
     .groupBy(members.tenantId)
     .as("member_counts");
 
-  const rows = await db
-    .select({
-      id: tenants.id,
-      name: tenants.name,
-      slug: tenants.slug,
-      plan: tenants.plan,
-      status: tenants.status,
-      trialEndsAt: tenants.trialEndsAt,
-      currentPeriodEnd: tenants.currentPeriodEnd,
-      seatsPurchased: tenants.seatsPurchased,
-      createdAt: tenants.createdAt,
-      ownerEmail: users.email,
-      memberCount: memberCountSubquery.count,
-    })
-    .from(tenants)
-    .leftJoin(users, eq(users.id, tenants.ownerUserId))
-    .leftJoin(memberCountSubquery, eq(memberCountSubquery.tenantId, tenants.id))
-    .orderBy(desc(tenants.createdAt));
+  const [rows, schemaInfo, lmsCounts] = await Promise.all([
+    db
+      .select({
+        id: tenants.id,
+        name: tenants.name,
+        slug: tenants.slug,
+        plan: tenants.plan,
+        status: tenants.status,
+        trialEndsAt: tenants.trialEndsAt,
+        currentPeriodEnd: tenants.currentPeriodEnd,
+        seatsPurchased: tenants.seatsPurchased,
+        createdAt: tenants.createdAt,
+        ownerEmail: users.email,
+        memberCount: memberCountSubquery.count,
+      })
+      .from(tenants)
+      .leftJoin(users, eq(users.id, tenants.ownerUserId))
+      .leftJoin(memberCountSubquery, eq(memberCountSubquery.tenantId, tenants.id))
+      .orderBy(desc(tenants.createdAt)),
+    getTenantSchemaInfo(),
+    getTenantLmsCounts(),
+  ]);
+  const schemaByTenant = new Map(schemaInfo.map((s) => [s.tenantId, s]));
+  const countsByTenant = new Map(lmsCounts.map((c) => [c.tenantId, c]));
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10 space-y-6">
@@ -63,48 +73,60 @@ export default async function PlatformTenantsPage() {
                   <th className="pb-2 pr-3 font-medium">Owner</th>
                   <th className="pb-2 pr-3 font-medium">Plan</th>
                   <th className="pb-2 pr-3 font-medium">Status</th>
+                  <th className="pb-2 pr-3 font-medium">Schema</th>
                   <th className="pb-2 pr-3 font-medium">Renews</th>
                   <th className="pb-2 pr-3 font-medium">Members</th>
+                  <th className="pb-2 pr-3 font-medium">Modules</th>
                   <th className="pb-2 pr-3 font-medium">Seats</th>
                   <th className="pb-2 pr-3 font-medium">Created</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[color:var(--border)]">
-                {rows.map((r) => (
-                  <tr key={r.id} className="align-top">
-                    <td className="py-3 pr-3">
-                      <Link
-                        href={`/platform/tenants/${r.id}`}
-                        className="font-medium hover:underline"
-                      >
-                        {r.name}
-                      </Link>
-                      <div className="text-xs text-[color:var(--muted-foreground)]">{r.slug}</div>
-                    </td>
-                    <td className="py-3 pr-3 text-[color:var(--muted-foreground)]">{r.ownerEmail ?? "—"}</td>
-                    <td className="py-3 pr-3">
-                      <span className="capitalize">{r.plan}</span>
-                    </td>
-                    <td className="py-3 pr-3">
-                      <Badge
-                        variant={statusVariant[r.status as keyof typeof statusVariant] ?? "secondary"}
-                      >
-                        {r.status}
-                      </Badge>
-                    </td>
-                    <td className="py-3 pr-3 text-[color:var(--muted-foreground)]">
-                      {r.currentPeriodEnd?.toISOString().slice(0, 10) ?? "—"}
-                    </td>
-                    <td className="py-3 pr-3">{r.memberCount ?? 0}</td>
-                    <td className="py-3 pr-3">{r.seatsPurchased ?? 0}</td>
-                    <td className="py-3 pr-3 text-[color:var(--muted-foreground)]">
-                      {r.createdAt.toISOString().slice(0, 10)}
-                    </td>
-                  </tr>
-                ))}
+                {rows.map((r) => {
+                  const schema = schemaByTenant.get(r.id);
+                  const counts = countsByTenant.get(r.id);
+                  return (
+                    <tr key={r.id} className="align-top">
+                      <td className="py-3 pr-3">
+                        <Link
+                          href={`/platform/tenants/${r.id}`}
+                          className="font-medium hover:underline"
+                        >
+                          {r.name}
+                        </Link>
+                        <div className="text-xs text-[color:var(--muted-foreground)]">{r.slug}</div>
+                      </td>
+                      <td className="py-3 pr-3 text-[color:var(--muted-foreground)]">{r.ownerEmail ?? "—"}</td>
+                      <td className="py-3 pr-3">
+                        <span className="capitalize">{r.plan}</span>
+                      </td>
+                      <td className="py-3 pr-3">
+                        <Badge
+                          variant={statusVariant[r.status as keyof typeof statusVariant] ?? "secondary"}
+                        >
+                          {r.status}
+                        </Badge>
+                      </td>
+                      <td className="py-3 pr-3">
+                        <Badge variant={schema?.isProvisioned ? "success" : "secondary"}>
+                          {schema?.isProvisioned ? "Physical" : "Logical"}
+                        </Badge>
+                      </td>
+                      <td className="py-3 pr-3 text-[color:var(--muted-foreground)]">
+                        {r.currentPeriodEnd?.toISOString().slice(0, 10) ?? "—"}
+                      </td>
+                      <td className="py-3 pr-3">{r.memberCount ?? 0}</td>
+                      <td className="py-3 pr-3">{counts?.modules ?? 0}</td>
+                      <td className="py-3 pr-3">{r.seatsPurchased ?? 0}</td>
+                      <td className="py-3 pr-3 text-[color:var(--muted-foreground)]">
+                        {r.createdAt.toISOString().slice(0, 10)}
+                      </td>
+                    </tr>
+                  );
+                })}
                 {rows.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="py-6 text-center text-[color:var(--muted-foreground)]">
+                    <td colSpan={10} className="py-6 text-center text-[color:var(--muted-foreground)]">
                       No tenants yet.
                     </td>
                   </tr>
