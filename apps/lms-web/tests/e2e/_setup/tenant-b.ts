@@ -19,7 +19,8 @@
 
 import bcrypt from "bcryptjs";
 import { eq, sql } from "drizzle-orm";
-import { db, lmsModules, lmsUsers, members, tenants, users } from "@tracey/db";
+import { db, forTenant, lmsModules, lmsUsers, members, tenants, users } from "@tracey/db";
+import { provisionTenant } from "../../../lib/tenancy/provision";
 
 export interface TestTenant {
   tenantId: string;
@@ -50,6 +51,17 @@ const TENANT_B: SeedSpec = {
   slug: process.env.E2E_TENANT_B_SLUG ?? "tenant-b-isolation-test",
   tenantName: process.env.E2E_TENANT_B_NAME ?? "Tenant B (isolation test)",
   userName: "Tenant B Admin",
+};
+
+const TENANT_C: SeedSpec = {
+  // Phase 7b — provisioned tenant for the mixed-isolation-models test.
+  // ensureTenantC additionally calls provisionTenant() on the seeded
+  // tenant so its LMS queries route through tenant_<c>.* via search_path.
+  email: process.env.E2E_TENANT_C_EMAIL ?? "tenant-c-admin@example.test",
+  password: process.env.E2E_TENANT_C_PASSWORD ?? "tenant-c-pass-1",
+  slug: process.env.E2E_TENANT_C_SLUG ?? "tenant-c-isolation-test",
+  tenantName: process.env.E2E_TENANT_C_NAME ?? "Tenant C (provisioned isolation test)",
+  userName: "Tenant C Admin",
 };
 
 async function ensureTenant(spec: SeedSpec): Promise<TestTenant> {
@@ -141,6 +153,15 @@ export async function ensureTenantB(): Promise<TestTenant> {
   return ensureTenant(TENANT_B);
 }
 
+/** Like ensureTenantA/B, but additionally provisions a per-tenant schema
+ *  via provisionTenant(). Idempotent on both axes — re-running the spec
+ *  is safe. */
+export async function ensureTenantC(): Promise<TestTenant> {
+  const t = await ensureTenant(TENANT_C);
+  await provisionTenant(t.tenantId);
+  return t;
+}
+
 export async function deleteModulesByTitle(title: string): Promise<number> {
   // Cleanup helper: removes any probe rows that the spec leaked. Safe to
   // call repeatedly. Filters by title so we never touch unrelated data.
@@ -168,4 +189,25 @@ export async function createProbeModule(opts: {
     .returning({ id: lmsModules.id });
   if (!row) throw new Error("createProbeModule: insert returned no row");
   return row.id;
+}
+
+/** Like createProbeModule, but writes via forTenant() so the row lands in
+ *  the tenant's per-tenant schema (when one exists) rather than public.
+ *  Use for tenants that have been provisioned via provisionTenant(). */
+export async function createProbeModuleInTenantSchema(opts: {
+  tenantId: string;
+  title: string;
+}): Promise<number> {
+  return forTenant(opts.tenantId).run(async (tx) => {
+    const [row] = await tx
+      .insert(lmsModules)
+      .values({
+        title: opts.title,
+        isPublished: false,
+        traceyTenantId: opts.tenantId,
+      })
+      .returning({ id: lmsModules.id });
+    if (!row) throw new Error("createProbeModuleInTenantSchema: insert returned no row");
+    return row.id;
+  });
 }

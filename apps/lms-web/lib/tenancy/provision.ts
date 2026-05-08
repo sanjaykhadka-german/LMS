@@ -11,8 +11,14 @@
 // DDL that can't be wrapped in `forTenant()` (which sets a search_path
 // pointing at a schema that doesn't yet exist). The lint allowlist in
 // scripts/check-tenant-scope.mjs recognises this comment.
+//
+// Note: `import "server-only"` is intentionally NOT used here even though
+// this module is server-side only. It's also imported by Playwright
+// fixtures (apps/lms-web/tests/e2e/_setup/tenant-b.ts) which run in raw
+// Node without the Next.js stub. The realistic import surface (server
+// actions + tests) is server-only by construction; the lint above plus
+// directory placement (lib/tenancy/, not components/) is the guarantee.
 
-import "server-only";
 import {
   BASELINE_MIGRATION_NAME,
   db,

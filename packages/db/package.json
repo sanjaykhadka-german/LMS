@@ -14,6 +14,8 @@
     "generate": "drizzle-kit generate",
     "migrate": "tsx src/migrate.ts",
     "migrate-tenants": "tsx src/per-tenant-migrate.ts",
+    "tenant-backup": "tsx src/cli/tenant-backup.ts",
+    "tenant-provision": "tsx src/cli/tenant-provision.ts",
     "reset": "tsx src/reset.ts",
     "studio": "drizzle-kit studio",
     "typecheck": "tsc --noEmit"
