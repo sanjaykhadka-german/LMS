@@ -27,18 +27,6 @@ export interface BridgedUser {
   emailVerified: Date;
 }
 
-// Used by auth.ts to detect orphaned app.users rows (a Tracey signup that
-// was abandoned before workspace creation). Such users would otherwise
-// land on /onboarding every time. Cheap — single indexed query.
-export async function userHasAnyMembership(userId: string): Promise<boolean> {
-  const [row] = await db
-    .select({ id: members.id })
-    .from(members)
-    .where(eq(members.userId, userId))
-    .limit(1);
-  return Boolean(row);
-}
-
 export async function tryLegacyAuth(
   email: string,
   plaintext: string,
