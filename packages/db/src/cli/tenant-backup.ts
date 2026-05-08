@@ -106,11 +106,22 @@ async function main() {
   // Spawn pg_dump. We pass DATABASE_URL via env (PGURL-equivalent) and
   // --schema to scope to the per-tenant schema. --no-owner / --no-privileges
   // keep the dump portable across environments (no role-specific output).
+  //
+  // --enable-row-security: pg_dump's default is to issue `SET row_security = off`
+  // and refuse to dump if RLS policies would filter the result, because a
+  // superuser run wants the unfiltered table. Our connection role is not a
+  // superuser on prod, and the per-tenant tables have FORCE RLS enabled by
+  // provisionSql. Without this flag, pg_dump bails on the first RLS-protected
+  // table ("query would be affected by row-level security policy"). With this
+  // flag plus PGOPTIONS=-c app.tenant_id=<id> below, pg_dump runs with
+  // row_security=on and the tenant's GUC, so policies admit exactly the
+  // tenant's rows — which is the entire intended dump anyway.
   const pgDump = locatePgDump();
   const args = [
     `--schema=${schema}`,
     "--no-owner",
     "--no-privileges",
+    "--enable-row-security",
     "--format=plain",
     `--file=${outputPath}`,
     databaseUrl,
@@ -121,9 +132,20 @@ async function main() {
   console.log(`[tenant-backup] pg_dump: ${pgDump}`);
   console.log(`[tenant-backup] output: ${outputPath}`);
 
+  // PGOPTIONS sets `app.tenant_id` on pg_dump's libpq connection at startup,
+  // so the RLS policies on tenant_<x>.lms_* (added by provisionSql) admit this
+  // tenant's rows. Without this, pg_dump's COPY TO stdout fails with
+  // "query would be affected by row-level security policy" on the first
+  // RLS-protected table (e.g. assignments). The role used by the CLI is not
+  // a superuser on prod, so RLS bites. Tx-local doesn't apply here — pg_dump
+  // opens its own connection and is not part of our application transaction.
   await new Promise<void>((resolve, reject) => {
     const proc = spawn(pgDump, args, {
       stdio: ["ignore", "inherit", "inherit"],
+      env: {
+        ...process.env,
+        PGOPTIONS: `${process.env.PGOPTIONS ?? ""} -c app.tenant_id=${tenantId}`.trim(),
+      },
     });
     proc.on("error", reject);
     proc.on("close", (code) => {

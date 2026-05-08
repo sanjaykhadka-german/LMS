@@ -56,67 +56,79 @@ async function verify(
   tenantId: string,
   schema: string,
 ): Promise<VerificationResult> {
-  const errors: string[] = [];
-  const perTable: VerificationResult["perTable"] = [];
+  // Wrap every read in a single transaction with tx-local app.tenant_id set,
+  // so the RLS policies on public.lms_* and tenant_<x>.lms_* admit this
+  // tenant's rows. Without this, every count below sees zero rows under RLS,
+  // verify falsely passes (source=0 vs copy=0), and the ledger row gets
+  // written for a copy that never happened. Tx-local (true) — cleared on
+  // commit, so it cannot leak into other connections in pooled callers.
+  return db.transaction(async (tx) => {
+    const errors: string[] = [];
+    const perTable: VerificationResult["perTable"] = [];
 
-  // 1. Per-table count match.
-  for (const table of LMS_TABLES) {
-    const sourceRows = (await db.execute(
+    await tx.execute(
+      drizzleSql`SELECT set_config('app.tenant_id', ${tenantId}, true)`,
+    );
+
+    // 1. Per-table count match.
+    for (const table of LMS_TABLES) {
+      const sourceRows = (await tx.execute(
+        drizzleSql.raw(
+          `SELECT count(*)::int AS c FROM public.${q(table)} WHERE tracey_tenant_id = '${tenantId}'`,
+        ),
+      )) as unknown as Array<{ c: number }>;
+      const copyRows = (await tx.execute(
+        drizzleSql.raw(`SELECT count(*)::int AS c FROM ${q(schema)}.${q(table)}`),
+      )) as unknown as Array<{ c: number }>;
+      const source = sourceRows[0]?.c ?? 0;
+      const copy = copyRows[0]?.c ?? 0;
+      perTable.push({ table, source, copy });
+      if (source !== copy) {
+        errors.push(`${table}: source=${source} copy=${copy} (mismatch)`);
+      }
+    }
+
+    // 2. Sequence advance check — for every ID-bearing table, the sequence's
+    //    last_value should equal max(id) when rows exist, or be at default (1)
+    //    when empty.
+    for (const table of LMS_TABLES_WITH_ID) {
+      const rows = (await tx.execute(
+        drizzleSql.raw(
+          `SELECT ` +
+            `(SELECT MAX(id) FROM ${q(schema)}.${q(table)}) AS max_id, ` +
+            `(SELECT last_value FROM ${q(schema)}.${q(`${table}_id_seq`)}) AS seq_last`,
+        ),
+      )) as unknown as Array<{ max_id: number | null; seq_last: number }>;
+      const r = rows[0];
+      if (!r) {
+        errors.push(`${table}: sequence check returned no row`);
+        continue;
+      }
+      if (r.max_id !== null && Number(r.seq_last) < Number(r.max_id)) {
+        errors.push(
+          `${table}: sequence last_value (${r.seq_last}) < max(id) (${r.max_id}); next nextval would collide`,
+        );
+      }
+    }
+
+    // 3. FK integrity smoke — content_items.module_id must resolve inside
+    //    the per-tenant schema. Picked because it's a chain (modules →
+    //    content_items → content_item_media) and validates that within-LMS
+    //    FKs were copied/recreated correctly.
+    const fkRows = (await tx.execute(
       drizzleSql.raw(
-        `SELECT count(*)::int AS c FROM public.${q(table)} WHERE tracey_tenant_id = '${tenantId}'`,
+        `SELECT count(*)::int AS c FROM ${q(schema)}.content_items ci ` +
+          `LEFT JOIN ${q(schema)}.modules m ON m.id = ci.module_id ` +
+          `WHERE m.id IS NULL AND ci.module_id IS NOT NULL`,
       ),
     )) as unknown as Array<{ c: number }>;
-    const copyRows = (await db.execute(
-      drizzleSql.raw(`SELECT count(*)::int AS c FROM ${q(schema)}.${q(table)}`),
-    )) as unknown as Array<{ c: number }>;
-    const source = sourceRows[0]?.c ?? 0;
-    const copy = copyRows[0]?.c ?? 0;
-    perTable.push({ table, source, copy });
-    if (source !== copy) {
-      errors.push(`${table}: source=${source} copy=${copy} (mismatch)`);
+    const orphaned = fkRows[0]?.c ?? 0;
+    if (orphaned > 0) {
+      errors.push(`content_items: ${orphaned} rows with module_id pointing nowhere in the per-tenant schema`);
     }
-  }
 
-  // 2. Sequence advance check — for every ID-bearing table, the sequence's
-  //    last_value should equal max(id) when rows exist, or be at default (1)
-  //    when empty.
-  for (const table of LMS_TABLES_WITH_ID) {
-    const rows = (await db.execute(
-      drizzleSql.raw(
-        `SELECT ` +
-          `(SELECT MAX(id) FROM ${q(schema)}.${q(table)}) AS max_id, ` +
-          `(SELECT last_value FROM ${q(schema)}.${q(`${table}_id_seq`)}) AS seq_last`,
-      ),
-    )) as unknown as Array<{ max_id: number | null; seq_last: number }>;
-    const r = rows[0];
-    if (!r) {
-      errors.push(`${table}: sequence check returned no row`);
-      continue;
-    }
-    if (r.max_id !== null && Number(r.seq_last) < Number(r.max_id)) {
-      errors.push(
-        `${table}: sequence last_value (${r.seq_last}) < max(id) (${r.max_id}); next nextval would collide`,
-      );
-    }
-  }
-
-  // 3. FK integrity smoke — content_items.module_id must resolve inside
-  //    the per-tenant schema. Picked because it's a chain (modules →
-  //    content_items → content_item_media) and validates that within-LMS
-  //    FKs were copied/recreated correctly.
-  const fkRows = (await db.execute(
-    drizzleSql.raw(
-      `SELECT count(*)::int AS c FROM ${q(schema)}.content_items ci ` +
-        `LEFT JOIN ${q(schema)}.modules m ON m.id = ci.module_id ` +
-        `WHERE m.id IS NULL AND ci.module_id IS NOT NULL`,
-    ),
-  )) as unknown as Array<{ c: number }>;
-  const orphaned = fkRows[0]?.c ?? 0;
-  if (orphaned > 0) {
-    errors.push(`content_items: ${orphaned} rows with module_id pointing nowhere in the per-tenant schema`);
-  }
-
-  return { ok: errors.length === 0, errors, perTable };
+    return { ok: errors.length === 0, errors, perTable };
+  });
 }
 
 async function main() {

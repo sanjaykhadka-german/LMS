@@ -285,6 +285,13 @@ export function dataCopySql(tenantId: string): string[] {
   const qSchema = q(schema);
   const stmts: string[] = [];
 
+  // Set app.tenant_id so the RLS policies on public.lms_* (0004_enable_rls.sql)
+  // and on tenant_<x>.lms_* (provisionSql) admit this tenant's rows. Without
+  // this, every `INSERT … SELECT FROM public.<t> WHERE tracey_tenant_id = $1`
+  // sees zero rows, the copy silently no-ops, and verify() falsely passes
+  // (source=0 vs copy=0). Tx-local — cleared on commit.
+  stmts.push(`SELECT set_config('app.tenant_id', ${lit(tenantId)}, true)`);
+
   // Search path needs the tenant schema first so unqualified `id` etc.
   // resolve correctly; the SELECT side uses fully qualified `public.<t>`
   // to read the source.
