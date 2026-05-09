@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 import { config as loadEnv } from "dotenv";
 import { db, tenants } from "@tracey/db";
 import { runWhsReminders } from "../lib/lms/reminders";
+import { logAuditEvent } from "../lib/audit";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 loadEnv({ path: path.resolve(here, "../../../.env") });
@@ -24,6 +25,7 @@ async function main(): Promise<void> {
 
   let totalSent = 0;
   let tenantsProcessed = 0;
+  const failures: Array<{ tenantId: string; error: string }> = [];
   for (const row of rows) {
     try {
       const sent = await runWhsReminders(row.id);
@@ -33,9 +35,28 @@ async function main(): Promise<void> {
         console.log(`[whs-reminders] ${row.name} (${row.id}): sent ${sent}`);
       }
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      failures.push({ tenantId: row.id, error: msg });
       console.error(`[whs-reminders] failed for tenant ${row.id}:`, err);
     }
   }
+
+  // Audit-event sink so each run is observable post-hoc:
+  //   SELECT * FROM app.audit_events
+  //    WHERE action = 'cron.whs_reminders.run'
+  //    ORDER BY created_at DESC LIMIT 10;
+  // Gives a paper trail independent of Render's log retention window.
+  await logAuditEvent({
+    action: "cron.whs_reminders.run",
+    targetKind: "cron",
+    targetId: "whs-reminders",
+    details: {
+      tenantsProcessed,
+      tenantsTotal: rows.length,
+      emailsSent: totalSent,
+      failures,
+    },
+  });
 
   console.log(
     `[whs-reminders] done — ${totalSent} email(s) across ${tenantsProcessed}/${rows.length} tenant(s)`,
