@@ -1,0 +1,60 @@
+name: legacy-flask-guard
+
+# Reject changes to the quarantined Flask source unless the author
+# explicitly opts in. Phase 5 retired Flask; only emergency-rollback work
+# should touch legacy-flask/. Escape hatch: include [allow-legacy-flask]
+# in the commit message or PR title.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changes under legacy-flask/
+        id: changed
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.event.after }}"
+          fi
+          CHANGED=$(git diff --name-only "$BASE" "$HEAD" -- legacy-flask/ || true)
+          {
+            echo "files<<EOF"
+            echo "$CHANGED"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Check for opt-in token
+        id: optin
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          MESSAGE=$(git log -1 --pretty=%B)
+          if echo "$MESSAGE$PR_TITLE" | grep -q '\[allow-legacy-flask\]'; then
+            echo "allowed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "allowed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fail if legacy-flask/ touched without opt-in
+        if: steps.changed.outputs.files != '' && steps.optin.outputs.allowed != 'true'
+        run: |
+          echo "::error::Changes detected under legacy-flask/, but the commit/PR did not include [allow-legacy-flask]."
+          echo "Files changed:"
+          echo "${{ steps.changed.outputs.files }}"
+          echo ""
+          echo "If this is intentional (emergency rollback work), add"
+          echo "[allow-legacy-flask] to your commit message or PR title."
+          exit 1
