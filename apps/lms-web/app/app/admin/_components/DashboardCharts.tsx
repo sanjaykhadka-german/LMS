@@ -51,12 +51,15 @@ export function DashboardCharts({
     attempts: d.attempts,
     passRate: Math.round(d.passRate * 100),
   }));
+  // Drop zero-value buckets — they still rendered a "Name: 0" label in
+  // the previous layout, contributing to the Completed/Overdue label
+  // collision the user reported.
   const pieData = [
     { name: "Completed", value: assignmentStatus.completed },
     { name: "Overdue", value: assignmentStatus.overdue },
     { name: "Due soon", value: assignmentStatus.dueSoon },
     { name: "Open", value: assignmentStatus.open },
-  ];
+  ].filter((d) => d.value > 0);
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
@@ -94,15 +97,24 @@ export function DashboardCharts({
               dataKey="value"
               nameKey="name"
               outerRadius={90}
-              label={(entry: { name: string; value: number }) =>
-                `${entry.name}: ${entry.value}`
+              labelLine={false}
+              label={({ percent }: { percent?: number }) =>
+                typeof percent === "number" && percent >= 0.04
+                  ? `${Math.round(percent * 100)}%`
+                  : ""
               }
             >
               {pieData.map((_, i) => (
                 <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
               ))}
             </Pie>
-            <Tooltip />
+            <Tooltip
+              formatter={(v: number, _name: string, p: { payload?: { name?: string } }) => [
+                String(v),
+                p.payload?.name ?? "",
+              ]}
+            />
+            <Legend />
           </PieChart>
         </ResponsiveContainer>
       </ChartCard>
