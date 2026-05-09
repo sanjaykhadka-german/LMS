@@ -31,16 +31,25 @@ export function WhsReminderButton() {
     <form
       action={runWhsRemindersAction}
       onSubmit={(e) => {
-        if (
-          !confirm(
-            "Send WHS expiry reminders now? Records reminded in the last 14 days are skipped.",
-          )
-        ) {
-          e.preventDefault();
-        }
+        const fd = new FormData(e.currentTarget);
+        const force = fd.get("force") === "1";
+        const msg = force
+          ? "Send WHS expiry reminders now and IGNORE the 14-day cooldown? Every matching record will be re-emailed."
+          : "Send WHS expiry reminders now? Records reminded in the last 14 days are skipped.";
+        if (!confirm(msg)) e.preventDefault();
       }}
+      className="flex flex-wrap items-center gap-3"
     >
       <Submit label="Send WHS expiry reminders" />
+      <label className="inline-flex items-center gap-1.5 text-xs text-[color:var(--muted-foreground)]">
+        <input
+          type="checkbox"
+          name="force"
+          value="1"
+          className="h-3.5 w-3.5 rounded border-[color:var(--border)]"
+        />
+        Force (ignore 14-day cooldown)
+      </label>
     </form>
   );
 }
