@@ -23,6 +23,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { sql as drizzleSql } from "drizzle-orm";
 import postgres from "postgres";
 import bcrypt from "bcryptjs";
+import { drizzle } from "drizzle-orm/postgres-js";
 import {
   dataCopySql,
   db,
@@ -31,6 +32,7 @@ import {
   tenantSchemaName,
   tenants,
   users,
+  verifyTenantCopy,
 } from "@tracey/db";
 import { provisionTenant } from "../lib/tenancy/provision";
 
@@ -170,5 +172,46 @@ describe.skipIf(!rlsUrl)("Phase 7c — dataCopySql under non-superuser RLS", () 
       drizzleSql.raw(`SELECT count(*)::int AS c FROM "${schema}".modules`),
     )) as unknown as Array<{ c: number }>;
     expect(rows[0]?.c, "non-superuser dataCopySql must copy the seeded module").toBe(1);
+  });
+
+  it("verifyTenantCopy detects a count mismatch via a non-superuser connection", async () => {
+    // The previous test left the per-tenant schema with the copied module
+    // (1/1 across modules + content_items). Simulate post-copy corruption
+    // by deleting the module from tenant_<id>.modules — verifyTenantCopy
+    // should then report ok=false with a mismatch error for `modules`.
+    //
+    // Without the set_config('app.tenant_id') call inside verifyTenantCopy,
+    // RLS would filter both source AND copy reads to zero, the comparison
+    // would be 0=0, ok would be true, and this test would fail with
+    // "expected false, received true" — exactly the false-positive that
+    // bit prod cutover on 2026-05-08.
+    const schema = tenantSchemaName(seeded.tenantId);
+    await db.execute(
+      drizzleSql.raw(
+        `DELETE FROM "${schema}".modules WHERE tracey_tenant_id = '${seeded.tenantId}'`,
+      ),
+    );
+
+    // Run verifyTenantCopy via a fresh non-superuser drizzle instance.
+    const rlsSql = postgres(rlsUrl!, { max: 1, prepare: false });
+    const rlsDb = drizzle(rlsSql);
+    let result;
+    try {
+      result = await verifyTenantCopy(rlsDb, seeded.tenantId, schema);
+    } finally {
+      await rlsSql.end();
+    }
+
+    expect(result.ok, "verifyTenantCopy must reject the mismatch — false positive would mean RLS is filtering source/copy reads to zero").toBe(false);
+    const moduleRow = result.perTable.find((r) => r.table === "modules");
+    expect(moduleRow?.source).toBe(1);
+    expect(moduleRow?.copy).toBe(0);
+    expect(result.errors.some((e) => e.includes("modules: source=1 copy=0"))).toBe(true);
+
+    // Restore the deleted module so afterAll's cleanupTenantRls runs cleanly
+    // (DROP SCHEMA CASCADE would handle it anyway, but keeping state tidy
+    // costs nothing).
+    await db.execute(drizzleSql.raw(`DROP SCHEMA "${schema}" CASCADE`));
+    await db.execute(drizzleSql`DELETE FROM app.tenant_migrations WHERE tenant_id = ${seeded.tenantId}`);
   });
 });
