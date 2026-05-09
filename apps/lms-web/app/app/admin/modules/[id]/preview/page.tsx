@@ -17,12 +17,16 @@ export const metadata = { title: "Preview module" };
 
 export default async function ModulePreviewPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ back?: string }>;
 }) {
   const { id } = await params;
+  const { back } = await searchParams;
   const moduleId = parseInt(id, 10);
   if (!Number.isFinite(moduleId)) notFound();
+  const fromAiStudio = back === "ai-studio";
 
   const ctx = await requireAdmin();
   const tid = ctx.traceyTenantId;
@@ -100,10 +104,14 @@ export default async function ModulePreviewPage({
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <Link
-          href={`/app/admin/modules/${module.id}`}
+          href={
+            fromAiStudio
+              ? `/app/admin/modules/ai-studio?module_id=${module.id}`
+              : `/app/admin/modules/${module.id}`
+          }
           className="text-sm text-[color:var(--muted-foreground)] underline"
         >
-          ← Back to edit
+          {fromAiStudio ? "← Back to AI Studio" : "← Back to edit"}
         </Link>
         <span className="text-xs uppercase tracking-wider text-[color:var(--muted-foreground)]">
           Preview — exactly what employees see
@@ -146,7 +154,15 @@ export default async function ModulePreviewPage({
 
       <div className="flex flex-wrap gap-2">
         <Button asChild variant="outline">
-          <Link href={`/app/admin/modules/${module.id}`}>Back to edit</Link>
+          <Link
+            href={
+              fromAiStudio
+                ? `/app/admin/modules/ai-studio?module_id=${module.id}`
+                : `/app/admin/modules/${module.id}`
+            }
+          >
+            {fromAiStudio ? "Back to AI Studio" : "Back to edit"}
+          </Link>
         </Button>
         {questions.length > 0 && (
           <Button asChild>

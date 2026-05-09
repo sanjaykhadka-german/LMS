@@ -139,40 +139,45 @@ export function StudioClient({
     }
   }
 
-  async function importAsNew() {
+  async function importAsNew(): Promise<number | null> {
+    if (!moduleJson) return null;
+    const res = await fetch("/api/admin/ai-studio/import", { method: "POST" });
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error ?? "Import failed");
+      return null;
+    }
+    const newId = data.moduleIds?.[0];
+    return typeof newId === "number" ? newId : null;
+  }
+
+  async function applyToExisting(): Promise<number | null> {
+    if (!moduleJson || !initialModuleId) return null;
+    const res = await fetch(
+      `/api/admin/modules/${initialModuleId}/apply-ai-update`,
+      { method: "POST" },
+    );
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error ?? "Apply failed");
+      return null;
+    }
+    return initialModuleId;
+  }
+
+  async function commitAndGo(target: "preview" | "edit" | "done") {
     if (!moduleJson) return;
     setPending(true);
     setError(null);
     try {
-      const res = await fetch("/api/admin/ai-studio/import", { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error ?? "Import failed");
+      const id = initialModuleId ? await applyToExisting() : await importAsNew();
+      if (target === "done") {
+        router.push("/app/admin/modules");
         return;
       }
-      const newId = data.moduleIds?.[0];
-      if (newId) router.push(`/app/admin/modules/${newId}`);
-      else router.push("/app/admin/modules");
-    } finally {
-      setPending(false);
-    }
-  }
-
-  async function applyToExisting() {
-    if (!moduleJson || !initialModuleId) return;
-    setPending(true);
-    setError(null);
-    try {
-      const res = await fetch(
-        `/api/admin/modules/${initialModuleId}/apply-ai-update`,
-        { method: "POST" },
-      );
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error ?? "Apply failed");
-        return;
-      }
-      router.push(`/app/admin/modules/${initialModuleId}`);
+      if (!id) return;
+      const sub = target === "preview" ? "/preview" : "";
+      router.push(`/app/admin/modules/${id}${sub}?back=ai-studio`);
     } finally {
       setPending(false);
     }
@@ -386,18 +391,23 @@ export function StudioClient({
             <>
               <ModulePreview json={moduleJson} />
               <div className="flex flex-wrap gap-2 pt-2">
-                <Button onClick={importAsNew} disabled={pending}>
-                  Import as new module
+                <Button onClick={() => commitAndGo("preview")} disabled={pending}>
+                  Preview
                 </Button>
-                {initialModuleId && (
-                  <Button
-                    variant="outline"
-                    onClick={applyToExisting}
-                    disabled={pending}
-                  >
-                    Apply to module #{initialModuleId}
-                  </Button>
-                )}
+                <Button
+                  variant="outline"
+                  onClick={() => commitAndGo("edit")}
+                  disabled={pending}
+                >
+                  Advanced edit
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => commitAndGo("done")}
+                  disabled={pending}
+                >
+                  Done
+                </Button>
               </div>
             </>
           )}

@@ -65,12 +65,19 @@ export default async function ModuleEditPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ saved?: string; error?: string; msg?: string; v?: string }>;
+  searchParams: Promise<{
+    saved?: string;
+    error?: string;
+    msg?: string;
+    v?: string;
+    back?: string;
+  }>;
 }) {
   const { id } = await params;
   const moduleId = parseInt(id, 10);
   if (!Number.isFinite(moduleId)) notFound();
   const sp = await searchParams;
+  const fromAiStudio = sp.back === "ai-studio";
 
   const ctx = await requireAdmin();
   const tid = ctx.traceyTenantId;
@@ -171,14 +178,26 @@ export default async function ModuleEditPage({
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-3">
         <Link
-          href="/app/admin/modules"
+          href={
+            fromAiStudio
+              ? `/app/admin/modules/ai-studio?module_id=${moduleId}`
+              : "/app/admin/modules"
+          }
           className="text-sm text-[color:var(--muted-foreground)] underline"
         >
-          ← Back to modules
+          {fromAiStudio ? "← Back to AI Studio" : "← Back to modules"}
         </Link>
         <div className="flex items-center gap-2">
           <Button asChild variant="outline" size="sm">
-            <Link href={`/app/admin/modules/${moduleId}/preview`}>Preview</Link>
+            <Link
+              href={
+                fromAiStudio
+                  ? `/app/admin/modules/${moduleId}/preview?back=ai-studio`
+                  : `/app/admin/modules/${moduleId}/preview`
+              }
+            >
+              Preview
+            </Link>
           </Button>
           <Button asChild variant="outline" size="sm">
             <Link href={`/app/admin/modules/${moduleId}/assign`}>
