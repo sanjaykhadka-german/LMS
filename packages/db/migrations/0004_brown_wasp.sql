@@ -11,5 +11,5 @@
 -- The 0004 snapshot in meta/ now reflects reality (schema.ts) and future
 -- migrations will diff cleanly from it.
 
-ALTER TABLE "app"."tenants" ADD COLUMN "cancel_at_period_end" boolean DEFAULT false NOT NULL;--> statement-breakpoint
-ALTER TABLE "app"."tenants" ADD COLUMN "canceled_at" timestamp with time zone;
+ALTER TABLE "app"."tenants" ADD COLUMN IF NOT EXISTS "cancel_at_period_end" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "app"."tenants" ADD COLUMN IF NOT EXISTS "canceled_at" timestamp with time zone;
