@@ -98,6 +98,9 @@ jobs:
       - name: typecheck
         run: pnpm typecheck
 
+      - name: lint
+        run: pnpm -C apps/lms-web run lint
+
       - name: check-tenant-scope (STRICT=1)
         env:
           STRICT: "1"
