@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { asc, sql } from "drizzle-orm";
+import { and, asc, inArray, sql } from "drizzle-orm";
 import { lmsAssignments, lmsModules, lmsQuestions } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
@@ -16,7 +16,13 @@ export default async function ModulesPage() {
   const ctx = await requireAdmin();
   const tid = ctx.traceyTenantId;
 
-  const modules = await ctx.db.run((tx) =>
+  // Fetch modules first, then compute question + assignment counts in
+  // separate aggregated queries. The previous correlated-subquery shape
+  // returned 0 in the rendered count column for every module — drizzle
+  // interpolated the inner table reference in a way that escaped the
+  // outer tenant context. GROUP BY on a tenant-filtered SELECT is the
+  // bulletproof shape and avoids the inline-subquery edge case.
+  const baseRows = await ctx.db.run((tx) =>
     tx
       .select({
         id: lmsModules.id,
@@ -24,19 +30,60 @@ export default async function ModulesPage() {
         description: lmsModules.description,
         isPublished: lmsModules.isPublished,
         createdAt: lmsModules.createdAt,
-        questionCount: sql<number>`(
-          select count(*)::int from ${lmsQuestions}
-            where ${lmsQuestions.moduleId} = ${lmsModules.id}
-        )`,
-        assignmentCount: sql<number>`(
-          select count(*)::int from ${lmsAssignments}
-            where ${lmsAssignments.moduleId} = ${lmsModules.id}
-        )`,
       })
       .from(lmsModules)
       .where(tenantWhere(lmsModules, tid))
       .orderBy(asc(lmsModules.title)),
   );
+
+  const moduleIds = baseRows.map((m) => m.id);
+  const [questionCounts, assignmentCounts] = await Promise.all([
+    moduleIds.length === 0
+      ? Promise.resolve([] as Array<{ moduleId: number; count: number }>)
+      : ctx.db.run((tx) =>
+          tx
+            .select({
+              moduleId: lmsQuestions.moduleId,
+              count: sql<number>`count(*)::int`,
+            })
+            .from(lmsQuestions)
+            .where(
+              and(
+                tenantWhere(lmsQuestions, tid),
+                inArray(lmsQuestions.moduleId, moduleIds),
+              ),
+            )
+            .groupBy(lmsQuestions.moduleId),
+        ),
+    moduleIds.length === 0
+      ? Promise.resolve([] as Array<{ moduleId: number; count: number }>)
+      : ctx.db.run((tx) =>
+          tx
+            .select({
+              moduleId: lmsAssignments.moduleId,
+              count: sql<number>`count(*)::int`,
+            })
+            .from(lmsAssignments)
+            .where(
+              and(
+                tenantWhere(lmsAssignments, tid),
+                inArray(lmsAssignments.moduleId, moduleIds),
+              ),
+            )
+            .groupBy(lmsAssignments.moduleId),
+        ),
+  ]);
+  const questionCountByModule = new Map(
+    questionCounts.map((r) => [r.moduleId, r.count]),
+  );
+  const assignmentCountByModule = new Map(
+    assignmentCounts.map((r) => [r.moduleId, r.count]),
+  );
+  const modules = baseRows.map((m) => ({
+    ...m,
+    questionCount: questionCountByModule.get(m.id) ?? 0,
+    assignmentCount: assignmentCountByModule.get(m.id) ?? 0,
+  }));
 
   return (
     <div className="space-y-6">

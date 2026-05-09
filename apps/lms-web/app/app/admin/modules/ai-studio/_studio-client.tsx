@@ -307,7 +307,7 @@ export function StudioClient({
             ))}
             {pending && (
               <div className="text-[color:var(--muted-foreground)]">
-                Working…
+                We are working on your request…
               </div>
             )}
             {dragActive && (
