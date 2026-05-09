@@ -2,12 +2,14 @@ import { NextResponse } from "next/server";
 import { and, asc, eq, exists, ilike, or, sql } from "drizzle-orm";
 import {
   forTenant,
+  lmsChoices,
   lmsContentItems,
   lmsDepartments,
   lmsEmployers,
   lmsMachines,
   lmsModules,
   lmsPositions,
+  lmsQuestions,
   lmsUsers,
 } from "@tracey/db";
 import { getAuthorAccess } from "~/lib/auth/author";
@@ -15,6 +17,15 @@ import { tenantWhere } from "~/lib/lms/tenant-scope";
 
 const LOOKUP_LIMIT = 5;
 type LookupRow = { id: number; name: string };
+
+const EMPTY_BODY = {
+  users: [],
+  modules: [],
+  departments: [],
+  employers: [],
+  machines: [],
+  positions: [],
+};
 
 // GET /api/admin/search?q=<term>
 // Mirrors Flask's /admin/search (app.py:1719-1762): users + modules in the
@@ -26,7 +37,7 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const q = (searchParams.get("q") ?? "").trim();
   if (q.length < 2) {
-    return NextResponse.json({ users: [], modules: [] });
+    return NextResponse.json(EMPTY_BODY);
   }
 
   const like = `%${q}%`;
@@ -81,9 +92,10 @@ export async function GET(req: Request) {
       : Promise.resolve([] as Array<{ id: number; name: string; email: string }>),
     tdb.run((tx) => {
       // Match modules by their own title/description OR by any content_item
-      // (lesson/section) under them whose title/body matches. Roll up to the
-      // module — the result shape stays { id, title } so the search UI is
-      // unchanged. Correlated EXISTS keeps the limit at 8 distinct modules.
+      // (lesson/section) OR any quiz question prompt OR any choice text under
+      // them. Roll up to the module — result shape stays { id, title } so the
+      // search UI is unchanged. Correlated EXISTS keeps the limit at 8 distinct
+      // modules even when a query hits 50 questions in one module.
       const contentMatches = tx
         .select({ x: sql`1` })
         .from(lmsContentItems)
@@ -97,6 +109,28 @@ export async function GET(req: Request) {
             ),
           ),
         );
+      const questionMatches = tx
+        .select({ x: sql`1` })
+        .from(lmsQuestions)
+        .where(
+          and(
+            eq(lmsQuestions.moduleId, lmsModules.id),
+            tenantWhere(lmsQuestions, tid),
+            ilike(lmsQuestions.prompt, like),
+          ),
+        );
+      const choiceMatches = tx
+        .select({ x: sql`1` })
+        .from(lmsChoices)
+        .innerJoin(lmsQuestions, eq(lmsQuestions.id, lmsChoices.questionId))
+        .where(
+          and(
+            eq(lmsQuestions.moduleId, lmsModules.id),
+            tenantWhere(lmsChoices, tid),
+            tenantWhere(lmsQuestions, tid),
+            ilike(lmsChoices.text, like),
+          ),
+        );
       return tx
         .select({ id: lmsModules.id, title: lmsModules.title })
         .from(lmsModules)
@@ -107,6 +141,8 @@ export async function GET(req: Request) {
               ilike(lmsModules.title, like),
               ilike(lmsModules.description, like),
               exists(contentMatches),
+              exists(questionMatches),
+              exists(choiceMatches),
             ),
           ),
         )
