@@ -39,14 +39,20 @@ const RE_PROMPTS: Array<{ label: string; prompt: string }> = [
 export function StudioClient({
   hasProvider,
   initialModuleId,
+  initialMessages = [],
+  initialFiles = [],
+  initialModuleJson = null,
 }: {
   hasProvider: boolean;
   initialModuleId: number | null;
+  initialMessages?: ChatMessage[];
+  initialFiles?: FileMeta[];
+  initialModuleJson?: string | null;
 }) {
   const router = useRouter();
-  const [files, setFiles] = useState<FileMeta[]>([]);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [moduleJson, setModuleJson] = useState<string | null>(null);
+  const [files, setFiles] = useState<FileMeta[]>(initialFiles);
+  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
+  const [moduleJson, setModuleJson] = useState<string | null>(initialModuleJson);
   const [text, setText] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -389,8 +395,7 @@ export function StudioClient({
             </p>
           ) : (
             <>
-              <ModulePreview json={moduleJson} />
-              <div className="flex flex-wrap gap-2 pt-2">
+              <div className="flex flex-wrap gap-2 border-b border-[color:var(--border)] pb-3">
                 <Button onClick={() => commitAndGo("preview")} disabled={pending}>
                   Preview
                 </Button>
@@ -409,6 +414,7 @@ export function StudioClient({
                   Done
                 </Button>
               </div>
+              <ModulePreview json={moduleJson} />
             </>
           )}
         </CardContent>
