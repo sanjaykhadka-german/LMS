@@ -16,7 +16,8 @@
     "reconcile:stripe": "tsx scripts/reconcile-stripe.ts",
     "cron:whs-reminders": "tsx scripts/run-whs-reminders.ts",
     "icons:pwa": "node scripts/generate-pwa-icons.mjs",
-    "check-tenant-scope": "node scripts/check-tenant-scope.mjs"
+    "check-tenant-scope": "node scripts/check-tenant-scope.mjs",
+    "check-cli-rls-scope": "node scripts/check-cli-rls-scope.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.0",
