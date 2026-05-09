@@ -11,33 +11,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
+  static-checks:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-
-    # Postgres service: matches local dev (root/root, lms_dev) so the same
-    # DATABASE_URL works without conditional logic. The Docker entrypoint
-    # creates `root` as a superuser, which mirrors the dev box and lets
-    # bare-db test fixtures bypass RLS for setup. The non-superuser RLS
-    # regression test (per-tenant-rls.test.ts) connects via tracey_test_rls
-    # instead, which is created later in the workflow.
-    services:
-      postgres:
-        image: postgres:18-alpine
-        env:
-          POSTGRES_USER: root
-          POSTGRES_PASSWORD: root
-          POSTGRES_DB: lms_dev
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-
-    env:
-      DATABASE_URL: postgresql://root:root@localhost:5432/lms_dev
+    timeout-minutes: 10
 
     steps:
       - uses: actions/checkout@v4
@@ -56,30 +32,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Drizzle-tracked migrations bring the schema up to 0004_brown_wasp.
-      # Anything in packages/db/migrations/manual/ is operator-driven on
-      # prod; CI applies the subset the test suite depends on below.
-      - name: Apply Drizzle migrations
-        run: pnpm --filter @tracey/db run migrate
-
-      # Manual migrations the tests depend on. Order matters:
-      #   - 0006 creates app.tenant_migrations (per-tenant ledger)
-      #   - 0004 enables RLS, with the per-tenant-rls test in mind.
-      # Other manual files (0004_ai_studio_sessions, 0005_backfill_14d_trial,
-      # 0007_cancel_at_period_end) are either superseded by Drizzle or are
-      # data fixes not needed for tests.
-      - name: Apply tenant_migrations ledger
-        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/db/migrations/manual/0006_tenant_migrations_ledger.sql
-
-      - name: Apply RLS migration
-        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/db/migrations/manual/0004_enable_rls.sql
-
-      - name: Set up test RLS role
-        run: pnpm -C apps/lms-web run setup:test-rls-role
-
+      # tsc-only, no DB needed.
       - name: typecheck
         run: pnpm typecheck
 
+      # Static-analysis guards — also DB-free.
       - name: check-tenant-scope (STRICT=1)
         env:
           STRICT: "1"
@@ -88,12 +45,15 @@ jobs:
       - name: check-cli-rls-scope
         run: pnpm -C apps/lms-web check-cli-rls-scope
 
-      # vitest with RLS_TEST_DATABASE_URL set, so the per-tenant-rls
-      # regression runs under the non-superuser role and would fail loudly
-      # if any of dataCopySql / verify / tenant-provision lose their
-      # set_config('app.tenant_id') call again. Without this env var, the
-      # test self-skips and CI provides no coverage of the RLS pathway.
-      - name: vitest (incl. per-tenant-rls regression)
-        env:
-          RLS_TEST_DATABASE_URL: postgresql://tracey_test_rls:tracey_test_rls@localhost:5432/lms_dev
-        run: pnpm --filter lms-web run test
+      # vitest is intentionally OMITTED. Several vitest specs (tenant-copy,
+      # cross-schema, per-tenant-provision, per-tenant-rls) seed rows into
+      # public.lms_* tables, which are NOT created by any tracked migration —
+      # they were Flask's SQLAlchemy-managed tables and came into the dev DB
+      # via `db.create_all()` at first Flask startup. With Flask retired
+      # (Phase 5), there's no longer a path to reproduce that schema in a
+      # fresh CI Postgres. Adding vitest back to CI requires either:
+      #   1. Committing a `pg_dump --schema-only` fixture of the public.lms_*
+      #      tables and applying it here before vitest, or
+      #   2. Migrating the LMS table DDL into Drizzle (declare in
+      #      lms-schema.ts as authoritative + generate migrations).
+      # Both are tracked in project_open_followups.md as separate work.
