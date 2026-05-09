@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { forTenant } from "@tracey/db";
 import { requireTenant } from "./current";
 import { getOrProvisionLmsUser, type LearnerContext } from "~/lib/lms/learner";
+import { assertWriteAccess } from "~/lib/billing/guard";
 
 /**
  * Admin gate for /app/admin/*. Requires the active tenant membership to be
@@ -34,4 +35,17 @@ export async function requireAdmin(): Promise<LearnerContext & { role: "owner" |
     role,
     db: forTenant(tenant.id),
   };
+}
+
+/**
+ * Stricter variant for **mutating** admin server actions. Same as
+ * `requireAdmin()` plus a billing-gate check: tenants in `read_only` or
+ * `blocked` access state can't write. Throws `BillingGateError`.
+ *
+ * Pages that only render data should keep using `requireAdmin()` so a
+ * read-only tenant can still see (but not edit) their workspace.
+ */
+export async function requireAdminAction(): Promise<LearnerContext & { role: "owner" | "admin" }> {
+  await assertWriteAccess();
+  return requireAdmin();
 }

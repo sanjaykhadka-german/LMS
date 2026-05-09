@@ -1,10 +1,10 @@
-"use server";
+﻿"use server";
 
 import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { lmsEmployers, lmsUsers } from "@tracey/db";
-import { requireAdmin } from "~/lib/auth/admin";
+import { requireAdminAction } from "~/lib/auth/admin";
 import { logAuditEvent } from "~/lib/audit";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
 import type { FormState } from "../_components/NameCrudForm";
@@ -14,7 +14,7 @@ const nameSchema = z.object({
 });
 
 export async function createEmployerAction(_prev: FormState, formData: FormData): Promise<FormState> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
   const parsed = nameSchema.safeParse({ name: formData.get("name") });
   if (!parsed.success) {
@@ -57,7 +57,7 @@ export async function createEmployerAction(_prev: FormState, formData: FormData)
 }
 
 export async function deleteEmployerAction(formData: FormData): Promise<void> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
   const id = parseInt(String(formData.get("id") ?? ""), 10);
   if (!Number.isFinite(id)) throw new Error("Bad id");

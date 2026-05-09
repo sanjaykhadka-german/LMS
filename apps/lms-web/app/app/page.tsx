@@ -42,6 +42,16 @@ export default async function DashboardPage() {
     pricingTiers.find((t) => t.id === tenant.plan)?.name ??
     tenant.plan.charAt(0).toUpperCase() + tenant.plan.slice(1);
 
+  const showPendingCancel =
+    tenant.status === "active" && tenant.cancelAtPeriodEnd;
+  const cancelOn = tenant.currentPeriodEnd
+    ? tenant.currentPeriodEnd.toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      })
+    : "the end of the current period";
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -56,6 +66,19 @@ export default async function DashboardPage() {
           {trialDaysLeft !== null && ` — ${trialDaysLeft}d left`}
         </Badge>
       </div>
+
+      {showPendingCancel && (
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <span>
+            Subscription scheduled to cancel on <strong>{cancelOn}</strong>. Reactivate from the billing portal to keep access.
+          </span>
+          <form action="/api/billing/portal" method="post">
+            <Button type="submit" variant="outline" size="sm">
+              Reactivate
+            </Button>
+          </form>
+        </div>
+      )}
 
       <div className="mt-8 grid gap-6 md:grid-cols-2">
         <Card>

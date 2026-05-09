@@ -1,4 +1,4 @@
-"use server";
+﻿"use server";
 
 import crypto from "node:crypto";
 import { revalidatePath } from "next/cache";
@@ -14,7 +14,7 @@ import {
   lmsUserMachines,
   lmsUsers,
 } from "@tracey/db";
-import { requireAdmin } from "~/lib/auth/admin";
+import { requireAdminAction } from "~/lib/auth/admin";
 import { logAuditEvent } from "~/lib/audit";
 import { sendInviteEmail, sendPasswordResetEmail } from "~/lib/lms/notify-admin";
 import { deleteStoredPhoto, PhotoUploadError, saveUserPhoto } from "~/lib/lms/photos";
@@ -85,7 +85,7 @@ function generateTempPassword(): string {
 }
 
 export async function createEmployeeAction(_prev: FormState, formData: FormData): Promise<FormState> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
 
   let parsed;
@@ -129,7 +129,7 @@ export async function createEmployeeAction(_prev: FormState, formData: FormData)
   }
 
   // users.email has a global UNIQUE constraint (Phase-2 SSO contract). Two
-  // tenants therefore cannot share an email — surface that as a duplicate
+  // tenants therefore cannot share an email â€” surface that as a duplicate
   // error rather than silently failing on the constraint.
   // allow-cross-tenant: public.users excluded from RLS; cross-tenant email
   // lookup is intentional to detect collisions across workspaces.
@@ -204,7 +204,7 @@ export async function createEmployeeAction(_prev: FormState, formData: FormData)
   revalidatePath("/app/admin/employees");
   const parts = [
     `${fullName} added.`,
-    emailed ? "Invite emailed." : `Email not sent — temp password: ${tempPw}`,
+    emailed ? "Invite emailed." : `Email not sent â€” temp password: ${tempPw}`,
   ];
   if (autoAssigned > 0) {
     parts.push(`${autoAssigned} module${autoAssigned === 1 ? "" : "s"} auto-assigned from department policy.`);
@@ -213,7 +213,7 @@ export async function createEmployeeAction(_prev: FormState, formData: FormData)
 }
 
 export async function toggleEmployeeActiveAction(formData: FormData): Promise<void> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
   const id = parseInt(String(formData.get("id") ?? ""), 10);
   if (!Number.isFinite(id)) throw new Error("Bad id");
@@ -262,7 +262,7 @@ const roleSchema = z.object({
 });
 
 export async function changeEmployeeRoleAction(formData: FormData): Promise<void> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
   const parsed = roleSchema.safeParse({
     id: formData.get("id"),
@@ -312,7 +312,7 @@ export async function changeEmployeeRoleAction(formData: FormData): Promise<void
 }
 
 export async function resetEmployeePasswordAction(formData: FormData): Promise<void> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
   const id = parseInt(String(formData.get("id") ?? ""), 10);
   if (!Number.isFinite(id)) throw new Error("Bad id");
@@ -374,7 +374,7 @@ const updateSchema = z.object({
 });
 
 export async function updateEmployeeAction(formData: FormData): Promise<void> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
   let parsed;
   try {
@@ -422,8 +422,8 @@ export async function updateEmployeeAction(formData: FormData): Promise<void> {
     .filter((s) => /^\d+$/.test(s))
     .map((s) => parseInt(s, 10));
 
-  // Photo handling. Three branches: new file uploaded → save + replace;
-  // remove_photo checkbox checked → null + delete previous; otherwise leave
+  // Photo handling. Three branches: new file uploaded â†’ save + replace;
+  // remove_photo checkbox checked â†’ null + delete previous; otherwise leave
   // the column alone.
   const photoEntry = formData.get("photo");
   const removePhoto = formData.get("remove_photo") === "1";

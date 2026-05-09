@@ -1,11 +1,11 @@
-"use server";
+﻿"use server";
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { lmsWhsRecords } from "@tracey/db";
-import { requireAdmin } from "~/lib/auth/admin";
+import { requireAdminAction } from "~/lib/auth/admin";
 import { logAuditEvent } from "~/lib/audit";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
 
@@ -46,7 +46,7 @@ function intOrNull(raw: FormDataEntryValue | null): number | null {
 }
 
 export async function createWhsRecordAction(formData: FormData): Promise<void> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
   let parsed;
   try {
@@ -102,7 +102,7 @@ export async function createWhsRecordAction(formData: FormData): Promise<void> {
 }
 
 export async function updateWhsRecordAction(formData: FormData): Promise<void> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
   const id = intOrNull(formData.get("id"));
   if (!id) throw new Error("Bad id");
@@ -167,7 +167,7 @@ export async function updateWhsRecordAction(formData: FormData): Promise<void> {
 }
 
 export async function deleteWhsRecordAction(formData: FormData): Promise<void> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
   const id = intOrNull(formData.get("id"));
   if (!id) throw new Error("Bad id");

@@ -1,4 +1,4 @@
-"use server";
+﻿"use server";
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -14,7 +14,7 @@ import {
   lmsQuestions,
   lmsChoices,
 } from "@tracey/db";
-import { requireAdmin } from "~/lib/auth/admin";
+import { requireAdminAction } from "~/lib/auth/admin";
 import { logAuditEvent } from "~/lib/audit";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
 import {
@@ -43,7 +43,7 @@ async function ownedModule(id: number, tid: string) {
 }
 
 export async function updateModuleAction(formData: FormData): Promise<void> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
   const parsed = updateSchema.safeParse({
     id: formData.get("id"),
@@ -87,10 +87,10 @@ export async function updateModuleAction(formData: FormData): Promise<void> {
   redirect(`/app/admin/modules/${parsed.data.id}?saved=1`);
 }
 
-// ─── Cover ────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Cover â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function setModuleCoverAction(formData: FormData): Promise<void> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
   const id = parseInt(String(formData.get("id") ?? ""), 10);
   if (!Number.isFinite(id)) throw new Error("Bad id");
@@ -139,7 +139,7 @@ export async function setModuleCoverAction(formData: FormData): Promise<void> {
 }
 
 export async function clearModuleCoverAction(formData: FormData): Promise<void> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
   const id = parseInt(String(formData.get("id") ?? ""), 10);
   if (!Number.isFinite(id)) throw new Error("Bad id");
@@ -158,10 +158,10 @@ export async function clearModuleCoverAction(formData: FormData): Promise<void> 
   revalidatePath(`/app/admin/modules/${id}`);
 }
 
-// ─── Module-level media ───────────────────────────────────────────────────
+// â”€â”€â”€ Module-level media â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function addModuleMediaAction(formData: FormData): Promise<void> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
   const id = parseInt(String(formData.get("id") ?? ""), 10);
   if (!Number.isFinite(id)) throw new Error("Bad id");
@@ -204,7 +204,7 @@ export async function addModuleMediaAction(formData: FormData): Promise<void> {
 }
 
 export async function removeModuleMediaAction(formData: FormData): Promise<void> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
   const moduleId = parseInt(String(formData.get("module_id") ?? ""), 10);
   const mediaId = parseInt(String(formData.get("id") ?? ""), 10);
@@ -231,10 +231,10 @@ export async function removeModuleMediaAction(formData: FormData): Promise<void>
   revalidatePath(`/app/admin/modules/${moduleId}`);
 }
 
-// ─── Version snapshot ─────────────────────────────────────────────────────
+// â”€â”€â”€ Version snapshot â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function saveModuleVersionAction(formData: FormData): Promise<void> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
   const id = parseInt(String(formData.get("id") ?? ""), 10);
   const summary = String(formData.get("summary") ?? "").trim().slice(0, 255);
@@ -242,7 +242,7 @@ export async function saveModuleVersionAction(formData: FormData): Promise<void>
   const m = await ownedModule(id, tid);
   if (!m) throw new Error("Module not found");
 
-  // Build the snapshot — same shape as Flask build_module_snapshot (app.py:666).
+  // Build the snapshot â€” same shape as Flask build_module_snapshot (app.py:666).
   // All five queries share one tenant-scoped transaction.
   const { contentItems, mediaItems, questions, ciMedia, choices } = await ctx.db.run(
     async (tx) => {

@@ -1,14 +1,14 @@
-"use server";
+﻿"use server";
 
 import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { lmsAssignments } from "@tracey/db";
-import { requireAdmin } from "~/lib/auth/admin";
+import { requireAdminAction } from "~/lib/auth/admin";
 import { logAuditEvent } from "~/lib/audit";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
 
 export async function deleteAssignmentAction(formData: FormData): Promise<void> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
   const id = parseInt(String(formData.get("id") ?? ""), 10);
   if (!Number.isFinite(id)) throw new Error("Bad id");

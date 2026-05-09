@@ -1,17 +1,17 @@
-"use server";
+﻿"use server";
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 import { lmsAssignments, lmsModules } from "@tracey/db";
-import { requireAdmin } from "~/lib/auth/admin";
+import { requireAdminAction } from "~/lib/auth/admin";
 import { logAuditEvent } from "~/lib/audit";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
 
 const DEFAULT_VALIDITY_DAYS = 180;
 
 export async function bulkAssignModuleAction(formData: FormData): Promise<void> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
   const moduleId = parseInt(String(formData.get("module_id") ?? ""), 10);
   if (!Number.isFinite(moduleId)) throw new Error("Bad module id");
@@ -72,7 +72,7 @@ export async function bulkAssignModuleAction(formData: FormData): Promise<void> 
 }
 
 export async function unassignModuleAction(formData: FormData): Promise<void> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
   const moduleId = parseInt(String(formData.get("module_id") ?? ""), 10);
   const assignmentId = parseInt(String(formData.get("id") ?? ""), 10);

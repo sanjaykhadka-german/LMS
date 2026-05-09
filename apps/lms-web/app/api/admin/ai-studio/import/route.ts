@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
-import { requireAdmin } from "~/lib/auth/admin";
+﻿import { NextResponse } from "next/server";
+import { requireAdminAction } from "~/lib/auth/admin";
+import { BillingGateError } from "~/lib/billing/guard";
 import { logAuditEvent } from "~/lib/audit";
 import { ApplyModuleError, importModuleFromJson } from "~/lib/ai/apply-module";
 import { getStudioSession, saveStudioSession } from "~/lib/ai/sessions";
@@ -9,8 +10,14 @@ export const runtime = "nodejs";
 export async function POST() {
   let ctx;
   try {
-    ctx = await requireAdmin();
-  } catch {
+    ctx = await requireAdminAction();
+  } catch (err) {
+    if (err instanceof BillingGateError) {
+      return NextResponse.json(
+        { error: "subscription_required", level: err.level, status: err.tenantStatus },
+        { status: 403 },
+      );
+    }
     return new NextResponse("Unauthorized", { status: 401 });
   }
   const tid = ctx.traceyTenantId;
@@ -58,7 +65,7 @@ export async function POST() {
     });
   }
 
-  // Reset the studio after a successful import — the AI JSON has been
+  // Reset the studio after a successful import â€” the AI JSON has been
   // committed so there's nothing useful to keep around.
   await saveStudioSession(ctx.traceyUserId, tid, { currentModuleJson: null });
   return NextResponse.json({ ok: true, moduleIds: createdIds });

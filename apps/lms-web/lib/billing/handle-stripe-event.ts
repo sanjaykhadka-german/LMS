@@ -69,6 +69,12 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<HandleResu
       const item = sub.items.data[0];
       const plan = planFromPrice(item?.price);
       const seats = item?.quantity ?? 0;
+      // Stripe reports a pending cancellation as `status=active` +
+      // `cancel_at_period_end=true` until the period ends, then fires
+      // `customer.subscription.deleted`. Mirror both flags so the dashboard
+      // can warn before the grace window expires.
+      const cancelAtPeriodEnd = Boolean(sub.cancel_at_period_end);
+      const canceledAt = sub.canceled_at ? new Date(sub.canceled_at * 1000) : null;
       const result = await db
         .update(tenants)
         .set({
@@ -76,6 +82,8 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<HandleResu
           plan,
           status: statusFromStripe(sub.status),
           currentPeriodEnd: new Date(sub.current_period_end * 1000),
+          cancelAtPeriodEnd,
+          canceledAt,
           seatsPurchased: seats,
           updatedAt: new Date(),
         })
@@ -93,6 +101,7 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<HandleResu
           plan,
           status: statusFromStripe(sub.status),
           seats,
+          cancel_at_period_end: cancelAtPeriodEnd,
         },
       });
       return { status: "processed", tenantId: updated.id, type: event.type };
@@ -102,9 +111,17 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<HandleResu
       const sub = event.data.object as Stripe.Subscription;
       const customerId = typeof sub.customer === "string" ? sub.customer : null;
       if (!customerId) return { status: "missing_tenant", type: event.type };
+      const canceledAt = sub.canceled_at
+        ? new Date(sub.canceled_at * 1000)
+        : new Date();
       const result = await db
         .update(tenants)
-        .set({ status: "canceled", updatedAt: new Date() })
+        .set({
+          status: "canceled",
+          cancelAtPeriodEnd: false,
+          canceledAt,
+          updatedAt: new Date(),
+        })
         .where(eq(tenants.stripeCustomerId, customerId))
         .returning({ id: tenants.id });
       const updated = result[0];

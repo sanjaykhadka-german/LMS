@@ -1,0 +1,154 @@
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { currentMembership, currentUser } from "~/lib/auth/current";
+import { isPlatformAdmin } from "~/lib/auth/platform";
+import { accessLevelFor } from "~/lib/billing/access";
+import { Button } from "~/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "~/components/ui/card";
+import { pricingTiers, formatPrice } from "~/lib/site-config";
+
+const REASON_COPY = {
+  canceled: {
+    title: "Your subscription was canceled",
+    body: "Re-subscribe to restore access to your training data. Your members, modules, and history are still here.",
+  },
+  past_due: {
+    title: "Payment failed",
+    body: "We couldn't process your last payment. Update your payment method in the billing portal to restore full access.",
+  },
+  trialing_expired: {
+    title: "Your free trial ended",
+    body: "Pick a plan to keep using Tracey. Your trial data is preserved.",
+  },
+  active_pending_cancel: {
+    title: "Cancellation scheduled",
+    body: "Your subscription is set to cancel at the end of the current period. You can reactivate from the Stripe portal.",
+  },
+  active: {
+    title: "Manage your subscription",
+    body: "Change plan, update payment method, or cancel from the Stripe billing portal.",
+  },
+} as const;
+
+export default async function BillingPage() {
+  const user = await currentUser();
+  if (!user) redirect("/sign-in?returnTo=/app/billing");
+
+  const membership = await currentMembership();
+  if (!membership) redirect("/onboarding");
+  const tenant = membership.tenant;
+
+  const platformAdmin = isPlatformAdmin(user.email);
+  const level = platformAdmin ? "full" : accessLevelFor(tenant);
+
+  let reason: keyof typeof REASON_COPY = "active";
+  if (tenant.status === "canceled") reason = "canceled";
+  else if (tenant.status === "past_due") reason = "past_due";
+  else if (
+    tenant.status === "trialing" &&
+    tenant.trialEndsAt &&
+    tenant.trialEndsAt.getTime() <= Date.now()
+  ) {
+    reason = "trialing_expired";
+  } else if (tenant.status === "active" && tenant.cancelAtPeriodEnd) {
+    reason = "active_pending_cancel";
+  }
+
+  const copy = REASON_COPY[reason];
+  const subscribable = pricingTiers.filter((t) => t.cta.kind === "signup");
+
+  return (
+    <div className="mx-auto max-w-4xl px-4 py-10">
+      <div className="mb-8">
+        <h1 className="text-2xl font-semibold tracking-tight">{copy.title}</h1>
+        <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">{copy.body}</p>
+        {platformAdmin && level !== "full" && (
+          <p className="mt-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900">
+            Platform admin override: you have full access. Tenant&apos;s effective level is{" "}
+            <strong>{accessLevelFor(tenant)}</strong>.
+          </p>
+        )}
+      </div>
+
+      {tenant.stripeCustomerId && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-lg">Stripe billing portal</CardTitle>
+            <CardDescription>
+              Update card, view invoices, change plan, or cancel.
+            </CardDescription>
+          </CardHeader>
+          <CardFooter>
+            <form action="/api/billing/portal" method="post" className="w-full">
+              <Button type="submit" className="w-full">
+                Open billing portal
+              </Button>
+            </form>
+          </CardFooter>
+        </Card>
+      )}
+
+      {(reason === "canceled" || reason === "trialing_expired") && (
+        <div className="grid gap-4 md:grid-cols-2">
+          {subscribable.map((tier) => {
+            const monthly = tier.prices?.monthly.perSeatPerMonth ?? 0;
+            const annual = tier.prices?.annual.perSeatPerMonth ?? 0;
+            return (
+              <Card key={tier.id}>
+                <CardHeader>
+                  <CardTitle className="text-lg">{tier.name}</CardTitle>
+                  <CardDescription>{tier.description}</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm">
+                  <div>
+                    {formatPrice(monthly)}
+                    <span className="text-[color:var(--muted-foreground)]"> /seat/month</span>
+                  </div>
+                  <div className="text-[color:var(--muted-foreground)]">
+                    or {formatPrice(annual)}/seat/month billed annually (save 20%)
+                  </div>
+                </CardContent>
+                <CardFooter className="flex flex-col gap-2">
+                  <form action="/api/billing/checkout" method="post" className="w-full">
+                    <input type="hidden" name="plan" value={tier.id} />
+                    <input type="hidden" name="billing" value="monthly" />
+                    <Button
+                      type="submit"
+                      variant={tier.featured ? "default" : "outline"}
+                      className="w-full"
+                    >
+                      Subscribe monthly
+                    </Button>
+                  </form>
+                  <form action="/api/billing/checkout" method="post" className="w-full">
+                    <input type="hidden" name="plan" value={tier.id} />
+                    <input type="hidden" name="billing" value="annual" />
+                    <Button type="submit" variant="ghost" className="w-full">
+                      Subscribe annually
+                    </Button>
+                  </form>
+                </CardFooter>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="mt-8 text-sm">
+        <Link
+          href="/app"
+          className="text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)]"
+        >
+          ← Back to dashboard
+        </Link>
+      </div>
+    </div>
+  );
+}

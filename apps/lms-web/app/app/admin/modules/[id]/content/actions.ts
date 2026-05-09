@@ -1,4 +1,4 @@
-"use server";
+﻿"use server";
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -8,7 +8,7 @@ import {
   lmsContentItems,
   lmsModules,
 } from "@tracey/db";
-import { requireAdmin } from "~/lib/auth/admin";
+import { requireAdminAction } from "~/lib/auth/admin";
 import { logAuditEvent } from "~/lib/audit";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
 import {
@@ -33,9 +33,9 @@ const VALID_KINDS = new Set([
 
 // Re-serialise the body field set into the on-disk shape that
 // loadLiveModule (lib/lms/learner.ts) and Flask's templates parse:
-//   section  → JSON { body, bullets, groups }
-//   scenario → JSON { body, answerBody }
-//   else     → plain text in the body column
+//   section  â†’ JSON { body, bullets, groups }
+//   scenario â†’ JSON { body, answerBody }
+//   else     â†’ plain text in the body column
 function serialiseBody(kind: string, formData: FormData): string {
   const bodyText = String(formData.get("body") ?? "");
   if (kind === "section") {
@@ -63,7 +63,7 @@ function serialiseBody(kind: string, formData: FormData): string {
 }
 
 export async function addContentItemAction(formData: FormData): Promise<void> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
   const moduleId = parseInt(String(formData.get("module_id") ?? ""), 10);
   if (!Number.isFinite(moduleId)) throw new Error("Bad module id");
@@ -118,7 +118,7 @@ export async function addContentItemAction(formData: FormData): Promise<void> {
 }
 
 export async function updateContentItemAction(formData: FormData): Promise<void> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
   const id = parseInt(String(formData.get("id") ?? ""), 10);
   const moduleId = parseInt(String(formData.get("module_id") ?? ""), 10);
@@ -204,7 +204,7 @@ export async function updateContentItemAction(formData: FormData): Promise<void>
 }
 
 export async function deleteContentItemAction(formData: FormData): Promise<void> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
   const id = parseInt(String(formData.get("id") ?? ""), 10);
   const moduleId = parseInt(String(formData.get("module_id") ?? ""), 10);
@@ -268,10 +268,10 @@ export async function deleteContentItemAction(formData: FormData): Promise<void>
   revalidatePath(`/app/admin/modules/${moduleId}`);
 }
 
-// ─── Per-content-item media ───────────────────────────────────────────────
+// â”€â”€â”€ Per-content-item media â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function addContentMediaAction(formData: FormData): Promise<void> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
   const contentItemId = parseInt(String(formData.get("content_item_id") ?? ""), 10);
   const moduleId = parseInt(String(formData.get("module_id") ?? ""), 10);
@@ -325,7 +325,7 @@ export async function addContentMediaAction(formData: FormData): Promise<void> {
 }
 
 export async function removeContentMediaAction(formData: FormData): Promise<void> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
   const id = parseInt(String(formData.get("id") ?? ""), 10);
   const moduleId = parseInt(String(formData.get("module_id") ?? ""), 10);

@@ -1,10 +1,10 @@
-"use server";
+﻿"use server";
 
 import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { lmsDepartments, lmsUsers } from "@tracey/db";
-import { requireAdmin } from "~/lib/auth/admin";
+import { requireAdminAction } from "~/lib/auth/admin";
 import { logAuditEvent } from "~/lib/audit";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
 
@@ -23,7 +23,7 @@ const nameSchema = z.object({
 });
 
 export async function createDepartmentAction(_prev: FormState, formData: FormData): Promise<FormState> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
   const parsed = nameSchema.safeParse({ name: formData.get("name") });
   if (!parsed.success) {
@@ -67,12 +67,12 @@ export async function createDepartmentAction(_prev: FormState, formData: FormDat
 }
 
 export async function deleteDepartmentAction(formData: FormData): Promise<void> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
   const id = parseInt(String(formData.get("id") ?? ""), 10);
   if (!Number.isFinite(id)) throw new Error("Bad id");
 
-  // Reassign users with this department to NULL — matches Flask delete path
+  // Reassign users with this department to NULL â€” matches Flask delete path
   // (app.py:3351). Done in one tx so a partial fail leaves nothing dangling.
   const target = await ctx.db.run(async (tx) => {
     const [found] = await tx

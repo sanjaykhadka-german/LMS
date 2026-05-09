@@ -1,13 +1,15 @@
 import "server-only";
 import { and, asc, eq } from "drizzle-orm";
 import {
-  db,
+  forTenant,
   lmsChoices,
   lmsContentItems,
   lmsModules,
   lmsQuestions,
 } from "@tracey/db";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
+
+type Tx = Parameters<Parameters<ReturnType<typeof forTenant>["run"]>[0]>[0];
 
 // Ports app.py:_module_description_from + _section_kind_and_body +
 // _add_question_with_choices + import_module_from_json + apply_module_json_to_existing.
@@ -58,7 +60,7 @@ function sectionKindAndBody(s: Record<string, unknown>): {
 }
 
 async function addQuestionWithChoices(
-  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  tx: Tx,
   moduleId: number,
   tenantId: string,
   qpos: number,
@@ -120,7 +122,7 @@ export async function importModuleFromJson(opts: {
 }): Promise<number[]> {
   const payload = Array.isArray(opts.data) ? opts.data : [opts.data];
   const createdIds: number[] = [];
-  await db.transaction(async (tx) => {
+  await forTenant(opts.tenantId).run(async (tx) => {
     for (let i = 0; i < payload.length; i++) {
       const mod = payload[i];
       if (!mod || typeof mod !== "object") {
@@ -192,7 +194,7 @@ export async function applyModuleJsonToExisting(opts: {
   const title = String(data.title ?? "").trim();
   if (!title) throw new ApplyModuleError("Module is missing a 'title' field.");
 
-  await db.transaction(async (tx) => {
+  await forTenant(opts.tenantId).run(async (tx) => {
     // Update title + description.
     const updated = await tx
       .update(lmsModules)

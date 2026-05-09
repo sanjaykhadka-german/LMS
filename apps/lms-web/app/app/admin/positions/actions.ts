@@ -1,11 +1,11 @@
-"use server";
+﻿"use server";
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { lmsPositions, lmsUsers } from "@tracey/db";
-import { requireAdmin } from "~/lib/auth/admin";
+import { requireAdminAction } from "~/lib/auth/admin";
 import { logAuditEvent } from "~/lib/audit";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
 import type { FormState } from "../_components/NameCrudForm";
@@ -21,7 +21,7 @@ function parseOptionalInt(raw: FormDataEntryValue | null): number | null {
 }
 
 export async function createPositionAction(_prev: FormState, formData: FormData): Promise<FormState> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
   const parsed = baseSchema.safeParse({ name: formData.get("name") });
   if (!parsed.success) {
@@ -56,7 +56,7 @@ export async function createPositionAction(_prev: FormState, formData: FormData)
 }
 
 export async function updatePositionAction(formData: FormData): Promise<void> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
   const id = parseOptionalInt(formData.get("id"));
   if (!id) throw new Error("Bad id");
@@ -77,7 +77,7 @@ export async function updatePositionAction(formData: FormData): Promise<void> {
       .limit(1);
     if (!current) throw new Error("Position not found");
 
-    // Cycle guard — port of app.py:1582-1593. Self-as-parent and direct-child
+    // Cycle guard â€” port of app.py:1582-1593. Self-as-parent and direct-child
     // -as-parent only; deeper cycles are unlikely in practice.
     if (parentId === id) {
       parentId = current.parentId;
@@ -112,7 +112,7 @@ export async function updatePositionAction(formData: FormData): Promise<void> {
 }
 
 export async function deletePositionAction(formData: FormData): Promise<void> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
   const id = parseOptionalInt(formData.get("id"));
   if (!id) throw new Error("Bad id");

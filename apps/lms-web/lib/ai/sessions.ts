@@ -1,6 +1,6 @@
 import "server-only";
 import { and, eq } from "drizzle-orm";
-import { db, aiStudioSessions, type AiStudioSession } from "@tracey/db";
+import { forTenant, aiStudioSessions, type AiStudioSession } from "@tracey/db";
 import type { ChatTurn } from "./claude";
 
 export interface StoredFile {
@@ -32,13 +32,16 @@ export async function getStudioSession(
   userId: string,
   tenantId: string,
 ): Promise<StudioState> {
-  const [row] = await db
-    .select()
-    .from(aiStudioSessions)
-    .where(
-      and(eq(aiStudioSessions.userId, userId), eq(aiStudioSessions.tenantId, tenantId)),
-    )
-    .limit(1);
+  const rows = await forTenant(tenantId).run((tx) =>
+    tx
+      .select()
+      .from(aiStudioSessions)
+      .where(
+        and(eq(aiStudioSessions.userId, userId), eq(aiStudioSessions.tenantId, tenantId)),
+      )
+      .limit(1),
+  );
+  const row = rows[0];
   if (!row) return EMPTY;
   return rowToState(row);
 }
@@ -50,27 +53,29 @@ export async function saveStudioSession(
 ): Promise<StudioState> {
   const current = await getStudioSession(userId, tenantId);
   const next: StudioState = { ...current, ...state };
-  await db
-    .insert(aiStudioSessions)
-    .values({
-      userId,
-      tenantId,
-      history: next.history as unknown,
-      files: next.files as unknown,
-      currentModuleJson: next.currentModuleJson,
-      moduleId: next.moduleId,
-      updatedAt: new Date(),
-    })
-    .onConflictDoUpdate({
-      target: [aiStudioSessions.userId, aiStudioSessions.tenantId],
-      set: {
+  await forTenant(tenantId).run((tx) =>
+    tx
+      .insert(aiStudioSessions)
+      .values({
+        userId,
+        tenantId,
         history: next.history as unknown,
         files: next.files as unknown,
         currentModuleJson: next.currentModuleJson,
         moduleId: next.moduleId,
         updatedAt: new Date(),
-      },
-    });
+      })
+      .onConflictDoUpdate({
+        target: [aiStudioSessions.userId, aiStudioSessions.tenantId],
+        set: {
+          history: next.history as unknown,
+          files: next.files as unknown,
+          currentModuleJson: next.currentModuleJson,
+          moduleId: next.moduleId,
+          updatedAt: new Date(),
+        },
+      }),
+  );
   return next;
 }
 
@@ -78,11 +83,13 @@ export async function resetStudioSession(
   userId: string,
   tenantId: string,
 ): Promise<void> {
-  await db
-    .delete(aiStudioSessions)
-    .where(
-      and(eq(aiStudioSessions.userId, userId), eq(aiStudioSessions.tenantId, tenantId)),
-    );
+  await forTenant(tenantId).run((tx) =>
+    tx
+      .delete(aiStudioSessions)
+      .where(
+        and(eq(aiStudioSessions.userId, userId), eq(aiStudioSessions.tenantId, tenantId)),
+      ),
+  );
 }
 
 function rowToState(row: AiStudioSession): StudioState {

@@ -1,4 +1,4 @@
-"use server";
+﻿"use server";
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -8,7 +8,7 @@ import {
   lmsDepartments,
   lmsModules,
 } from "@tracey/db";
-import { requireAdmin } from "~/lib/auth/admin";
+import { requireAdminAction } from "~/lib/auth/admin";
 import { logAuditEvent } from "~/lib/audit";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
 
@@ -17,7 +17,7 @@ import { tenantWhere } from "~/lib/lms/tenant-scope";
 // write the delta.
 
 export async function saveDepartmentPoliciesAction(formData: FormData): Promise<void> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
 
   const [departments, moduleRows] = await Promise.all([

@@ -1,4 +1,4 @@
-"use server";
+﻿"use server";
 
 import crypto from "node:crypto";
 import { redirect } from "next/navigation";
@@ -15,7 +15,7 @@ import {
   lmsUserMachines,
   lmsUsers,
 } from "@tracey/db";
-import { requireAdmin } from "~/lib/auth/admin";
+import { requireAdminAction } from "~/lib/auth/admin";
 import { logAuditEvent } from "~/lib/audit";
 import { autoAssignForDepartment } from "~/lib/lms/admin";
 import { sendInviteEmail } from "~/lib/lms/notify-admin";
@@ -119,7 +119,7 @@ async function findPositionIdByName(name: string, tid: string): Promise<number |
 }
 
 export async function bulkUploadEmployeesAction(formData: FormData): Promise<void> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
   const file = formData.get("csv");
   if (!(file instanceof File) || file.size === 0) {

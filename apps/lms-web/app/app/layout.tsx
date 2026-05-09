@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import {
   currentMembership,
@@ -10,10 +11,18 @@ import { siteConfig } from "~/lib/site-config";
 import { getAuthorAccess } from "~/lib/auth/author";
 import { isPlatformAdmin } from "~/lib/auth/platform";
 import { getOrProvisionLmsUser } from "~/lib/lms/learner";
+import { accessLevelFor } from "~/lib/billing/access";
 import { UserMenu } from "./_components/user-menu";
 import { TenantSwitcher } from "./_components/tenant-switcher";
 import { GlobalSearch } from "./_components/global-search";
+import { ReadOnlyBanner } from "./_components/read-only-banner";
 import { InstallAppButton } from "~/components/pwa/InstallAppButton";
+
+// Pages that must remain reachable when a tenant is `blocked`. The billing
+// page is the re-subscribe escape hatch. Sign-out is a server action invoked
+// from the user menu without rendering through this layout, so it does not
+// need an exemption here.
+const BILLING_GATE_EXEMPT = ["/app/billing"];
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await currentUser();
@@ -21,6 +30,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const membership = await currentMembership();
   if (!membership) redirect("/onboarding");
+
+  const platformAdmin = isPlatformAdmin(user.email);
+  const accessLevel = platformAdmin ? "full" : accessLevelFor(membership.tenant);
+
+  const hdrs = await headers();
+  const pathname = hdrs.get("x-pathname") ?? "";
+  const exempt = BILLING_GATE_EXEMPT.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+
+  if (accessLevel === "blocked" && !exempt) {
+    redirect("/app/billing");
+  }
 
   const tenants = await listUserTenants();
   const switcherOptions = tenants.map((m) => ({
@@ -38,7 +58,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const photoUrl = lmsUser.photoFilename
     ? `/uploads/${lmsUser.photoFilename}`
     : null;
-  const platformAdmin = isPlatformAdmin(user.email);
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -79,7 +98,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               </Link>
               {(membership.role === "owner" || membership.role === "admin") && (
                 <Link
-                  href="/app"
+                  href="/app/billing"
                   className="rounded-md px-3 py-1.5 text-sm font-medium text-[color:var(--muted-foreground)] transition-colors hover:bg-[color:var(--secondary)] hover:text-[color:var(--foreground)]"
                 >
                   Billing
@@ -106,6 +125,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </div>
         </div>
       </header>
+      {accessLevel === "read_only" && (
+        <ReadOnlyBanner
+          status={membership.tenant.status}
+          trialEndsAt={membership.tenant.trialEndsAt?.toISOString() ?? null}
+          currentPeriodEnd={membership.tenant.currentPeriodEnd?.toISOString() ?? null}
+        />
+      )}
       <main className="flex-1">{children}</main>
     </div>
   );

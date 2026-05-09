@@ -1,4 +1,4 @@
-"use server";
+﻿"use server";
 
 import { revalidatePath } from "next/cache";
 import { and, desc, eq } from "drizzle-orm";
@@ -7,12 +7,12 @@ import {
   lmsModules,
   lmsQuestions,
 } from "@tracey/db";
-import { requireAdmin } from "~/lib/auth/admin";
+import { requireAdminAction } from "~/lib/auth/admin";
 import { logAuditEvent } from "~/lib/audit";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
 
 export async function addQuestionAction(formData: FormData): Promise<void> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
   const moduleId = parseInt(String(formData.get("module_id") ?? ""), 10);
   if (!Number.isFinite(moduleId)) throw new Error("Bad module id");
@@ -63,7 +63,7 @@ export async function addQuestionAction(formData: FormData): Promise<void> {
 }
 
 export async function updateQuestionAction(formData: FormData): Promise<void> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
   const id = parseInt(String(formData.get("id") ?? ""), 10);
   const moduleId = parseInt(String(formData.get("module_id") ?? ""), 10);
@@ -106,7 +106,7 @@ export async function updateQuestionAction(formData: FormData): Promise<void> {
 }
 
 export async function deleteQuestionAction(formData: FormData): Promise<void> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
   const id = parseInt(String(formData.get("id") ?? ""), 10);
   const moduleId = parseInt(String(formData.get("module_id") ?? ""), 10);
@@ -143,10 +143,10 @@ export async function deleteQuestionAction(formData: FormData): Promise<void> {
   revalidatePath(`/app/admin/modules/${moduleId}`);
 }
 
-// ─── Choices ──────────────────────────────────────────────────────────────
+// â”€â”€â”€ Choices â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function addChoiceAction(formData: FormData): Promise<void> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
   const questionId = parseInt(String(formData.get("question_id") ?? ""), 10);
   const moduleId = parseInt(String(formData.get("module_id") ?? ""), 10);
@@ -190,7 +190,7 @@ export async function addChoiceAction(formData: FormData): Promise<void> {
 }
 
 export async function updateChoiceAction(formData: FormData): Promise<void> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
   const id = parseInt(String(formData.get("id") ?? ""), 10);
   const moduleId = parseInt(String(formData.get("module_id") ?? ""), 10);
@@ -225,7 +225,7 @@ export async function updateChoiceAction(formData: FormData): Promise<void> {
 }
 
 export async function deleteChoiceAction(formData: FormData): Promise<void> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
   const id = parseInt(String(formData.get("id") ?? ""), 10);
   const moduleId = parseInt(String(formData.get("module_id") ?? ""), 10);

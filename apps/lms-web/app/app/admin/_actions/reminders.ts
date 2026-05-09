@@ -1,12 +1,12 @@
-"use server";
+﻿"use server";
 
 import { redirect } from "next/navigation";
-import { requireAdmin } from "~/lib/auth/admin";
+import { requireAdminAction } from "~/lib/auth/admin";
 import { logAuditEvent } from "~/lib/audit";
 import { runAssignmentReminders, runWhsReminders } from "~/lib/lms/reminders";
 
 export async function runAssignmentRemindersAction(): Promise<void> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
   const sent = await runAssignmentReminders(tid);
   await logAuditEvent({
@@ -22,7 +22,7 @@ export async function runAssignmentRemindersAction(): Promise<void> {
 }
 
 export async function runWhsRemindersAction(formData: FormData): Promise<void> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
   const force = formData.get("force") === "1";
   const sent = await runWhsReminders(tid, { force });

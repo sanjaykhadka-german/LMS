@@ -1,17 +1,17 @@
-"use server";
+﻿"use server";
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { and, eq, lt } from "drizzle-orm";
 import { auditEvents, db, lmsAuditLogs } from "@tracey/db";
-import { requireAdmin } from "~/lib/auth/admin";
+import { requireAdminAction } from "~/lib/auth/admin";
 import { logAuditEvent } from "~/lib/audit";
 
 const DEFAULT_DAYS = 365;
 const MIN_DAYS = 30;
 
 export async function pruneAuditLogsAction(formData: FormData): Promise<void> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
 
   const raw = formData.get("days");
@@ -23,7 +23,7 @@ export async function pruneAuditLogsAction(formData: FormData): Promise<void> {
 
   const cutoff = new Date(Date.now() - days * 86_400_000);
 
-  // app.audit_events — Tracey schema, not RLS-covered.
+  // app.audit_events â€” Tracey schema, not RLS-covered.
   // allow-cross-tenant: explicit tenantId filter on uuid-keyed Tracey table.
   const traceyDeleted = await db
     .delete(auditEvents)

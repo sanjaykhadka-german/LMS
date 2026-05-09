@@ -1,17 +1,17 @@
-"use server";
+﻿"use server";
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { and, eq, inArray, ne } from "drizzle-orm";
 import { z } from "zod";
 import { lmsMachineModules, lmsMachines, lmsModules } from "@tracey/db";
-import { requireAdmin } from "~/lib/auth/admin";
+import { requireAdminAction } from "~/lib/auth/admin";
 import { logAuditEvent } from "~/lib/audit";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
 import type { FormState } from "../_components/NameCrudForm";
 
 export async function createMachineAction(_prev: FormState, formData: FormData): Promise<FormState> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
   const parsed = z
     .object({ name: z.string().trim().min(1, "Name is required").max(100) })
@@ -63,7 +63,7 @@ const updateSchema = z.object({
 });
 
 export async function updateMachineAction(formData: FormData): Promise<void> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
   const parsed = updateSchema.safeParse({
     id: formData.get("id"),
@@ -98,7 +98,7 @@ export async function updateMachineAction(formData: FormData): Promise<void> {
     redirect(`/app/admin/machines/${id}/edit?error=duplicate`);
   }
 
-  // Sync the M2M to exactly the chosen module ids — clear-and-reinsert is
+  // Sync the M2M to exactly the chosen module ids â€” clear-and-reinsert is
   // simpler than diffing and is fine for a small set.
   await ctx.db.run(async (tx) => {
     await tx
@@ -139,7 +139,7 @@ export async function updateMachineAction(formData: FormData): Promise<void> {
 }
 
 export async function deleteMachineAction(formData: FormData): Promise<void> {
-  const ctx = await requireAdmin();
+  const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
   const id = parseInt(String(formData.get("id") ?? ""), 10);
   if (!Number.isFinite(id)) throw new Error("Bad id");

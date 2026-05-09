@@ -16,7 +16,10 @@ import {
 } from "./fakes/db";
 
 function subscriptionEvent(
-  type: "customer.subscription.created" | "customer.subscription.updated",
+  type:
+    | "customer.subscription.created"
+    | "customer.subscription.updated"
+    | "customer.subscription.deleted",
   overrides: Partial<{
     id: string;
     customerId: string;
@@ -25,6 +28,8 @@ function subscriptionEvent(
     status: Stripe.Subscription.Status;
     currentPeriodEnd: number;
     seats: number;
+    cancelAtPeriodEnd: boolean;
+    canceledAt: number | null;
   }> = {},
 ): Stripe.Event {
   const {
@@ -35,6 +40,8 @@ function subscriptionEvent(
     status = "active",
     currentPeriodEnd = 1735689600, // 2025-01-01
     seats = 5,
+    cancelAtPeriodEnd = false,
+    canceledAt = null,
   } = overrides;
   return {
     id,
@@ -52,6 +59,8 @@ function subscriptionEvent(
         customer: customerId,
         status,
         current_period_end: currentPeriodEnd,
+        cancel_at_period_end: cancelAtPeriodEnd,
+        canceled_at: canceledAt,
         items: {
           object: "list",
           data: [
@@ -113,6 +122,65 @@ describe("handleStripeEvent — customer.subscription.updated", () => {
     });
     const result = await handleStripeEvent(event);
     expect(result.status).toBe("missing_tenant");
+  });
+
+  it("persists cancel_at_period_end and canceled_at when set", async () => {
+    const canceledAtSec = 1735000000;
+    const event = subscriptionEvent("customer.subscription.updated", {
+      cancelAtPeriodEnd: true,
+      canceledAt: canceledAtSec,
+    });
+    await handleStripeEvent(event);
+    const t = getTenant("tenant-1") as { cancelAtPeriodEnd?: boolean; canceledAt?: Date };
+    expect(t.cancelAtPeriodEnd).toBe(true);
+    expect(t.canceledAt).toEqual(new Date(canceledAtSec * 1000));
+  });
+
+  it("clears cancel_at_period_end when subscription resumes", async () => {
+    seedTenant({
+      id: "tenant-1",
+      stripeCustomerId: "cus_123",
+      status: "active",
+      // simulate a prior pending-cancel state
+      cancelAtPeriodEnd: true,
+      canceledAt: new Date("2025-01-15"),
+    } as unknown as Parameters<typeof seedTenant>[0]);
+    const event = subscriptionEvent("customer.subscription.updated", {
+      cancelAtPeriodEnd: false,
+      canceledAt: null,
+    });
+    await handleStripeEvent(event);
+    const t = getTenant("tenant-1") as { cancelAtPeriodEnd?: boolean; canceledAt?: Date | null };
+    expect(t.cancelAtPeriodEnd).toBe(false);
+    expect(t.canceledAt).toBeNull();
+  });
+});
+
+describe("handleStripeEvent — customer.subscription.deleted", () => {
+  beforeEach(() => {
+    resetFakeDb();
+    seedTenant({
+      id: "tenant-del",
+      stripeCustomerId: "cus_del",
+      status: "active",
+    });
+  });
+
+  it("flips status to canceled, clears cancelAtPeriodEnd, sets canceledAt", async () => {
+    const canceledAtSec = 1736000000;
+    const event = subscriptionEvent("customer.subscription.deleted", {
+      customerId: "cus_del",
+      canceledAt: canceledAtSec,
+    });
+    await handleStripeEvent(event);
+    const t = getTenant("tenant-del") as {
+      status?: string;
+      cancelAtPeriodEnd?: boolean;
+      canceledAt?: Date;
+    };
+    expect(t.status).toBe("canceled");
+    expect(t.cancelAtPeriodEnd).toBe(false);
+    expect(t.canceledAt).toEqual(new Date(canceledAtSec * 1000));
   });
 });
 

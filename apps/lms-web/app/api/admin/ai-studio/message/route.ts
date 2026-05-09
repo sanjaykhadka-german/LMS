@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import type Anthropic from "@anthropic-ai/sdk";
-import { requireAdmin } from "~/lib/auth/admin";
+import { requireAdminAction } from "~/lib/auth/admin";
+import { BillingGateError } from "~/lib/billing/guard";
 import { getClaudeApiKey, sendMessage } from "~/lib/ai/claude";
 import { getStudioSession, saveStudioSession } from "~/lib/ai/sessions";
 
@@ -10,8 +11,14 @@ export const maxDuration = 300; // Anthropic requests can run long; allow 5 min.
 export async function POST(req: Request) {
   let ctx;
   try {
-    ctx = await requireAdmin();
-  } catch {
+    ctx = await requireAdminAction();
+  } catch (err) {
+    if (err instanceof BillingGateError) {
+      return NextResponse.json(
+        { error: "subscription_required", level: err.level, status: err.tenantStatus },
+        { status: 403 },
+      );
+    }
     return new NextResponse("Unauthorized", { status: 401 });
   }
   const userId = ctx.traceyUserId;
