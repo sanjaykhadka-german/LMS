@@ -56,44 +56,46 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Drizzle-tracked migrations bring the `app` and `drizzle` schemas up
-      # to whatever's on origin. Public/LMS tables are NOT created by these.
-      - name: Apply Drizzle migrations
-        run: pnpm --filter @tracey/db run migrate
-
-      # Bootstrap the public.lms_* tables from the committed fixture.
-      # Source of truth: a `pg_dump --schema-only --schema=public` of the
-      # canonical local lms_dev. Updated by re-running pg_dump whenever
-      # the LMS table shape changes (Flask retired in Phase 5; no
-      # Drizzle-managed migrations exist for these tables).
-      - name: Apply LMS schema fixture
-        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/db/fixtures/lms-public-schema.sql
-
-      # Manual migrations the test suite depends on:
-      #   0004_ai_studio_sessions creates app.ai_studio_sessions —
-      #     deliberately NOT in the Drizzle migration (0004_brown_wasp
-      #     stripped its CREATE statements per the snapshot-gotcha
-      #     comment in that file), so a manual apply is required.
-      #   0006 creates app.tenant_migrations (per-tenant ledger).
-      #   0004_enable_rls enables RLS on public.lms_* + app.ai_studio_sessions.
-      - name: Apply ai_studio_sessions table
-        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/db/migrations/manual/0004_ai_studio_sessions.sql
-
-      - name: Apply tenant_migrations ledger
-        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/db/migrations/manual/0006_tenant_migrations_ledger.sql
-
-      - name: Apply RLS migration
-        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/db/migrations/manual/0004_enable_rls.sql
-
-      # 0009 enables RLS on app.notifications. Must come AFTER 0005 created
-      # the table (which Drizzle migrate did) and AFTER the test RLS role
-      # is irrelevant to apply (the role is created next; RLS targets
-      # FORCE-mode so all roles are subject regardless).
-      - name: Apply notifications RLS
-        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/db/migrations/manual/0009_enable_rls_notifications.sql
-
-      - name: Set up test RLS role
-        run: pnpm -C apps/lms-web run setup:test-rls-role
+      # Consolidated DB setup. Each substep is wrapped in ::group:: so the
+      # GH Actions UI still shows collapsible sections per phase, but only
+      # one outer step is paid for in action overhead (~5-10s per step).
+      #
+      # Order matters:
+      #   1. Drizzle-tracked migrations build `app` + `drizzle` schemas
+      #      (does NOT touch public.lms_* — those tables are owned by the
+      #      committed pg_dump fixture, see Phase 5 retirement).
+      #   2. LMS schema fixture seeds public.lms_*.
+      #   3. Manual migration 0004_ai_studio_sessions creates app.ai_studio_sessions
+      #      (intentionally stripped from Drizzle's 0004_brown_wasp per the
+      #      snapshot-gotcha comment in that file).
+      #   4. 0006 creates app.tenant_migrations ledger.
+      #   5. 0004_enable_rls enables RLS on public.lms_* + ai_studio_sessions.
+      #   6. 0009 enables RLS on app.notifications (table created by Drizzle 0005).
+      #   7. Test RLS role for the per-tenant-rls regression.
+      - name: DB setup (migrations + RLS + test role)
+        run: |
+          set -euo pipefail
+          echo '::group::Drizzle migrations (app + drizzle schemas)'
+          pnpm --filter @tracey/db run migrate
+          echo '::endgroup::'
+          echo '::group::Apply LMS schema fixture (public.lms_*)'
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/db/fixtures/lms-public-schema.sql
+          echo '::endgroup::'
+          echo '::group::Apply manual migration: ai_studio_sessions'
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/db/migrations/manual/0004_ai_studio_sessions.sql
+          echo '::endgroup::'
+          echo '::group::Apply manual migration: tenant_migrations ledger'
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/db/migrations/manual/0006_tenant_migrations_ledger.sql
+          echo '::endgroup::'
+          echo '::group::Apply manual migration: RLS on public.lms_* + ai_studio_sessions'
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/db/migrations/manual/0004_enable_rls.sql
+          echo '::endgroup::'
+          echo '::group::Apply manual migration: RLS on app.notifications'
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/db/migrations/manual/0009_enable_rls_notifications.sql
+          echo '::endgroup::'
+          echo '::group::Set up test RLS role'
+          pnpm -C apps/lms-web run setup:test-rls-role
+          echo '::endgroup::'
 
       - name: typecheck
         run: pnpm typecheck
