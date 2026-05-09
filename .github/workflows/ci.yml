@@ -11,6 +11,43 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # No-DB checks. Runs in parallel with `test` so the wall time is bounded
+  # by the slower of the two jobs (the test job, dominated by Postgres
+  # startup + DB setup + vitest), not the sum.
+  static-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: typecheck
+        run: pnpm typecheck
+
+      - name: lint
+        run: pnpm -C apps/lms-web run lint
+
+      - name: check-tenant-scope (STRICT=1)
+        env:
+          STRICT: "1"
+        run: pnpm -C apps/lms-web check-tenant-scope
+
+      - name: check-cli-rls-scope
+        run: pnpm -C apps/lms-web check-cli-rls-scope
+
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -96,20 +133,6 @@ jobs:
           echo '::group::Set up test RLS role'
           pnpm -C apps/lms-web run setup:test-rls-role
           echo '::endgroup::'
-
-      - name: typecheck
-        run: pnpm typecheck
-
-      - name: lint
-        run: pnpm -C apps/lms-web run lint
-
-      - name: check-tenant-scope (STRICT=1)
-        env:
-          STRICT: "1"
-        run: pnpm -C apps/lms-web check-tenant-scope
-
-      - name: check-cli-rls-scope
-        run: pnpm -C apps/lms-web check-cli-rls-scope
 
       # vitest with RLS_TEST_DATABASE_URL set, so the per-tenant-rls
       # regression runs under the non-superuser role and would fail loudly
