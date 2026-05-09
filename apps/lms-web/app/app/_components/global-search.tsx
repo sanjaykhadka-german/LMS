@@ -15,17 +15,40 @@ interface ModuleHit {
   title: string;
   url: string;
 }
+interface LookupHit {
+  id: number;
+  name: string;
+  url: string;
+}
 interface SearchResult {
   users: UserHit[];
   modules: ModuleHit[];
+  departments: LookupHit[];
+  employers: LookupHit[];
+  machines: LookupHit[];
+  positions: LookupHit[];
 }
 
-type Flat = { kind: "user" | "module"; label: string; sub?: string; url: string };
+const EMPTY_RESULT: SearchResult = {
+  users: [],
+  modules: [],
+  departments: [],
+  employers: [],
+  machines: [],
+  positions: [],
+};
+
+type Flat = {
+  kind: "user" | "module" | "department" | "employer" | "machine" | "position";
+  label: string;
+  sub?: string;
+  url: string;
+};
 
 export function GlobalSearch() {
   const router = useRouter();
   const [q, setQ] = useState("");
-  const [results, setResults] = useState<SearchResult>({ users: [], modules: [] });
+  const [results, setResults] = useState<SearchResult>(EMPTY_RESULT);
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -48,7 +71,7 @@ export function GlobalSearch() {
     const trimmed = q.trim();
     if (trimmed.length < 2) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: clear stale results when query falls below 2 chars
-      setResults({ users: [], modules: [] });
+      setResults(EMPTY_RESULT);
       return;
     }
     const myReq = ++reqIdRef.current;
@@ -79,6 +102,10 @@ export function GlobalSearch() {
       url: u.url,
     })),
     ...results.modules.map<Flat>((m) => ({ kind: "module", label: m.title, url: m.url })),
+    ...results.departments.map<Flat>((d) => ({ kind: "department", label: d.name, url: d.url })),
+    ...results.employers.map<Flat>((e) => ({ kind: "employer", label: e.name, url: e.url })),
+    ...results.machines.map<Flat>((m) => ({ kind: "machine", label: m.name, url: m.url })),
+    ...results.positions.map<Flat>((p) => ({ kind: "position", label: p.name, url: p.url })),
   ];
 
   function navigate(item: Flat) {
@@ -116,8 +143,8 @@ export function GlobalSearch() {
           if (flat.length > 0) setOpen(true);
         }}
         onKeyDown={onKeyDown}
-        placeholder="Search users or modules…"
-        aria-label="Search users or modules"
+        placeholder="Search the workspace…"
+        aria-label="Search users, modules, and lookups"
         autoComplete="off"
       />
       {open && flat.length > 0 && (
@@ -151,6 +178,85 @@ export function GlobalSearch() {
                     onClick={() => navigate(flat[flatIdx]!)}
                     onMouseEnter={() => setHighlight(flatIdx)}
                     primary={m.title}
+                  />
+                );
+              })}
+            </Section>
+          )}
+          {results.departments.length > 0 && (
+            <Section label="Departments">
+              {results.departments.map((d, idx) => {
+                const flatIdx = results.users.length + results.modules.length + idx;
+                return (
+                  <Row
+                    key={`d-${d.id}`}
+                    active={highlight === flatIdx}
+                    onClick={() => navigate(flat[flatIdx]!)}
+                    onMouseEnter={() => setHighlight(flatIdx)}
+                    primary={d.name}
+                  />
+                );
+              })}
+            </Section>
+          )}
+          {results.employers.length > 0 && (
+            <Section label="Employers">
+              {results.employers.map((e, idx) => {
+                const flatIdx =
+                  results.users.length +
+                  results.modules.length +
+                  results.departments.length +
+                  idx;
+                return (
+                  <Row
+                    key={`e-${e.id}`}
+                    active={highlight === flatIdx}
+                    onClick={() => navigate(flat[flatIdx]!)}
+                    onMouseEnter={() => setHighlight(flatIdx)}
+                    primary={e.name}
+                  />
+                );
+              })}
+            </Section>
+          )}
+          {results.machines.length > 0 && (
+            <Section label="Machines">
+              {results.machines.map((m, idx) => {
+                const flatIdx =
+                  results.users.length +
+                  results.modules.length +
+                  results.departments.length +
+                  results.employers.length +
+                  idx;
+                return (
+                  <Row
+                    key={`x-${m.id}`}
+                    active={highlight === flatIdx}
+                    onClick={() => navigate(flat[flatIdx]!)}
+                    onMouseEnter={() => setHighlight(flatIdx)}
+                    primary={m.name}
+                  />
+                );
+              })}
+            </Section>
+          )}
+          {results.positions.length > 0 && (
+            <Section label="Positions">
+              {results.positions.map((p, idx) => {
+                const flatIdx =
+                  results.users.length +
+                  results.modules.length +
+                  results.departments.length +
+                  results.employers.length +
+                  results.machines.length +
+                  idx;
+                return (
+                  <Row
+                    key={`p-${p.id}`}
+                    active={highlight === flatIdx}
+                    onClick={() => navigate(flat[flatIdx]!)}
+                    onMouseEnter={() => setHighlight(flatIdx)}
+                    primary={p.name}
                   />
                 );
               })}

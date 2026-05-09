@@ -3,11 +3,18 @@ import { and, asc, eq, exists, ilike, or, sql } from "drizzle-orm";
 import {
   forTenant,
   lmsContentItems,
+  lmsDepartments,
+  lmsEmployers,
+  lmsMachines,
   lmsModules,
+  lmsPositions,
   lmsUsers,
 } from "@tracey/db";
 import { getAuthorAccess } from "~/lib/auth/author";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
+
+const LOOKUP_LIMIT = 5;
+type LookupRow = { id: number; name: string };
 
 // GET /api/admin/search?q=<term>
 // Mirrors Flask's /admin/search (app.py:1719-1762): users + modules in the
@@ -27,11 +34,26 @@ export async function GET(req: Request) {
 
   // Tracey 'admin'/'owner' see users; lmsRole='qaqc' (member-tier) does
   // not — matches Flask, where `current_user.is_admin` gated the user
-  // search but modules were visible to all authors (app.py:1742).
+  // search but modules were visible to all authors (app.py:1742). Same
+  // gate applies to the lookup tables (departments, employers, machines,
+  // positions) — those are admin-managed and never surfaced to qaqc.
   const includeUsers = access.membershipRole === "owner" || access.membershipRole === "admin";
+  const includeAdminLookups = includeUsers;
 
   const tdb = forTenant(tid);
-  const [userRows, moduleRows] = await Promise.all([
+  const emptyLookup: LookupRow[] = [];
+  const lookupQuery = (
+    table: typeof lmsDepartments | typeof lmsEmployers | typeof lmsMachines | typeof lmsPositions,
+  ) =>
+    tdb.run((tx) =>
+      tx
+        .select({ id: table.id, name: table.name })
+        .from(table)
+        .where(and(tenantWhere(table, tid), ilike(table.name, like)))
+        .orderBy(asc(table.name))
+        .limit(LOOKUP_LIMIT),
+    );
+  const [userRows, moduleRows, departmentRows, employerRows, machineRows, positionRows] = await Promise.all([
     includeUsers
       ? tdb.run((tx) =>
           tx
@@ -91,6 +113,10 @@ export async function GET(req: Request) {
         .orderBy(asc(lmsModules.title))
         .limit(8);
     }),
+    includeAdminLookups ? lookupQuery(lmsDepartments) : Promise.resolve(emptyLookup),
+    includeAdminLookups ? lookupQuery(lmsEmployers) : Promise.resolve(emptyLookup),
+    includeAdminLookups ? lookupQuery(lmsMachines) : Promise.resolve(emptyLookup),
+    includeAdminLookups ? lookupQuery(lmsPositions) : Promise.resolve(emptyLookup),
   ]);
 
   return NextResponse.json({
@@ -104,6 +130,26 @@ export async function GET(req: Request) {
       id: m.id,
       title: m.title,
       url: `/app/admin/modules/${m.id}`,
+    })),
+    departments: departmentRows.map((d) => ({
+      id: d.id,
+      name: d.name,
+      url: "/app/admin/departments",
+    })),
+    employers: employerRows.map((e) => ({
+      id: e.id,
+      name: e.name,
+      url: "/app/admin/employers",
+    })),
+    machines: machineRows.map((m) => ({
+      id: m.id,
+      name: m.name,
+      url: `/app/admin/machines/${m.id}/edit`,
+    })),
+    positions: positionRows.map((p) => ({
+      id: p.id,
+      name: p.name,
+      url: `/app/admin/positions/${p.id}/edit`,
     })),
   });
 }
