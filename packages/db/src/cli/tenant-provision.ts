@@ -82,25 +82,38 @@ async function main() {
   // Safety check: refuse to provision if the tenant has existing rows in
   // any LMS table in public — provisioning would shadow the existing data
   // until 7c does the copy. --force overrides for sandbox use.
+  //
+  // Wrapped in a transaction with tx-local `app.tenant_id` so the RLS
+  // policies on public.lms_* (0004_enable_rls.sql) admit this tenant's
+  // rows. Without this, every count returns 0 under prod RLS and the
+  // guard silently passes — the operator loses the warning that they're
+  // about to shadow existing data.
   if (!force) {
-    for (const table of LMS_TABLES) {
-      const rows = (await db.execute(
-        drizzleSql.raw(
-          `SELECT count(*)::int AS c FROM public."${table}" WHERE tracey_tenant_id = '${tenantId}'`,
-        ),
-      )) as unknown as Array<{ c: number }>;
-      const count = rows[0]?.c ?? 0;
-      if (count > 0) {
-        console.error(
-          `[tenant-provision] REFUSING — tenant ${tenant.slug} has ${count} rows in public.${table}.\n` +
-            `  Provisioning a per-tenant schema would HIDE this data from the app until Phase 7c copies it over.\n` +
-            `  Either:\n` +
-            `    a) wait for Phase 7c to handle the data copy + provisioning together, or\n` +
-            `    b) re-run with --force if you intend to provision a sandbox tenant whose data is meant to be empty.`,
-        );
-        await sql.end();
-        process.exit(1);
+    const offender = await db.transaction(async (tx) => {
+      await tx.execute(
+        drizzleSql`SELECT set_config('app.tenant_id', ${tenantId}, true)`,
+      );
+      for (const table of LMS_TABLES) {
+        const rows = (await tx.execute(
+          drizzleSql.raw(
+            `SELECT count(*)::int AS c FROM public."${table}" WHERE tracey_tenant_id = '${tenantId}'`,
+          ),
+        )) as unknown as Array<{ c: number }>;
+        const count = rows[0]?.c ?? 0;
+        if (count > 0) return { table, count };
       }
+      return null;
+    });
+    if (offender) {
+      console.error(
+        `[tenant-provision] REFUSING — tenant ${tenant.slug} has ${offender.count} rows in public.${offender.table}.\n` +
+          `  Provisioning a per-tenant schema would HIDE this data from the app until Phase 7c copies it over.\n` +
+          `  Either:\n` +
+          `    a) wait for Phase 7c to handle the data copy + provisioning together, or\n` +
+          `    b) re-run with --force if you intend to provision a sandbox tenant whose data is meant to be empty.`,
+      );
+      await sql.end();
+      process.exit(1);
     }
   }
 
