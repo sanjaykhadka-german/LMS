@@ -6,6 +6,7 @@ import {
   getModuleForAssignment,
   requireLearner,
 } from "~/lib/lms/learner";
+import { getAuthorAccess } from "~/lib/auth/author";
 import { submitQuizAction } from "./actions";
 
 export const metadata = { title: "Quiz" };
@@ -30,6 +31,14 @@ export default async function QuizPage({
 
   // Match Flask: empty-quiz redirects back to the module page.
   if (mod.questions.length === 0) redirect(`/app/my/modules/${mod.id}`);
+
+  // Authors taking the quiz to dogfood the module bounce back to the admin
+  // preview, not the learner module page.
+  const author = await getAuthorAccess();
+  const cancelHref = author
+    ? `/app/admin/modules/${mod.id}/preview`
+    : `/app/my/modules/${mod.id}`;
+  const cancelLabel = author ? "Back to admin preview" : "Cancel";
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-4 py-10">
@@ -71,7 +80,7 @@ export default async function QuizPage({
         ))}
         <div className="flex items-center justify-between gap-3">
           <Button asChild variant="outline">
-            <Link href={`/app/my/modules/${mod.id}`}>Cancel</Link>
+            <Link href={cancelHref}>{cancelLabel}</Link>
           </Button>
           <Button type="submit" size="lg">
             Submit quiz

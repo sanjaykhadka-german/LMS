@@ -42,24 +42,27 @@ export function StudioClient({
   initialMessages = [],
   initialFiles = [],
   initialModuleJson = null,
+  initialDirtyJson = false,
 }: {
   hasProvider: boolean;
   initialModuleId: number | null;
   initialMessages?: ChatMessage[];
   initialFiles?: FileMeta[];
   initialModuleJson?: string | null;
+  initialDirtyJson?: boolean;
 }) {
   const router = useRouter();
   const [files, setFiles] = useState<FileMeta[]>(initialFiles);
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [moduleJson, setModuleJson] = useState<string | null>(initialModuleJson);
-  // True when the AI has produced a fresh draft in *this* tab session. False
-  // on rehydration (after Back-from-Advanced-edit) so a stale draft isn't
-  // accidentally re-applied over manual edits the admin made in the editor.
-  // The server's session.currentModuleJson is always wiped on import, so a
-  // truthy initialModuleJson here can only come from the salvage path —
-  // which is by definition not dirty.
-  const [dirtyJson, setDirtyJson] = useState(false);
+  // True when the local moduleJson is an uncommitted draft that should be
+  // import/applied on next button click. Seeded from the server: import
+  // resets session.currentModuleJson to null, so currentModuleJson != null
+  // means there's an active draft (and dirtyJson should be true even
+  // across page refresh). When only `salvagedModuleJson` is set —
+  // post-import rehydration — initialDirtyJson is false and buttons just
+  // navigate without re-applying stale JSON over the admin's edits.
+  const [dirtyJson, setDirtyJson] = useState(initialDirtyJson);
   const [text, setText] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -197,7 +200,10 @@ export function StudioClient({
         router.push("/app/admin/modules");
         return;
       }
-      if (!id) return;
+      if (!id) {
+        setError("No module to navigate to. Generate or refine a module first.");
+        return;
+      }
       const sub = target === "preview" ? "/preview" : "";
       router.push(`/app/admin/modules/${id}${sub}?back=ai-studio`);
     } finally {

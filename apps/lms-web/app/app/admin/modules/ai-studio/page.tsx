@@ -87,6 +87,7 @@ export default async function AiStudioPage({
         initialMessages={initialMessages}
         initialFiles={initialFiles}
         initialModuleJson={session.currentModuleJson ?? salvagedModuleJson}
+        initialDirtyJson={session.currentModuleJson != null}
       />
     </div>
   );

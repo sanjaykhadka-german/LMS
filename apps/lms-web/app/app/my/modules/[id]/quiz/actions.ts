@@ -7,7 +7,9 @@ import {
   requireLearner,
   submitAttempt,
 } from "~/lib/lms/learner";
-import type { AnswersMap } from "~/lib/lms/scoring";
+import { getAuthorAccess } from "~/lib/auth/author";
+import { logAuditEvent } from "~/lib/audit";
+import { scoreAttempt, type AnswersMap, type QuizQuestion } from "~/lib/lms/scoring";
 
 export async function submitQuizAction(formData: FormData): Promise<void> {
   const moduleId = parseInt(String(formData.get("moduleId") ?? ""), 10);
@@ -25,11 +27,49 @@ export async function submitQuizAction(formData: FormData): Promise<void> {
     redirect(`/app/my/modules/${mod.id}`);
   }
 
-  // Read q_<id> form fields into the AnswersMap shape that scoring.ts expects.
-  // Reject anything that isn't a string of digits — defends against tampering
-  // (Flask trusts the form; we don't).
+  const answers = readAnswers(formData, mod.questions);
+
+  // Author dogfood path: score, don't persist. The admin/owner/qaqc is
+  // dogfooding their own quiz — persisting would pollute lmsAttempts /
+  // assignments.completedAt, fire the admin email summary, and ring their
+  // own bell with quiz.completed. Show the score on the admin preview
+  // page via query params; nothing else reads the score URL so URL
+  // tampering is harmless self-deception.
+  const author = await getAuthorAccess();
+  if (author) {
+    const score = scoreAttempt(mod.questions, answers);
+    await logAuditEvent({
+      tenantId: traceyTenantId,
+      actorUserId: author.traceyUserId,
+      action: "quiz.author_preview",
+      targetKind: "module",
+      targetId: String(moduleId),
+      details: {
+        score: score.percent,
+        correct: score.correct,
+        total: score.total,
+        passed: score.percent >= 80,
+      },
+    });
+    redirect(
+      `/app/admin/modules/${moduleId}/preview` +
+        `?score=${score.percent}&correct=${score.correct}&total=${score.total}`,
+    );
+  }
+
+  // Learner path — unchanged.
+  const result = await submitAttempt({
+    lmsUser,
+    module: mod,
+    assignment: row.assignment,
+    answers,
+  });
+  redirect(`/app/my/results/${result.attemptId}`);
+}
+
+function readAnswers(formData: FormData, questions: QuizQuestion[]): AnswersMap {
   const answers: AnswersMap = {};
-  for (const q of mod.questions) {
+  for (const q of questions) {
     const raw = formData.getAll(`q_${q.id}`);
     const filtered: string[] = [];
     for (const v of raw) {
@@ -39,12 +79,5 @@ export async function submitQuizAction(formData: FormData): Promise<void> {
     }
     if (filtered.length > 0) answers[String(q.id)] = filtered;
   }
-
-  const result = await submitAttempt({
-    lmsUser,
-    module: mod,
-    assignment: row.assignment,
-    answers,
-  });
-  redirect(`/app/my/results/${result.attemptId}`);
+  return answers;
 }

@@ -21,13 +21,26 @@ export default async function ModulePreviewPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ back?: string }>;
+  searchParams: Promise<{
+    back?: string;
+    score?: string;
+    correct?: string;
+    total?: string;
+  }>;
 }) {
   const { id } = await params;
-  const { back } = await searchParams;
+  const sp = await searchParams;
   const moduleId = parseInt(id, 10);
   if (!Number.isFinite(moduleId)) notFound();
-  const fromAiStudio = back === "ai-studio";
+  const fromAiStudio = sp.back === "ai-studio";
+
+  // Author-preview score banner: populated when an admin submits the quiz
+  // via "Take quiz as me" — values are URL params, not persisted.
+  const previewScore = parseClampedInt(sp.score, 0, 100);
+  const previewCorrect = parseClampedInt(sp.correct, 0, 9999);
+  const previewTotal = parseClampedInt(sp.total, 0, 9999);
+  const showPreviewBanner =
+    previewScore !== null && previewCorrect !== null && previewTotal !== null;
 
   const ctx = await requireAdmin();
   const tid = ctx.traceyTenantId;
@@ -119,6 +132,13 @@ export default async function ModulePreviewPage({
         </span>
       </div>
 
+      {showPreviewBanner && (
+        <div className="rounded-md border border-[color:var(--border)] bg-[color:var(--secondary)]/30 px-3 py-2 text-sm">
+          <strong>Author preview:</strong> scored {previewScore}% (
+          {previewCorrect}/{previewTotal}) — not saved.
+        </div>
+      )}
+
       <header>
         <div className="text-xs font-semibold uppercase tracking-wider text-[color:var(--muted-foreground)]">
           Training module
@@ -174,4 +194,16 @@ export default async function ModulePreviewPage({
       </div>
     </div>
   );
+}
+
+function parseClampedInt(
+  raw: string | undefined,
+  min: number,
+  max: number,
+): number | null {
+  if (raw === undefined) return null;
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n)) return null;
+  if (n < min || n > max) return null;
+  return n;
 }
