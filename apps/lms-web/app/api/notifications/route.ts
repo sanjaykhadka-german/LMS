@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
-import { db, notifications } from "@tracey/db";
+import { forTenant, notifications } from "@tracey/db";
 import { currentUser, currentMembership } from "~/lib/auth/current";
 
 const FEED_LIMIT = 20;
@@ -15,37 +15,42 @@ export async function GET() {
   if (!membership) return NextResponse.json({ unreadCount: 0, items: [] });
 
   const tid = membership.tenant.id;
+  const tdb = forTenant(tid);
 
   const [items, unreadRow] = await Promise.all([
-    db
-      .select({
-        id: notifications.id,
-        kind: notifications.kind,
-        title: notifications.title,
-        body: notifications.body,
-        actionUrl: notifications.actionUrl,
-        readAt: notifications.readAt,
-        createdAt: notifications.createdAt,
-      })
-      .from(notifications)
-      .where(
-        and(
-          eq(notifications.recipientUserId, user.id),
-          eq(notifications.tenantId, tid),
+    tdb.run((tx) =>
+      tx
+        .select({
+          id: notifications.id,
+          kind: notifications.kind,
+          title: notifications.title,
+          body: notifications.body,
+          actionUrl: notifications.actionUrl,
+          readAt: notifications.readAt,
+          createdAt: notifications.createdAt,
+        })
+        .from(notifications)
+        .where(
+          and(
+            eq(notifications.recipientUserId, user.id),
+            eq(notifications.tenantId, tid),
+          ),
+        )
+        .orderBy(desc(notifications.createdAt))
+        .limit(FEED_LIMIT),
+    ),
+    tdb.run((tx) =>
+      tx
+        .select({ count: sql<number>`count(*)::int` })
+        .from(notifications)
+        .where(
+          and(
+            eq(notifications.recipientUserId, user.id),
+            eq(notifications.tenantId, tid),
+            isNull(notifications.readAt),
+          ),
         ),
-      )
-      .orderBy(desc(notifications.createdAt))
-      .limit(FEED_LIMIT),
-    db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(notifications)
-      .where(
-        and(
-          eq(notifications.recipientUserId, user.id),
-          eq(notifications.tenantId, tid),
-          isNull(notifications.readAt),
-        ),
-      ),
+    ),
   ]);
 
   return NextResponse.json({
@@ -63,6 +68,7 @@ export async function POST(req: Request) {
   const membership = await currentMembership();
   if (!membership) return new NextResponse("No tenant", { status: 400 });
   const tid = membership.tenant.id;
+  const tdb = forTenant(tid);
 
   let payload: { ids?: unknown; all?: unknown } = {};
   try {
@@ -74,32 +80,36 @@ export async function POST(req: Request) {
   const now = new Date();
 
   if (payload.all === true) {
-    await db
-      .update(notifications)
-      .set({ readAt: now })
-      .where(
-        and(
-          eq(notifications.recipientUserId, user.id),
-          eq(notifications.tenantId, tid),
-          isNull(notifications.readAt),
+    await tdb.run((tx) =>
+      tx
+        .update(notifications)
+        .set({ readAt: now })
+        .where(
+          and(
+            eq(notifications.recipientUserId, user.id),
+            eq(notifications.tenantId, tid),
+            isNull(notifications.readAt),
+          ),
         ),
-      );
+    );
     return NextResponse.json({ ok: true });
   }
 
   if (Array.isArray(payload.ids)) {
     const ids = payload.ids.filter((v): v is string => typeof v === "string");
     if (ids.length === 0) return NextResponse.json({ ok: true });
-    await db
-      .update(notifications)
-      .set({ readAt: now })
-      .where(
-        and(
-          eq(notifications.recipientUserId, user.id),
-          eq(notifications.tenantId, tid),
-          inArray(notifications.id, ids),
+    await tdb.run((tx) =>
+      tx
+        .update(notifications)
+        .set({ readAt: now })
+        .where(
+          and(
+            eq(notifications.recipientUserId, user.id),
+            eq(notifications.tenantId, tid),
+            inArray(notifications.id, ids),
+          ),
         ),
-      );
+    );
     return NextResponse.json({ ok: true });
   }
 

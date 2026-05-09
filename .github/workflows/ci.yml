@@ -85,6 +85,13 @@ jobs:
       - name: Apply RLS migration
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/db/migrations/manual/0004_enable_rls.sql
 
+      # 0009 enables RLS on app.notifications. Must come AFTER 0005 created
+      # the table (which Drizzle migrate did) and AFTER the test RLS role
+      # is irrelevant to apply (the role is created next; RLS targets
+      # FORCE-mode so all roles are subject regardless).
+      - name: Apply notifications RLS
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/db/migrations/manual/0009_enable_rls_notifications.sql
+
       - name: Set up test RLS role
         run: pnpm -C apps/lms-web run setup:test-rls-role
 

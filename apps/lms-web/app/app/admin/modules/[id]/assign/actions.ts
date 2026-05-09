@@ -74,10 +74,10 @@ export async function bulkAssignModuleAction(formData: FormData): Promise<void> 
     );
     const dueLine = dueAt ? `Due ${dueAt.toLocaleDateString()}` : null;
     await createNotifications(
+      ctx.db,
       recipients
         .filter((r): r is { id: number; traceyUserId: string } => Boolean(r.traceyUserId))
         .map((r) => ({
-          tenantId: tid,
           recipientUserId: r.traceyUserId,
           kind: "assignment.created",
           title: `New training: ${module.title}`,
