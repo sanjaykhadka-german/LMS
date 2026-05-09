@@ -178,7 +178,7 @@ export function StudioClient({
     }
   }
 
-  function usePrompt(p: string) {
+  function applyPrompt(p: string) {
     setText(p);
     textareaRef.current?.focus();
   }
@@ -325,7 +325,7 @@ export function StudioClient({
                     key={rp.label}
                     variant="outline"
                     size="sm"
-                    onClick={() => usePrompt(rp.prompt)}
+                    onClick={() => applyPrompt(rp.prompt)}
                     disabled={pending}
                   >
                     {rp.label}

@@ -155,6 +155,6 @@ export async function setActiveTenant(tenantId: string): Promise<void> {
 // this module.
 export type { Tenant } from "@tracey/db";
 
-// Suppress lint for `users` (used only via the Drizzle relation in eq()).
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+// Keep `users` referenced — used only via Drizzle relations. Underscore
+// prefix suppresses unused-var without needing an explicit disable.
 const _users = users;

@@ -143,6 +143,6 @@ function Centered({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
-// Suppress "unused import" lint — we only use `gt` if we extend with cleanup logic.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+// Keep `gt` referenced — used by future cleanup logic. ESLint v9 + TS-ESLint
+// ignore underscore-prefixed names, so no disable directive is needed.
 const _gt = gt;

@@ -23,11 +23,11 @@ export default async function MyModulePage({
   const row = await getAssignmentForLearner(lmsUser.id, moduleId, traceyTenantId);
   if (!row) notFound();
 
-  const module = await getModuleForAssignment({
+  const mod = await getModuleForAssignment({
     assignment: row.assignment,
     liveModule: row.module,
   });
-  const hasQuiz = module.questions.length > 0;
+  const hasQuiz = mod.questions.length > 0;
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-4 py-10">
@@ -42,30 +42,30 @@ export default async function MyModulePage({
         <div className="text-xs font-semibold uppercase tracking-wider text-[color:var(--muted-foreground)]">
           Training module
         </div>
-        <h1 className="mt-1 text-3xl font-semibold tracking-tight">{module.title}</h1>
-        {module.description && (
+        <h1 className="mt-1 text-3xl font-semibold tracking-tight">{mod.title}</h1>
+        {mod.description && (
           <p className="mt-2 whitespace-pre-line text-[color:var(--muted-foreground)]">
-            {module.description}
+            {mod.description}
           </p>
         )}
       </header>
 
-      {module.coverPath && (
+      {mod.coverPath && (
         <div>
-          <Media filePath={module.coverPath} />
+          <Media filePath={mod.coverPath} />
         </div>
       )}
 
-      {module.mediaItems.length > 0 && (
+      {mod.mediaItems.length > 0 && (
         <div className="space-y-3">
-          {module.mediaItems.map((m) => (
+          {mod.mediaItems.map((m) => (
             <Media key={m.id} filePath={m.filePath} />
           ))}
         </div>
       )}
 
       <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] p-5">
-        <ContentRenderer items={module.contentItems} />
+        <ContentRenderer items={mod.contentItems} />
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -77,7 +77,7 @@ export default async function MyModulePage({
         </Link>
         {hasQuiz ? (
           <Button asChild size="lg">
-            <Link href={`/app/my/modules/${module.id}/quiz`}>Take the quiz</Link>
+            <Link href={`/app/my/modules/${mod.id}/quiz`}>Take the quiz</Link>
           </Button>
         ) : (
           <span className="text-sm italic text-[color:var(--muted-foreground)]">

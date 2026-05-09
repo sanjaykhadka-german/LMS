@@ -17,7 +17,10 @@ export function InstallAppButton() {
     if (typeof window === "undefined") return;
 
     // Already running as an installed PWA — never show the button.
+    // The matchMedia check needs the browser DOM, so it can't run on the
+    // server, which is why this is in an effect rather than initial state.
     if (window.matchMedia?.("(display-mode: standalone)").matches) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time install detection; cascading render is unavoidable
       setInstalled(true);
       return;
     }

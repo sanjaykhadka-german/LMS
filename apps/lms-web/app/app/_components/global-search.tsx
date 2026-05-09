@@ -47,6 +47,7 @@ export function GlobalSearch() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     const trimmed = q.trim();
     if (trimmed.length < 2) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: clear stale results when query falls below 2 chars
       setResults({ users: [], modules: [] });
       return;
     }

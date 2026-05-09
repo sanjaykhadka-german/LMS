@@ -589,8 +589,8 @@ export async function getAttemptForLearner(
       .limit(1);
     if (!moduleRow[0]) return null;
 
-    const module = await loadLiveModuleTx(tx, moduleRow[0]);
-    return { attempt, module };
+    const liveModule = await loadLiveModuleTx(tx, moduleRow[0]);
+    return { attempt, module: liveModule };
   });
   if (!result) return null;
 

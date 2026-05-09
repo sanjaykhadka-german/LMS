@@ -17,19 +17,19 @@ export async function submitQuizAction(formData: FormData): Promise<void> {
   const row = await getAssignmentForLearner(lmsUser.id, moduleId, traceyTenantId);
   if (!row) throw new Error("Assignment not found");
 
-  const module = await getModuleForAssignment({
+  const mod = await getModuleForAssignment({
     assignment: row.assignment,
     liveModule: row.module,
   });
-  if (module.questions.length === 0) {
-    redirect(`/app/my/modules/${module.id}`);
+  if (mod.questions.length === 0) {
+    redirect(`/app/my/modules/${mod.id}`);
   }
 
   // Read q_<id> form fields into the AnswersMap shape that scoring.ts expects.
   // Reject anything that isn't a string of digits — defends against tampering
   // (Flask trusts the form; we don't).
   const answers: AnswersMap = {};
-  for (const q of module.questions) {
+  for (const q of mod.questions) {
     const raw = formData.getAll(`q_${q.id}`);
     const filtered: string[] = [];
     for (const v of raw) {
@@ -42,7 +42,7 @@ export async function submitQuizAction(formData: FormData): Promise<void> {
 
   const result = await submitAttempt({
     lmsUser,
-    module,
+    module: mod,
     assignment: row.assignment,
     answers,
   });

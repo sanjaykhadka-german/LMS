@@ -23,13 +23,13 @@ export default async function QuizPage({
   const row = await getAssignmentForLearner(lmsUser.id, moduleId, traceyTenantId);
   if (!row) notFound();
 
-  const module = await getModuleForAssignment({
+  const mod = await getModuleForAssignment({
     assignment: row.assignment,
     liveModule: row.module,
   });
 
   // Match Flask: empty-quiz redirects back to the module page.
-  if (module.questions.length === 0) redirect(`/app/my/modules/${module.id}`);
+  if (mod.questions.length === 0) redirect(`/app/my/modules/${mod.id}`);
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-4 py-10">
@@ -37,15 +37,15 @@ export default async function QuizPage({
         <div className="text-xs font-semibold uppercase tracking-wider text-[color:var(--muted-foreground)]">
           Knowledge check
         </div>
-        <h1 className="mt-1 text-3xl font-semibold tracking-tight">{module.title}</h1>
+        <h1 className="mt-1 text-3xl font-semibold tracking-tight">{mod.title}</h1>
         <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
           Answer every question. You can retake the quiz later if needed.
         </p>
       </header>
 
       <form action={submitQuizAction} className="space-y-4">
-        <input type="hidden" name="moduleId" value={module.id} />
-        {module.questions.map((q, i) => (
+        <input type="hidden" name="moduleId" value={mod.id} />
+        {mod.questions.map((q, i) => (
           <fieldset
             key={q.id}
             className="rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] p-5"
@@ -71,7 +71,7 @@ export default async function QuizPage({
         ))}
         <div className="flex items-center justify-between gap-3">
           <Button asChild variant="outline">
-            <Link href={`/app/my/modules/${module.id}`}>Cancel</Link>
+            <Link href={`/app/my/modules/${mod.id}`}>Cancel</Link>
           </Button>
           <Button type="submit" size="lg">
             Submit quiz

@@ -24,19 +24,11 @@ export default async function MyModulesPage() {
   const now = Date.now();
   const soonMs = 7 * 24 * 60 * 60 * 1000;
 
-  let completed = 0;
-  let outstanding = 0;
-  let overdue = 0;
-  let dueSoon = 0;
-
-  const decorated = rows.map((r) => {
-    const status = classify(r, now, soonMs);
-    if (status === "completed") completed += 1;
-    else outstanding += 1;
-    if (status === "overdue") overdue += 1;
-    if (status === "due_soon") dueSoon += 1;
-    return { ...r, status };
-  });
+  const decorated = rows.map((r) => ({ ...r, status: classify(r, now, soonMs) }));
+  const completed = decorated.filter((r) => r.status === "completed").length;
+  const outstanding = decorated.length - completed;
+  const overdue = decorated.filter((r) => r.status === "overdue").length;
+  const dueSoon = decorated.filter((r) => r.status === "due_soon").length;
 
   const total = decorated.length;
   const totalAttempts = agg.total;
