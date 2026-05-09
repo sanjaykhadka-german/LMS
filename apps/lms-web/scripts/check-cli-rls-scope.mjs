@@ -30,9 +30,13 @@ import { fileURLToPath } from "node:url";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "..", "..", "..");
 
-// File-scope scan list. Resolved relative to repoRoot.
-const SCAN_FILES_FIXED = ["packages/db/src/per-tenant-schema.ts"];
-const SCAN_DIRS = ["packages/db/src/cli"];
+// Scan everything under packages/db/src/ recursively. Catches the per-tenant
+// CLI scripts (cli/*.ts), per-tenant-schema.ts, per-tenant-verify.ts,
+// per-tenant-migrate.ts, plus anything new added later. Pure declaration
+// files (schema.ts, lms-schema.ts) don't match the heuristic — they use
+// pgTable("modules", …) without the literal `public.modules` substring.
+const SCAN_FILES_FIXED = [];
+const SCAN_DIRS = ["packages/db/src"];
 
 const LMS_TABLES = [
   "departments", "employers", "machines", "positions", "modules",
