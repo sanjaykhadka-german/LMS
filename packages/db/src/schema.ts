@@ -214,6 +214,40 @@ export const aiStudioSessions = appSchema.table(
   (t) => [uniqueIndex("ai_studio_sessions_user_tenant_uq").on(t.userId, t.tenantId)],
 );
 
+// ─── In-app notifications ───
+//
+// Per-user, per-tenant inbox surfaced as the bell dropdown in the app header.
+// Lives in `app` schema (not the per-tenant LMS schema) because it references
+// `users` (auth) directly via UUID, mirroring `audit_events`. Tenant scoping
+// is enforced in code via `tenantId` filter, not RLS.
+
+export const notifications = appSchema.table(
+  "notifications",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    recipientUserId: uuid("recipient_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    title: text("title").notNull(),
+    body: text("body"),
+    actionUrl: text("action_url"),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("notifications_recipient_created_idx").on(
+      t.recipientUserId,
+      t.tenantId,
+      t.createdAt,
+    ),
+    index("notifications_recipient_unread_idx").on(t.recipientUserId, t.readAt),
+  ],
+);
+
 // ─── Inferred types ───
 
 export type User = typeof users.$inferSelect;
@@ -230,3 +264,5 @@ export type NewAuditEvent = typeof auditEvents.$inferInsert;
 export type Role = "owner" | "admin" | "member";
 export type AiStudioSession = typeof aiStudioSessions.$inferSelect;
 export type NewAiStudioSession = typeof aiStudioSessions.$inferInsert;
+export type Notification = typeof notifications.$inferSelect;
+export type NewNotification = typeof notifications.$inferInsert;

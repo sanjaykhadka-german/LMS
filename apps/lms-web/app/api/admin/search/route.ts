@@ -56,7 +56,15 @@ export async function GET(req: Request) {
       tx
         .select({ id: lmsModules.id, title: lmsModules.title })
         .from(lmsModules)
-        .where(and(tenantWhere(lmsModules, tid), ilike(lmsModules.title, like)))
+        .where(
+          and(
+            tenantWhere(lmsModules, tid),
+            or(
+              ilike(lmsModules.title, like),
+              ilike(lmsModules.description, like),
+            ),
+          ),
+        )
         .orderBy(asc(lmsModules.title))
         .limit(8),
     ),

@@ -2,11 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { and, eq } from "drizzle-orm";
-import { lmsAssignments, lmsModules } from "@tracey/db";
+import { and, eq, inArray } from "drizzle-orm";
+import { lmsAssignments, lmsModules, lmsUsers } from "@tracey/db";
 import { requireAdminAction } from "~/lib/auth/admin";
 import { logAuditEvent } from "~/lib/audit";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
+import { createNotifications } from "~/lib/lms/notifications";
 
 const DEFAULT_VALIDITY_DAYS = 180;
 
@@ -53,8 +54,38 @@ export async function bulkAssignModuleAction(formData: FormData): Promise<void> 
         })),
       )
       .onConflictDoNothing({ target: [lmsAssignments.userId, lmsAssignments.moduleId] })
-      .returning({ id: lmsAssignments.id }),
+      .returning({ id: lmsAssignments.id, userId: lmsAssignments.userId }),
   );
+
+  if (inserted.length > 0) {
+    const recipients = await ctx.db.run((tx) =>
+      tx
+        .select({ id: lmsUsers.id, traceyUserId: lmsUsers.traceyUserId })
+        .from(lmsUsers)
+        .where(
+          and(
+            tenantWhere(lmsUsers, tid),
+            inArray(
+              lmsUsers.id,
+              inserted.map((r) => r.userId),
+            ),
+          ),
+        ),
+    );
+    const dueLine = dueAt ? `Due ${dueAt.toLocaleDateString()}` : null;
+    await createNotifications(
+      recipients
+        .filter((r): r is { id: number; traceyUserId: string } => Boolean(r.traceyUserId))
+        .map((r) => ({
+          tenantId: tid,
+          recipientUserId: r.traceyUserId,
+          kind: "assignment.created",
+          title: `New training: ${module.title}`,
+          body: dueLine,
+          actionUrl: "/app/my/modules",
+        })),
+    );
+  }
 
   await logAuditEvent({
     tenantId: tid,

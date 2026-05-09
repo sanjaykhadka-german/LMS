@@ -1,7 +1,15 @@
 import type { Metadata, Viewport } from "next";
+import { Cormorant_Garamond } from "next/font/google";
 import { siteConfig } from "~/lib/site-config";
 import { RegisterServiceWorker } from "~/components/pwa/RegisterServiceWorker";
 import "./globals.css";
+
+const headingFont = Cormorant_Garamond({
+  subsets: ["latin"],
+  weight: ["500", "600", "700"],
+  variable: "--font-heading",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: { default: siteConfig.name, template: `%s — ${siteConfig.name}` },
@@ -24,12 +32,12 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0a0a0a",
+  themeColor: "#8b1a1a",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning className={headingFont.variable}>
       <body>
         {children}
         <RegisterServiceWorker />

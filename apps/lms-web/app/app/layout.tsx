@@ -15,6 +15,7 @@ import { accessLevelFor } from "~/lib/billing/access";
 import { UserMenu } from "./_components/user-menu";
 import { TenantSwitcher } from "./_components/tenant-switcher";
 import { GlobalSearch } from "./_components/global-search";
+import { NotificationBell } from "./_components/notification-bell";
 import { ReadOnlyBanner } from "./_components/read-only-banner";
 import { InstallAppButton } from "~/components/pwa/InstallAppButton";
 
@@ -115,6 +116,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </nav>
           </div>
           <div className="flex items-center gap-2">
+            <NotificationBell />
             <InstallAppButton />
             <UserMenu
               name={user.name}
