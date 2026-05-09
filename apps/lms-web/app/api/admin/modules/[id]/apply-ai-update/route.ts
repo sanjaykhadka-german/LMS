@@ -6,7 +6,7 @@ import {
   ApplyModuleError,
   applyModuleJsonToExisting,
 } from "~/lib/ai/apply-module";
-import { getStudioSession } from "~/lib/ai/sessions";
+import { getStudioSession, saveStudioSession } from "~/lib/ai/sessions";
 
 export const runtime = "nodejs";
 
@@ -71,6 +71,14 @@ export async function POST(
     targetKind: "module",
     targetId: String(moduleId),
     details: {},
+  });
+
+  // Mirror the import route: clear the draft AND remember which module
+  // this session is associated with so subsequent rehydrates can navigate
+  // even when the URL doesn't carry ?module_id.
+  await saveStudioSession(ctx.traceyUserId, tid, {
+    currentModuleJson: null,
+    moduleId,
   });
 
   return NextResponse.json({ ok: true });

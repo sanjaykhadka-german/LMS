@@ -65,8 +65,13 @@ export async function POST() {
     });
   }
 
-  // Reset the studio after a successful import â€” the AI JSON has been
-  // committed so there's nothing useful to keep around.
-  await saveStudioSession(ctx.traceyUserId, tid, { currentModuleJson: null });
+  // Reset the draft AND remember which module came out of this session so
+  // a subsequent rehydrate (browser back, sidebar nav, /ai-studio reload
+  // without ?module_id) still knows where the Preview / Advanced edit
+  // buttons should navigate to.
+  await saveStudioSession(ctx.traceyUserId, tid, {
+    currentModuleJson: null,
+    moduleId: createdIds[0] ?? null,
+  });
   return NextResponse.json({ ok: true, moduleIds: createdIds });
 }
