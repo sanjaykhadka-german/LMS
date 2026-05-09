@@ -27,6 +27,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import {
   dataCopySql,
   db,
+  findExistingTenantRowsInPublic,
   isTenantSchemaName,
   members,
   tenantSchemaName,
@@ -213,5 +214,30 @@ describe.skipIf(!rlsUrl)("Phase 7c — dataCopySql under non-superuser RLS", () 
     // costs nothing).
     await db.execute(drizzleSql.raw(`DROP SCHEMA "${schema}" CASCADE`));
     await db.execute(drizzleSql`DELETE FROM app.tenant_migrations WHERE tenant_id = ${seeded.tenantId}`);
+  });
+
+  it("findExistingTenantRowsInPublic detects the seeded module via non-superuser", async () => {
+    // The provisioning safety-check is meant to refuse running when
+    // public.lms_* still has rows for the tenant — provisioning would
+    // shadow that data. With a buggy (RLS-blind) implementation, the
+    // count returns 0 under prod's non-superuser RLS and the safety
+    // check silently passes, removing the operator's warning.
+    //
+    // The seeded module from beforeAll is still in public.modules
+    // (afterAll runs cleanupTenantRls after all tests). Run the
+    // safety check via the non-superuser connection and assert the
+    // module is detected.
+    const rlsSql = postgres(rlsUrl!, { max: 1, prepare: false });
+    const rlsDb = drizzle(rlsSql);
+    let offender;
+    try {
+      offender = await findExistingTenantRowsInPublic(rlsDb, seeded.tenantId);
+    } finally {
+      await rlsSql.end();
+    }
+
+    expect(offender, "findExistingTenantRowsInPublic must detect the seeded module — null would mean RLS is hiding the row from the safety check").not.toBeNull();
+    expect(offender?.table).toBe("modules");
+    expect(offender?.count).toBe(1);
   });
 });

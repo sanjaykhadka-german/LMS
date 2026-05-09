@@ -22,6 +22,45 @@ import { sql as drizzleSql } from "drizzle-orm";
 import type { drizzle } from "drizzle-orm/postgres-js";
 import { LMS_TABLES, LMS_TABLES_WITH_ID } from "./per-tenant-schema";
 
+/**
+ * Safety-check helper for tenant-provision. Returns the first
+ * `public.lms_*` table containing rows for the given tenant, or null
+ * if all tables are empty. The CLI uses this to refuse provisioning
+ * when data exists in `public.*` (which would be shadowed by the new
+ * empty per-tenant schema until tenant-copy runs).
+ *
+ * Wrapped in a transaction with tx-local `app.tenant_id` so the RLS
+ * policies on `public.lms_*` admit this tenant's rows under prod's
+ * non-superuser role. Without the GUC, every count returns 0 and the
+ * guard silently passes — the same RLS-blind bug pattern the
+ * verifyTenantCopy fix above addresses.
+ */
+export interface ProvisionOffender {
+  table: string;
+  count: number;
+}
+
+export async function findExistingTenantRowsInPublic(
+  db: ReturnType<typeof drizzle>,
+  tenantId: string,
+): Promise<ProvisionOffender | null> {
+  return db.transaction(async (tx) => {
+    await tx.execute(
+      drizzleSql`SELECT set_config('app.tenant_id', ${tenantId}, true)`,
+    );
+    for (const table of LMS_TABLES) {
+      const rows = (await tx.execute(
+        drizzleSql.raw(
+          `SELECT count(*)::int AS c FROM public.${q(table)} WHERE tracey_tenant_id = '${tenantId}'`,
+        ),
+      )) as unknown as Array<{ c: number }>;
+      const count = rows[0]?.c ?? 0;
+      if (count > 0) return { table, count };
+    }
+    return null;
+  });
+}
+
 export interface VerificationResult {
   ok: boolean;
   errors: string[];

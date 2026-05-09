@@ -33,10 +33,10 @@ import postgres from "postgres";
 
 import {
   BASELINE_MIGRATION_NAME,
-  LMS_TABLES,
   provisionSql,
   tenantSchemaName,
 } from "../per-tenant-schema";
+import { findExistingTenantRowsInPublic } from "../per-tenant-verify";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "..", "..", "..", "..");
@@ -81,29 +81,11 @@ async function main() {
 
   // Safety check: refuse to provision if the tenant has existing rows in
   // any LMS table in public — provisioning would shadow the existing data
-  // until 7c does the copy. --force overrides for sandbox use.
-  //
-  // Wrapped in a transaction with tx-local `app.tenant_id` so the RLS
-  // policies on public.lms_* (0004_enable_rls.sql) admit this tenant's
-  // rows. Without this, every count returns 0 under prod RLS and the
-  // guard silently passes — the operator loses the warning that they're
-  // about to shadow existing data.
+  // until 7c does the copy. --force overrides for sandbox use. Logic
+  // extracted to per-tenant-verify so the regression test in
+  // tests/per-tenant-rls.test.ts can exercise it directly.
   if (!force) {
-    const offender = await db.transaction(async (tx) => {
-      await tx.execute(
-        drizzleSql`SELECT set_config('app.tenant_id', ${tenantId}, true)`,
-      );
-      for (const table of LMS_TABLES) {
-        const rows = (await tx.execute(
-          drizzleSql.raw(
-            `SELECT count(*)::int AS c FROM public."${table}" WHERE tracey_tenant_id = '${tenantId}'`,
-          ),
-        )) as unknown as Array<{ c: number }>;
-        const count = rows[0]?.c ?? 0;
-        if (count > 0) return { table, count };
-      }
-      return null;
-    });
+    const offender = await findExistingTenantRowsInPublic(db, tenantId);
     if (offender) {
       console.error(
         `[tenant-provision] REFUSING — tenant ${tenant.slug} has ${offender.count} rows in public.${offender.table}.\n` +
