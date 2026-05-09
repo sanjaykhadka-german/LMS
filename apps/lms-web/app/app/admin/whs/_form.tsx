@@ -152,7 +152,7 @@ export function WhsForm({ action, record, staff, errorBanner }: WhsFormProps) {
               id="notes"
               name="notes"
               defaultValue={record?.notes ?? ""}
-              rows={3}
+              rows={5}
               className="w-full rounded-md border border-[color:var(--input)] bg-transparent px-3 py-2 text-sm shadow-sm"
             />
           </div>
