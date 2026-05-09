@@ -77,6 +77,9 @@ jobs:
       - name: Set up test RLS role
         run: pnpm -C apps/lms-web run setup:test-rls-role
 
+      - name: typecheck
+        run: pnpm typecheck
+
       - name: check-tenant-scope (STRICT=1)
         env:
           STRICT: "1"

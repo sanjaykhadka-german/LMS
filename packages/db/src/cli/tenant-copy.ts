@@ -31,6 +31,8 @@ import postgres from "postgres";
 import {
   BASELINE_MIGRATION_NAME,
   DATA_COPY_MIGRATION_NAME,
+  LMS_TABLES,
+  LMS_TABLES_WITH_ID,
   dataCopySql,
   tenantSchemaName,
 } from "../per-tenant-schema";
