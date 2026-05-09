@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
-import { and, asc, eq, ilike, or } from "drizzle-orm";
-import { forTenant, lmsModules, lmsUsers } from "@tracey/db";
+import { and, asc, eq, exists, ilike, or, sql } from "drizzle-orm";
+import {
+  forTenant,
+  lmsContentItems,
+  lmsModules,
+  lmsUsers,
+} from "@tracey/db";
 import { getAuthorAccess } from "~/lib/auth/author";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
 
@@ -52,8 +57,25 @@ export async function GET(req: Request) {
             .limit(8),
         )
       : Promise.resolve([] as Array<{ id: number; name: string; email: string }>),
-    tdb.run((tx) =>
-      tx
+    tdb.run((tx) => {
+      // Match modules by their own title/description OR by any content_item
+      // (lesson/section) under them whose title/body matches. Roll up to the
+      // module — the result shape stays { id, title } so the search UI is
+      // unchanged. Correlated EXISTS keeps the limit at 8 distinct modules.
+      const contentMatches = tx
+        .select({ x: sql`1` })
+        .from(lmsContentItems)
+        .where(
+          and(
+            eq(lmsContentItems.moduleId, lmsModules.id),
+            tenantWhere(lmsContentItems, tid),
+            or(
+              ilike(lmsContentItems.title, like),
+              ilike(lmsContentItems.body, like),
+            ),
+          ),
+        );
+      return tx
         .select({ id: lmsModules.id, title: lmsModules.title })
         .from(lmsModules)
         .where(
@@ -62,12 +84,13 @@ export async function GET(req: Request) {
             or(
               ilike(lmsModules.title, like),
               ilike(lmsModules.description, like),
+              exists(contentMatches),
             ),
           ),
         )
         .orderBy(asc(lmsModules.title))
-        .limit(8),
-    ),
+        .limit(8);
+    }),
   ]);
 
   return NextResponse.json({
