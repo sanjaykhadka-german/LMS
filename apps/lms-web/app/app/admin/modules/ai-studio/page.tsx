@@ -1,9 +1,14 @@
 import Link from "next/link";
 import { Sparkles } from "lucide-react";
 import { requireAdmin } from "~/lib/auth/admin";
-import { getClaudeApiKey } from "~/lib/ai/claude";
+import { getClaudeApiKey, splitReplyAndJson } from "~/lib/ai/claude";
 import { getStudioSession } from "~/lib/ai/sessions";
 import { StudioClient } from "./_studio-client";
+
+interface RehydratedMessage {
+  role: "user" | "assistant";
+  text: string;
+}
 
 export const metadata = { title: "AI Studio" };
 
@@ -25,17 +30,29 @@ export default async function AiStudioPage({
   const session = await getStudioSession(ctx.traceyUserId, ctx.traceyTenantId);
 
   // ChatTurn (server, multi-block) -> ChatMessage (client, plain text).
-  // Drop turns that have no text content (e.g. a user turn that was just an
-  // attachment) since the file pills surface those separately.
-  const initialMessages = session.history
-    .map((turn) => {
-      const text = turn.content
-        .filter((b): b is { type: "text"; text: string } => b.type === "text")
-        .map((b) => b.text)
-        .join("\n");
-      return { role: turn.role, text };
-    })
-    .filter((m) => m.text);
+  // For assistant turns we run splitReplyAndJson so the chat shows just the
+  // visible reply (no fenced JSON dump) and we can salvage the most recent
+  // moduleJson into the right preview pane — even after import wiped
+  // session.currentModuleJson. Mirrors what the message route does for live
+  // turns; we just apply it to the persisted history at rehydration time.
+  const initialMessages: RehydratedMessage[] = [];
+  let salvagedModuleJson: string | null = null;
+  for (const turn of session.history) {
+    const text = turn.content
+      .filter((b): b is { type: "text"; text: string } => b.type === "text")
+      .map((b) => b.text)
+      .join("\n");
+    if (turn.role === "assistant") {
+      const split = splitReplyAndJson(text);
+      if (split.moduleJson) salvagedModuleJson = split.moduleJson;
+      const visible =
+        split.visibleReply.trim() ||
+        "(Claude returned a module update — see the preview pane.)";
+      initialMessages.push({ role: "assistant", text: visible });
+    } else if (text) {
+      initialMessages.push({ role: turn.role, text });
+    }
+  }
 
   const initialFiles = session.files.map((f) => ({
     id: f.id,
@@ -69,7 +86,7 @@ export default async function AiStudioPage({
         initialModuleId={urlModuleId ?? session.moduleId}
         initialMessages={initialMessages}
         initialFiles={initialFiles}
-        initialModuleJson={session.currentModuleJson}
+        initialModuleJson={session.currentModuleJson ?? salvagedModuleJson}
       />
     </div>
   );

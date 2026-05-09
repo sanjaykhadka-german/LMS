@@ -53,6 +53,13 @@ export function StudioClient({
   const [files, setFiles] = useState<FileMeta[]>(initialFiles);
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [moduleJson, setModuleJson] = useState<string | null>(initialModuleJson);
+  // True when the AI has produced a fresh draft in *this* tab session. False
+  // on rehydration (after Back-from-Advanced-edit) so a stale draft isn't
+  // accidentally re-applied over manual edits the admin made in the editor.
+  // The server's session.currentModuleJson is always wiped on import, so a
+  // truthy initialModuleJson here can only come from the salvage path —
+  // which is by definition not dirty.
+  const [dirtyJson, setDirtyJson] = useState(false);
   const [text, setText] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -125,7 +132,10 @@ export function StudioClient({
         return;
       }
       setMessages((prev) => [...prev, { role: "assistant", text: data.reply }]);
-      if (data.moduleJson) setModuleJson(data.moduleJson);
+      if (data.moduleJson) {
+        setModuleJson(data.moduleJson);
+        setDirtyJson(true);
+      }
     } finally {
       setPending(false);
     }
@@ -139,6 +149,7 @@ export function StudioClient({
       setMessages([]);
       setFiles([]);
       setModuleJson(null);
+      setDirtyJson(false);
       setError(null);
     } finally {
       setPending(false);
@@ -176,7 +187,12 @@ export function StudioClient({
     setPending(true);
     setError(null);
     try {
-      const id = initialModuleId ? await applyToExisting() : await importAsNew();
+      let id = initialModuleId;
+      if (dirtyJson) {
+        // Fresh AI draft in this tab — actually commit it.
+        id = initialModuleId ? await applyToExisting() : await importAsNew();
+        setDirtyJson(false);
+      }
       if (target === "done") {
         router.push("/app/admin/modules");
         return;

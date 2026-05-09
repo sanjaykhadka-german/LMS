@@ -12,6 +12,7 @@ import { requireAdmin } from "~/lib/auth/admin";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
 import { Button } from "~/components/ui/button";
 import { ContentRenderer, Media } from "../../../../my/_components/ContentRenderer";
+import { selfAssignAndTakeQuizAction } from "./actions";
 
 export const metadata = { title: "Preview module" };
 
@@ -165,9 +166,10 @@ export default async function ModulePreviewPage({
           </Link>
         </Button>
         {questions.length > 0 && (
-          <Button asChild>
-            <Link href={`/app/my/modules/${module.id}/quiz`}>Take quiz as me</Link>
-          </Button>
+          <form action={selfAssignAndTakeQuizAction}>
+            <input type="hidden" name="module_id" value={module.id} />
+            <Button type="submit">Take quiz as me</Button>
+          </form>
         )}
       </div>
     </div>
