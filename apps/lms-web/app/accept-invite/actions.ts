@@ -1,10 +1,11 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { and, eq, isNull } from "drizzle-orm";
-import { db, invitations, members, users } from "@tracey/db";
+import { and, eq, isNull, ne, or } from "drizzle-orm";
+import { db, forTenant, invitations, members, users } from "@tracey/db";
 import { currentUser, setActiveTenant } from "~/lib/auth/current";
 import { logAuditEvent } from "~/lib/audit";
+import { createNotifications } from "~/lib/lms/notifications";
 
 /**
  * Accept an invitation. Server action; expects `token` in form data.
@@ -68,6 +69,39 @@ export async function acceptInvitationAction(formData: FormData): Promise<void> 
     targetId: me.id,
     details: { role: inv.role, via: "invitation" },
   });
+
+  // Notify owners + admins + the inviter (deduplicated, never the joiner themselves).
+  if (!existing) {
+    try {
+      const adminMembers = await db
+        .select({ userId: members.userId })
+        .from(members)
+        .where(
+          and(
+            eq(members.tenantId, inv.tenantId),
+            or(eq(members.role, "owner"), eq(members.role, "admin")),
+            ne(members.userId, me.id),
+          ),
+        );
+      const recipientIds = new Set(adminMembers.map((m) => m.userId));
+      if (inv.invitedByUserId !== me.id) recipientIds.add(inv.invitedByUserId);
+      if (recipientIds.size > 0) {
+        const joinerLabel = me.name ?? me.email;
+        await createNotifications(
+          forTenant(inv.tenantId),
+          Array.from(recipientIds).map((uid) => ({
+            recipientUserId: uid,
+            kind: "member.joined",
+            title: `${joinerLabel} joined the workspace`,
+            body: `Role: ${inv.role}`,
+            actionUrl: "/app/members",
+          })),
+        );
+      }
+    } catch (err) {
+      console.error("[notifications] member.joined failed", err);
+    }
+  }
 
   await setActiveTenant(inv.tenantId);
   redirect("/app");

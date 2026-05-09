@@ -12,6 +12,7 @@ import {
   sendAssignmentReminderEmail,
   sendWhsExpiryReminderEmail,
 } from "./notify-admin";
+import { createNotification } from "./notifications";
 
 // Mirror Flask app.py:3537 (admin_send_reminders) + app.py:391 (process_whs_reminders).
 // Both run per-tenant. Returns the count of users emailed.
@@ -37,6 +38,7 @@ export async function runAssignmentReminders(tenantId: string): Promise<number> 
     tx
       .select({
         userId: lmsUsers.id,
+        traceyUserId: lmsUsers.traceyUserId,
         email: lmsUsers.email,
         name: lmsUsers.name,
         moduleTitle: lmsModules.title,
@@ -56,13 +58,17 @@ export async function runAssignmentReminders(tenantId: string): Promise<number> 
   );
 
   // Group by user.
-  const byUser = new Map<number, { email: string; name: string; titles: string[] }>();
+  const byUser = new Map<
+    number,
+    { traceyUserId: string | null; email: string; name: string; titles: string[] }
+  >();
   for (const r of rows) {
     const cur = byUser.get(r.userId);
     if (cur) {
       cur.titles.push(r.moduleTitle);
     } else {
       byUser.set(r.userId, {
+        traceyUserId: r.traceyUserId,
         email: r.email,
         name: r.name,
         titles: [r.moduleTitle],
@@ -78,6 +84,18 @@ export async function runAssignmentReminders(tenantId: string): Promise<number> 
       moduleTitles: u.titles,
     });
     if (ok) sent += 1;
+    if (u.traceyUserId) {
+      await createNotification(tdb, {
+        recipientUserId: u.traceyUserId,
+        kind: "assignment.reminder",
+        title:
+          u.titles.length === 1
+            ? `Reminder: complete "${u.titles[0]}"`
+            : `Reminder: ${u.titles.length} trainings still open`,
+        body: u.titles.length === 1 ? null : u.titles.slice(0, 3).join(", "),
+        actionUrl: "/app/my/modules",
+      });
+    }
   }
   return sent;
 }
@@ -110,6 +128,7 @@ export async function runWhsReminders(
         userEmail: lmsUsers.email,
         userName: lmsUsers.name,
         userActive: lmsUsers.isActiveFlag,
+        userTraceyId: lmsUsers.traceyUserId,
       })
       .from(lmsWhsRecords)
       .innerJoin(lmsUsers, eq(lmsUsers.id, lmsWhsRecords.userId))
@@ -128,10 +147,11 @@ export async function runWhsReminders(
   let sent = 0;
   for (const r of records) {
     if (!r.userActive) continue;
+    const kindLabel = WHS_KIND_SINGULAR[r.kind] ?? "WHS record";
     const ok = await sendWhsExpiryReminderEmail({
       to: r.userEmail,
       name: r.userName,
-      kindLabel: WHS_KIND_SINGULAR[r.kind] ?? "WHS record",
+      kindLabel,
       recordTitle: r.title,
       expiresOn: r.expiresOn,
     });
@@ -144,6 +164,15 @@ export async function runWhsReminders(
           .set({ lastRemindedAt: new Date() })
           .where(eq(lmsWhsRecords.id, r.id)),
       );
+      if (r.userTraceyId) {
+        await createNotification(tdb, {
+          recipientUserId: r.userTraceyId,
+          kind: "whs.expiring",
+          title: `${kindLabel}: ${r.title} expires ${r.expiresOn ?? "soon"}`,
+          body: "Renew before the expiry date to stay compliant.",
+          actionUrl: "/app/my/modules",
+        });
+      }
       sent += 1;
     }
   }

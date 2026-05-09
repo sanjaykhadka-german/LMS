@@ -1,6 +1,6 @@
 import "server-only";
 import crypto from "node:crypto";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
 import {
@@ -17,6 +17,7 @@ import {
   lmsQuestions,
   lmsUploadedFiles,
   lmsUsers,
+  members,
   type LmsAssignment,
   type LmsModule,
   type LmsUser,
@@ -33,6 +34,7 @@ import {
 } from "./scoring";
 import { PASS_THRESHOLD } from "~/lib/site-config";
 import { notifyAttempt } from "./notify";
+import { createNotifications } from "./notifications";
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -557,6 +559,34 @@ export async function submitAttempt(opts: {
     score: score.percent,
     passed,
   });
+
+  // Mirror the email summary as in-app notifs to tenant admins/owners.
+  void (async () => {
+    const tdb = forTenant(tid);
+    const adminMembers = await tdb.run((tx) =>
+      tx
+        .select({ userId: members.userId })
+        .from(members)
+        .where(
+          and(
+            eq(members.tenantId, tid),
+            or(eq(members.role, "owner"), eq(members.role, "admin")),
+          ),
+        ),
+    );
+    if (adminMembers.length === 0) return;
+    const verdict = passed ? "passed" : "did not pass";
+    await createNotifications(
+      tdb,
+      adminMembers.map((m) => ({
+        recipientUserId: m.userId,
+        kind: "quiz.completed",
+        title: `${opts.lmsUser.name} ${verdict} ${opts.module.title}`,
+        body: `Score: ${score.percent}%`,
+        actionUrl: `/app/admin/modules/${opts.module.id}`,
+      })),
+    );
+  })();
 
   return { attemptId, score, passed };
 }
