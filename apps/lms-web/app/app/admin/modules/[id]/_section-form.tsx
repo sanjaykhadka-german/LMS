@@ -133,7 +133,7 @@ export function SectionForm({
           name="body"
           value={body}
           onChange={(e) => setBody(e.target.value)}
-          rows={4}
+          rows={7}
           className="w-full rounded-md border border-[color:var(--input)] bg-transparent px-3 py-2 text-sm shadow-sm"
         />
       </div>

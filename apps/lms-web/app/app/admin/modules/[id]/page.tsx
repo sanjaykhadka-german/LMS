@@ -234,7 +234,7 @@ export default async function ModuleEditPage({
                 id="description"
                 name="description"
                 defaultValue={module.description ?? ""}
-                rows={3}
+                rows={8}
                 className="w-full rounded-md border border-[color:var(--input)] bg-transparent px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[color:var(--ring)]"
               />
             </div>
