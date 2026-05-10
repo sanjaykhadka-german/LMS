@@ -417,6 +417,13 @@ export function StudioClient({
             </p>
           ) : (
             <>
+              {!dirtyJson && initialModuleId !== null && (
+                <p className="rounded-md border border-dashed border-[color:var(--border)] px-3 py-2 text-xs text-[color:var(--muted-foreground)]">
+                  Showing your last draft (already imported as module
+                  &nbsp;#{initialModuleId}). The buttons below just navigate —
+                  refine via chat to apply new changes.
+                </p>
+              )}
               <div className="flex flex-wrap gap-2 border-b border-[color:var(--border)] pb-3">
                 <Button onClick={() => commitAndGo("preview")} disabled={pending}>
                   Preview
