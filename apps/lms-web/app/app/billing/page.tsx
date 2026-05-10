@@ -35,6 +35,10 @@ const REASON_COPY = {
     title: "Manage your subscription",
     body: "Change plan, update payment method, or cancel from the Stripe billing portal.",
   },
+  trialing: {
+    title: "You're on a free trial",
+    body: "Pick a plan below when you're ready to continue, or end the trial early. Your data is preserved either way.",
+  },
 } as const;
 
 export default async function BillingPage() {
@@ -57,6 +61,8 @@ export default async function BillingPage() {
     tenant.trialEndsAt.getTime() <= Date.now()
   ) {
     reason = "trialing_expired";
+  } else if (tenant.status === "trialing") {
+    reason = "trialing";
   } else if (tenant.status === "active" && tenant.cancelAtPeriodEnd) {
     reason = "active_pending_cancel";
   }
@@ -95,7 +101,9 @@ export default async function BillingPage() {
         </Card>
       )}
 
-      {(reason === "canceled" || reason === "trialing_expired") && (
+      {(reason === "canceled" ||
+        reason === "trialing_expired" ||
+        reason === "trialing") && (
         <div className="grid gap-4 md:grid-cols-2">
           {subscribable.map((tier) => {
             const monthly = tier.prices?.monthly.perSeatPerMonth ?? 0;

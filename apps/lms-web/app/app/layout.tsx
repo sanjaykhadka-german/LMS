@@ -1,5 +1,4 @@
 import Link from "next/link";
-import Image from "next/image";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import {
@@ -66,14 +65,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
           <div className="flex items-center gap-4">
             <Link href="/app" className="flex items-center" aria-label={siteConfig.name}>
-              <Image
-                src="/tracey-wordmark.png"
-                alt={siteConfig.name}
-                width={1323}
-                height={605}
-                priority
-                className="h-14 w-auto"
-              />
+              <span
+                className="text-3xl leading-none tracking-tight"
+                style={{ fontFamily: "var(--font-heading), ui-serif, Georgia, serif" }}
+              >
+                tra<span className="text-[color:var(--primary)]">ce</span>y
+              </span>
             </Link>
             <TenantSwitcher
               active={{
