@@ -2,21 +2,17 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { and, desc, eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import {
   forTenant,
-  lmsContentItems,
-  lmsContentItemMedia,
   lmsModuleMedia,
-  lmsModuleVersions,
   lmsModules,
-  lmsQuestions,
-  lmsChoices,
 } from "@tracey/db";
 import { requireAdminAction } from "~/lib/auth/admin";
 import { logAuditEvent } from "~/lib/audit";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
+import { snapshotModuleVersion } from "~/lib/lms/module-versions";
 import {
   deleteStoredPhoto,
   PhotoUploadError,
@@ -242,112 +238,13 @@ export async function saveModuleVersionAction(formData: FormData): Promise<void>
   const m = await ownedModule(id, tid);
   if (!m) throw new Error("Module not found");
 
-  // Build the snapshot â€” same shape as Flask build_module_snapshot (app.py:666).
-  // All five queries share one tenant-scoped transaction.
-  const { contentItems, mediaItems, questions, ciMedia, choices } = await ctx.db.run(
-    async (tx) => {
-      const [contentItems, mediaItems, questions] = await Promise.all([
-        tx
-          .select()
-          .from(lmsContentItems)
-          .where(and(eq(lmsContentItems.moduleId, id), tenantWhere(lmsContentItems, tid)))
-          .orderBy(lmsContentItems.position),
-        tx
-          .select()
-          .from(lmsModuleMedia)
-          .where(and(eq(lmsModuleMedia.moduleId, id), tenantWhere(lmsModuleMedia, tid)))
-          .orderBy(lmsModuleMedia.position),
-        tx
-          .select()
-          .from(lmsQuestions)
-          .where(and(eq(lmsQuestions.moduleId, id), tenantWhere(lmsQuestions, tid)))
-          .orderBy(lmsQuestions.position),
-      ]);
-      const ciIds = contentItems.map((c) => c.id);
-      const ciMedia = ciIds.length
-        ? await tx
-            .select()
-            .from(lmsContentItemMedia)
-            .where(tenantWhere(lmsContentItemMedia, tid))
-        : [];
-      const qIds = questions.map((q) => q.id);
-      const choices = qIds.length
-        ? await tx
-            .select()
-            .from(lmsChoices)
-            .where(tenantWhere(lmsChoices, tid))
-        : [];
-      return { contentItems, mediaItems, questions, ciMedia, choices };
-    },
-  );
-  const ciMediaByItem = new Map<number, typeof ciMedia>();
-  for (const x of ciMedia) {
-    const arr = ciMediaByItem.get(x.contentItemId) ?? [];
-    arr.push(x);
-    ciMediaByItem.set(x.contentItemId, arr);
-  }
-  const choicesByQ = new Map<number, typeof choices>();
-  for (const c of choices) {
-    const arr = choicesByQ.get(c.questionId) ?? [];
-    arr.push(c);
-    choicesByQ.set(c.questionId, arr);
-  }
-
-  const snapshot = {
-    title: m.title,
-    description: m.description ?? "",
-    is_published: m.isPublished ?? true,
-    cover_path: m.coverPath ?? "",
-    media_items: mediaItems.map((x) => ({ id: x.id, kind: x.kind, file_path: x.filePath })),
-    content_items: contentItems.map((ci) => ({
-      id: ci.id,
-      kind: ci.kind,
-      title: ci.title,
-      body: ci.body,
-      file_path: ci.filePath,
-      position: ci.position,
-      media_items: (ciMediaByItem.get(ci.id) ?? []).map((x) => ({
-        id: x.id,
-        kind: x.kind,
-        file_path: x.filePath,
-      })),
-    })),
-    questions: questions.map((q) => ({
-      id: q.id,
-      kind: q.kind,
-      prompt: q.prompt,
-      position: q.position,
-      choices: (choicesByQ.get(q.id) ?? []).map((c) => ({
-        id: c.id,
-        text: c.text,
-        is_correct: c.isCorrect,
-      })),
-    })),
-  };
-
-  // Auto-increment version_number per module.
-  const [latest] = await ctx.db.run((tx) =>
-    tx
-      .select({ versionNumber: lmsModuleVersions.versionNumber })
-      .from(lmsModuleVersions)
-      .where(
-        and(eq(lmsModuleVersions.moduleId, id), tenantWhere(lmsModuleVersions, tid)),
-      )
-      .orderBy(desc(lmsModuleVersions.versionNumber))
-      .limit(1),
-  );
-  const nextNumber = (latest?.versionNumber ?? 0) + 1;
-
-  await ctx.db.run((tx) =>
-    tx.insert(lmsModuleVersions).values({
-      moduleId: id,
-      versionNumber: nextNumber,
-      snapshotJson: JSON.stringify(snapshot),
-      createdById: ctx.lmsUser.id,
-      summary,
-      traceyTenantId: tid,
-    }),
-  );
+  const nextNumber = await snapshotModuleVersion({
+    tdb: ctx.db,
+    moduleId: id,
+    tenantId: tid,
+    createdById: ctx.lmsUser.id,
+    summary,
+  });
 
   await logAuditEvent({
     tenantId: tid,

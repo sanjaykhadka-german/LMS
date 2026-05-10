@@ -1,9 +1,11 @@
 ﻿import { NextResponse } from "next/server";
+import { forTenant } from "@tracey/db";
 import { requireAdminAction } from "~/lib/auth/admin";
 import { BillingGateError } from "~/lib/billing/guard";
 import { logAuditEvent } from "~/lib/audit";
 import { ApplyModuleError, importModuleFromJson } from "~/lib/ai/apply-module";
 import { getStudioSession, saveStudioSession } from "~/lib/ai/sessions";
+import { snapshotModuleVersion } from "~/lib/lms/module-versions";
 
 export const runtime = "nodejs";
 
@@ -63,6 +65,20 @@ export async function POST() {
       targetId: String(id),
       details: { count: createdIds.length },
     });
+    // Best-effort version snapshot — gives every AI-imported module a v1
+    // record for diff/rollback. Failure here logs but doesn't block the
+    // import response since the module itself is already persisted.
+    try {
+      await snapshotModuleVersion({
+        tdb: forTenant(tid),
+        moduleId: id,
+        tenantId: tid,
+        createdById: ctx.lmsUser.id,
+        summary: "Imported from AI Studio",
+      });
+    } catch (err) {
+      console.error("[ai-studio.import] version snapshot failed for", id, err);
+    }
   }
 
   // Reset the draft AND remember which module came out of this session so

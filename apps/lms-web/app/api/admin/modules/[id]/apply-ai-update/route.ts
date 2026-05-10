@@ -1,4 +1,5 @@
 ﻿import { NextResponse } from "next/server";
+import { forTenant } from "@tracey/db";
 import { requireAdminAction } from "~/lib/auth/admin";
 import { BillingGateError } from "~/lib/billing/guard";
 import { logAuditEvent } from "~/lib/audit";
@@ -7,6 +8,7 @@ import {
   applyModuleJsonToExisting,
 } from "~/lib/ai/apply-module";
 import { getStudioSession, saveStudioSession } from "~/lib/ai/sessions";
+import { snapshotModuleVersion } from "~/lib/lms/module-versions";
 
 export const runtime = "nodejs";
 
@@ -72,6 +74,20 @@ export async function POST(
     targetId: String(moduleId),
     details: {},
   });
+
+  // Best-effort: snapshot post-apply state so every AI-driven update has
+  // a rollback record. Doesn't block on failure — apply already succeeded.
+  try {
+    await snapshotModuleVersion({
+      tdb: forTenant(tid),
+      moduleId,
+      tenantId: tid,
+      createdById: ctx.lmsUser.id,
+      summary: "Applied AI update from AI Studio",
+    });
+  } catch (err) {
+    console.error("[ai-studio.apply] version snapshot failed for", moduleId, err);
+  }
 
   // Mirror the import route: clear the draft AND remember which module
   // this session is associated with so subsequent rehydrates can navigate
