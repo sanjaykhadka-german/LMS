@@ -7,6 +7,32 @@
 //   - Pass-through for everything else (and never touch /api/* or cross-origin).
 // Bump CACHE when this file changes so old clients drop their stale shell.
 
+// On localhost we never want a SW: Turbopack rotates /_next/static chunk
+// hashes on every edit, and cache-first matches on the old hashes yield
+// "module factory not available" runtime errors. RegisterServiceWorker.tsx
+// already unregisters in dev, but its useEffect can't run if hydration
+// fails first — so guard at the SW layer as belt-and-braces. Any SW that
+// somehow gets installed on localhost (e.g. from a prior `next start` run)
+// unregisters itself, drops its caches, and reloads open clients.
+const isLocalhost =
+  self.location.hostname === "localhost" ||
+  self.location.hostname === "127.0.0.1";
+
+if (isLocalhost) {
+  self.addEventListener("install", () => self.skipWaiting());
+  self.addEventListener("activate", (event) => {
+    event.waitUntil(
+      self.registration
+        .unregister()
+        .then(() => caches.keys())
+        .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+        .then(() => self.clients.matchAll())
+        .then((clients) => clients.forEach((c) => c.navigate(c.url)))
+        .catch(() => undefined),
+    );
+  });
+}
+
 const CACHE = "tracey-v1";
 const PRECACHE_URLS = [
   "/offline",
@@ -18,6 +44,7 @@ const PRECACHE_URLS = [
 ];
 
 self.addEventListener("install", (event) => {
+  if (isLocalhost) return;
   event.waitUntil(
     caches
       .open(CACHE)
@@ -35,6 +62,7 @@ self.addEventListener("install", (event) => {
 });
 
 self.addEventListener("activate", (event) => {
+  if (isLocalhost) return;
   event.waitUntil(
     caches
       .keys()
@@ -46,6 +74,7 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
+  if (isLocalhost) return;
   const req = event.request;
   if (req.method !== "GET") return;
 
