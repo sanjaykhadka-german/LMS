@@ -69,7 +69,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 className="text-3xl leading-none tracking-tight"
                 style={{ fontFamily: "var(--font-heading), ui-serif, Georgia, serif" }}
               >
-                tra<span className="text-[color:var(--primary)]">ce</span>y
+                tr<span className="text-[color:var(--primary)]">a</span>cey
               </span>
             </Link>
             <TenantSwitcher
