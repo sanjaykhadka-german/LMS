@@ -148,32 +148,34 @@ export async function runWhsReminders(
   for (const r of records) {
     if (!r.userActive) continue;
     const kindLabel = WHS_KIND_SINGULAR[r.kind] ?? "WHS record";
-    const ok = await sendWhsExpiryReminderEmail({
+    // Email is best-effort. The in-app notification + lastRemindedAt
+    // update fire regardless of email status so a misconfigured Resend
+    // can't silence the bell or bust the cooldown into a spam loop.
+    const emailOk = await sendWhsExpiryReminderEmail({
       to: r.userEmail,
       name: r.userName,
       kindLabel,
       recordTitle: r.title,
       expiresOn: r.expiresOn,
     });
-    if (ok) {
-      // Each update is its own short transaction with `app.tenant_id` set —
-      // intentional, so a slow email loop doesn't hold a long-running tx.
-      await tdb.run((tx) =>
-        tx
-          .update(lmsWhsRecords)
-          .set({ lastRemindedAt: new Date() })
-          .where(eq(lmsWhsRecords.id, r.id)),
-      );
-      if (r.userTraceyId) {
-        await createNotification(tdb, {
-          recipientUserId: r.userTraceyId,
-          kind: "whs.expiring",
-          title: `${kindLabel}: ${r.title} expires ${r.expiresOn ?? "soon"}`,
-          body: "Renew before the expiry date to stay compliant.",
-          actionUrl: "/app/my/modules",
-        });
-      }
-      sent += 1;
+    if (emailOk) sent += 1;
+
+    // Each update is its own short transaction with `app.tenant_id` set —
+    // intentional, so a slow email loop doesn't hold a long-running tx.
+    await tdb.run((tx) =>
+      tx
+        .update(lmsWhsRecords)
+        .set({ lastRemindedAt: new Date() })
+        .where(eq(lmsWhsRecords.id, r.id)),
+    );
+    if (r.userTraceyId) {
+      await createNotification(tdb, {
+        recipientUserId: r.userTraceyId,
+        kind: "whs.expiring",
+        title: `${kindLabel}: ${r.title} expires ${r.expiresOn ?? "soon"}`,
+        body: "Renew before the expiry date to stay compliant.",
+        actionUrl: "/app/my/modules",
+      });
     }
   }
   return sent;

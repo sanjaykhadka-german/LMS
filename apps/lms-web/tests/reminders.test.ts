@@ -21,12 +21,13 @@ import {
   lmsAssignments,
   lmsModules,
   lmsUsers,
+  lmsWhsRecords,
   members,
   notifications,
   tenants,
   users,
 } from "@tracey/db";
-import { runAssignmentReminders } from "../lib/lms/reminders";
+import { runAssignmentReminders, runWhsReminders } from "../lib/lms/reminders";
 
 const isLiveDb =
   !!process.env.DATABASE_URL && !/test:test@/.test(process.env.DATABASE_URL);
@@ -143,6 +144,9 @@ async function fullCleanup(seeded: Seeded): Promise<void> {
   await db
     .delete(lmsAssignments)
     .where(eq(lmsAssignments.traceyTenantId, seeded.tenantId));
+  await db
+    .delete(lmsWhsRecords)
+    .where(eq(lmsWhsRecords.traceyTenantId, seeded.tenantId));
   await db.delete(lmsModules).where(eq(lmsModules.traceyTenantId, seeded.tenantId));
   await db.delete(lmsUsers).where(eq(lmsUsers.traceyTenantId, seeded.tenantId));
   await db.delete(members).where(eq(members.tenantId, seeded.tenantId));
@@ -205,5 +209,91 @@ describe.skipIf(!isLiveDb)("runAssignmentReminders trigger", () => {
         ),
       );
     expect(countRows[0]?.count ?? 0).toBe(0);
+  });
+});
+
+describe.skipIf(!isLiveDb)("runWhsReminders trigger", () => {
+  let seeded: Seeded;
+
+  beforeAll(async () => {
+    seeded = await seed();
+    // Add a WHS record expiring in 14 days, no prior reminder.
+    const expiresOn = new Date(Date.now() + 14 * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+    await db.insert(lmsWhsRecords).values({
+      kind: "first_aider",
+      userId: seeded.lmsUserId,
+      title: "First aid certification",
+      expiresOn,
+      lastRemindedAt: null,
+      traceyTenantId: seeded.tenantId,
+    });
+  }, 30_000);
+
+  afterAll(async () => {
+    await fullCleanup(seeded);
+  });
+
+  it("fires a whs.expiring notification regardless of email status", async () => {
+    // Locally RESEND_API_KEY is unset, so the email path no-ops. The
+    // refactored runWhsReminders fires the in-app notification anyway.
+    await runWhsReminders(seeded.tenantId);
+
+    const rows = await db
+      .select()
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.tenantId, seeded.tenantId),
+          eq(notifications.kind, "whs.expiring"),
+        ),
+      );
+
+    expect(rows.length).toBeGreaterThanOrEqual(1);
+    const ours = rows.find((r) => r.recipientUserId === seeded.learnerAuthId);
+    expect(ours, "expected a notification for the seeded learner").toBeDefined();
+    expect(ours!.title).toContain("First aid certification");
+    expect(ours!.actionUrl).toBe("/app/my/modules");
+  });
+
+  it("respects the cooldown on the next call", async () => {
+    // The previous run set lastRemindedAt = now. Cooldown is 14 days, so
+    // a re-run inside that window should produce no new whs.expiring rows.
+    await db
+      .delete(notifications)
+      .where(eq(notifications.tenantId, seeded.tenantId));
+
+    await runWhsReminders(seeded.tenantId);
+
+    const countRows = await db
+      .select({ count: drizzleSql<number>`count(*)::int` })
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.tenantId, seeded.tenantId),
+          eq(notifications.kind, "whs.expiring"),
+        ),
+      );
+    expect(countRows[0]?.count ?? 0).toBe(0);
+  });
+
+  it("force=true overrides the cooldown", async () => {
+    await db
+      .delete(notifications)
+      .where(eq(notifications.tenantId, seeded.tenantId));
+
+    await runWhsReminders(seeded.tenantId, { force: true });
+
+    const rows = await db
+      .select()
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.tenantId, seeded.tenantId),
+          eq(notifications.kind, "whs.expiring"),
+        ),
+      );
+    expect(rows.length).toBeGreaterThanOrEqual(1);
   });
 });
