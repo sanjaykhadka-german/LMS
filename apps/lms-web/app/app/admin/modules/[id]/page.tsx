@@ -427,7 +427,11 @@ export default async function ModuleEditPage({
             Saving a version pins a snapshot of the current content + questions.
             Existing assignments keep their version; new assignments get the latest.
           </p>
-          {versions.length > 0 && (
+          {versions.length === 0 ? (
+            <p className="rounded-md border border-dashed border-[color:var(--border)] px-3 py-4 text-center text-xs text-[color:var(--muted-foreground)]">
+              No versions saved yet. Click <strong>Save version</strong> to pin a snapshot, or use AI Studio &mdash; an imported / applied module is auto-snapshotted.
+            </p>
+          ) : (
             <ul className="divide-y divide-[color:var(--border)] text-sm">
               {versions.map((v) => (
                 <li key={v.id} className="flex justify-between py-2">
