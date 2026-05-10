@@ -90,6 +90,30 @@ export function StudioClient({
             method: "POST",
             body: fd,
           });
+          // Special-case "thin content": modal alert so the user can't miss
+          // it, and signal back to the caller that this file was rejected
+          // pre-flight (no Anthropic call burned). All other errors fall
+          // through to parseJsonResponse + the inline error banner.
+          if (res.status === 400) {
+            const cloned = res.clone();
+            try {
+              const body = (await cloned.json()) as {
+                error?: string;
+                message?: string;
+                wordCount?: number;
+              };
+              if (body.error === "thin") {
+                alert(
+                  `${file.name} looks too short to build a module from ` +
+                    `(${body.wordCount ?? 0} word${body.wordCount === 1 ? "" : "s"} of extractable text). ` +
+                    `Try a longer document, or add more context in the chat message.`,
+                );
+                return null;
+              }
+            } catch {
+              // not JSON or schema mismatch — fall through
+            }
+          }
           const data = await parseJsonResponse<{ file: FileMeta }>(
             res,
             `${file.name}: upload failed`,
@@ -100,8 +124,11 @@ export function StudioClient({
       const ok: FileMeta[] = [];
       const fails: string[] = [];
       for (const r of results) {
-        if (r.status === "fulfilled") ok.push(r.value);
-        else fails.push(r.reason instanceof Error ? r.reason.message : String(r.reason));
+        if (r.status === "fulfilled") {
+          if (r.value) ok.push(r.value);
+        } else {
+          fails.push(r.reason instanceof Error ? r.reason.message : String(r.reason));
+        }
       }
       if (ok.length > 0) setFiles((prev) => [...prev, ...ok]);
       if (fails.length > 0) setError(fails.join("\n"));
@@ -120,6 +147,20 @@ export function StudioClient({
     if (!trimmed || pending) return;
     setError(null);
     const fileIds = files.map((f) => f.id);
+    // Client-side guard: don't burn an Anthropic call when the user has
+    // neither attached a file nor written a substantive prompt. The server's
+    // upload-time word-count guard handles thin files; this catches the
+    // matching "no files + barely-there prompt" case.
+    const hasNoFiles = fileIds.length === 0 && !moduleJson;
+    const promptWordCount = trimmed.split(/\s+/).filter(Boolean).length;
+    if (hasNoFiles && promptWordCount < 5) {
+      alert(
+        "Add a document or write a longer prompt (at least a sentence) " +
+          "describing what training you want. AI Studio needs something to " +
+          "work from.",
+      );
+      return;
+    }
     setMessages((prev) => [...prev, { role: "user", text: trimmed }]);
     setText("");
     setPending(true);

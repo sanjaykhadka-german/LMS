@@ -3,6 +3,7 @@ import { requireAdminAction } from "~/lib/auth/admin";
 import { BillingGateError } from "~/lib/billing/guard";
 import {
   FileTooLargeError,
+  ThinContentError,
   UnsupportedFileError,
   processUpload,
 } from "~/lib/ai/files";
@@ -41,6 +42,17 @@ export async function POST(req: Request) {
     }
     if (err instanceof UnsupportedFileError) {
       return NextResponse.json({ error: err.message }, { status: 415 });
+    }
+    if (err instanceof ThinContentError) {
+      return NextResponse.json(
+        {
+          error: "thin",
+          message: err.message,
+          wordCount: err.wordCount,
+          filename: err.filename,
+        },
+        { status: 400 },
+      );
     }
     console.error("[ai-studio] upload failed:", err);
     const msg =
