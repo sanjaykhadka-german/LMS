@@ -1,39 +1,37 @@
 import Link from "next/link";
+import { formatDate } from "~/lib/format/datetime";
 
 interface ReadOnlyBannerProps {
   status: string;
   trialEndsAt: string | null;
   currentPeriodEnd: string | null;
+  timezone: string;
 }
 
-function fmtDate(iso: string | null): string {
+function fmtDate(iso: string | null, tz: string): string {
   if (!iso) return "soon";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "soon";
-  return d.toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
+  return (
+    formatDate(iso, tz, { year: "numeric", month: "short", day: "numeric" }) || "soon"
+  );
 }
 
 export function ReadOnlyBanner({
   status,
   trialEndsAt,
   currentPeriodEnd,
+  timezone,
 }: ReadOnlyBannerProps) {
   let message: string;
   if (status === "trialing") {
-    message = `Your trial ended on ${fmtDate(trialEndsAt)}. The workspace is read-only — subscribe to make changes.`;
+    message = `Your trial ended on ${fmtDate(trialEndsAt, timezone)}. The workspace is read-only — subscribe to make changes.`;
   } else if (status === "past_due") {
-    // 7d grace window from current_period_end (matches accessLevelFor()).
     const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
     const periodEndMs = currentPeriodEnd ? new Date(currentPeriodEnd).getTime() : null;
     const blocksAtIso =
       periodEndMs && !Number.isNaN(periodEndMs)
         ? new Date(periodEndMs + SEVEN_DAYS_MS).toISOString()
         : null;
-    message = `Last payment failed. The workspace is read-only until ${fmtDate(blocksAtIso)} — please update your payment method.`;
+    message = `Last payment failed. The workspace is read-only until ${fmtDate(blocksAtIso, timezone)} — please update your payment method.`;
   } else {
     message = "The workspace is read-only.";
   }

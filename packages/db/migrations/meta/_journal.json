@@ -43,6 +43,13 @@
       "when": 1778298252287,
       "tag": "0005_dazzling_blue_shield",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1778539208725,
+      "tag": "0006_spicy_blindfold",
+      "breakpoints": true
     }
   ]
 }

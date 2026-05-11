@@ -316,7 +316,12 @@ export async function bulkUploadEmployeesAction(formData: FormData): Promise<voi
     });
     if (emailed) result.invited += 1;
     if (newId) {
-      await autoAssignForDepartment({ userId: newId, departmentId, traceyTenantId: tid });
+      await autoAssignForDepartment({
+        userId: newId,
+        departmentId,
+        traceyTenantId: tid,
+        tenantTimezone: ctx.tenantTimezone,
+      });
     }
     result.created += 1;
   }

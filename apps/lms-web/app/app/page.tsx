@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { currentTenant } from "~/lib/auth/current";
+import { formatDate } from "~/lib/format/datetime";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import {
@@ -45,7 +46,7 @@ export default async function DashboardPage() {
   const showPendingCancel =
     tenant.status === "active" && tenant.cancelAtPeriodEnd;
   const cancelOn = tenant.currentPeriodEnd
-    ? tenant.currentPeriodEnd.toLocaleDateString(undefined, {
+    ? formatDate(tenant.currentPeriodEnd, tenant.timezone, {
         year: "numeric",
         month: "short",
         day: "numeric",

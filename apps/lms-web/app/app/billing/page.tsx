@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { currentMembership, currentUser } from "~/lib/auth/current";
 import { isPlatformAdmin } from "~/lib/auth/platform";
 import { accessLevelFor } from "~/lib/billing/access";
+import { formatDate } from "~/lib/format/datetime";
 import { Button } from "~/components/ui/button";
 import {
   Card,
@@ -80,7 +81,7 @@ export default async function BillingPage() {
     reason === "trialing" ? daysUntil(tenant.trialEndsAt) : null;
   const trialEndsAtLabel =
     reason === "trialing" && tenant.trialEndsAt
-      ? tenant.trialEndsAt.toLocaleDateString(undefined, {
+      ? formatDate(tenant.trialEndsAt, tenant.timezone, {
           day: "numeric",
           month: "long",
           year: "numeric",

@@ -14,6 +14,7 @@ import {
   lmsUsers,
 } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
+import { formatDate as fmtDateInTz } from "~/lib/format/datetime";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -35,6 +36,8 @@ export default async function EmployeeDetailPage({
 
   const ctx = await requireAdmin();
   const tid = ctx.traceyTenantId;
+  const formatDate = (d: Date | string): string =>
+    fmtDateInTz(d, ctx.tenantTimezone, { year: "numeric", month: "short", day: "numeric" }) || "—";
 
   const [[user], assignments, attempts, userMachineRows] = await Promise.all([
     ctx.db.run((tx) =>
@@ -473,12 +476,3 @@ function CompetencyBadge({
   return <Badge variant="outline">No training required</Badge>;
 }
 
-function formatDate(d: Date | string): string {
-  const date = typeof d === "string" ? new Date(d) : d;
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleDateString("en-AU", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}

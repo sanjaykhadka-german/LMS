@@ -8,6 +8,7 @@ import {
   Grid3x3,
   HardHat,
   Network,
+  Settings,
   Users,
   Library,
   Receipt,
@@ -63,6 +64,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             </SidebarLink>
             <SidebarLink href="/app/admin/audit-logs" icon={FileText}>
               Audit logs
+            </SidebarLink>
+            <SidebarLink href="/app/admin/workspace" icon={Settings}>
+              Workspace
             </SidebarLink>
           </SidebarSection>
         </nav>

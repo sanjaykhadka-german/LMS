@@ -8,6 +8,7 @@ import {
   lmsUsers,
 } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
+import { isEffectivelyActive } from "~/lib/lms/employee-status";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -35,6 +36,7 @@ export default async function EmployeesPage({
           email: lmsUsers.email,
           role: lmsUsers.role,
           isActiveFlag: lmsUsers.isActiveFlag,
+          terminationDate: lmsUsers.terminationDate,
           departmentName: lmsDepartments.name,
           employerName: lmsEmployers.name,
           positionName: lmsPositions.name,
@@ -69,7 +71,7 @@ export default async function EmployeesPage({
     ),
   ]);
 
-  const activeCount = employees.filter((e) => e.isActiveFlag).length;
+  const activeCount = employees.filter(isEffectivelyActive).length;
   const disabledCount = employees.length - activeCount;
 
   return (
@@ -124,37 +126,40 @@ export default async function EmployeesPage({
                 </tr>
               </thead>
               <tbody className="divide-y divide-[color:var(--border)]">
-                {employees.map((e) => (
-                  <tr key={e.id}>
-                    <td className="px-6 py-3 align-middle">
-                      <div className="font-medium">
-                        <Link href={`/app/admin/employees/${e.id}`} className="hover:underline">
-                          {e.name}
-                        </Link>
-                      </div>
-                      <div className="text-xs text-[color:var(--muted-foreground)]">{e.email}</div>
-                    </td>
-                    <td className="px-3 py-3 align-middle">{e.departmentName ?? "—"}</td>
-                    <td className="px-3 py-3 align-middle">{e.positionName ?? "—"}</td>
-                    <td className="px-3 py-3 align-middle">
-                      <RoleBadge role={e.role} />
-                    </td>
-                    <td className="px-3 py-3 align-middle">
-                      {e.isActiveFlag ? (
-                        <Badge variant="success">Active</Badge>
-                      ) : (
-                        <Badge variant="secondary">Disabled</Badge>
-                      )}
-                    </td>
-                    <td className="px-6 py-3 align-middle text-right">
-                      <RowActions
-                        id={e.id}
-                        isActive={e.isActiveFlag ?? true}
-                        currentRole={e.role}
-                      />
-                    </td>
-                  </tr>
-                ))}
+                {employees.map((e) => {
+                  const active = isEffectivelyActive(e);
+                  return (
+                    <tr key={e.id}>
+                      <td className="px-6 py-3 align-middle">
+                        <div className="font-medium">
+                          <Link href={`/app/admin/employees/${e.id}`} className="hover:underline">
+                            {e.name}
+                          </Link>
+                        </div>
+                        <div className="text-xs text-[color:var(--muted-foreground)]">{e.email}</div>
+                      </td>
+                      <td className="px-3 py-3 align-middle">{e.departmentName ?? "—"}</td>
+                      <td className="px-3 py-3 align-middle">{e.positionName ?? "—"}</td>
+                      <td className="px-3 py-3 align-middle">
+                        <RoleBadge role={e.role} />
+                      </td>
+                      <td className="px-3 py-3 align-middle">
+                        {active ? (
+                          <Badge variant="success">Active</Badge>
+                        ) : (
+                          <Badge variant="secondary">Disabled</Badge>
+                        )}
+                      </td>
+                      <td className="px-6 py-3 align-middle text-right">
+                        <RowActions
+                          id={e.id}
+                          isActive={active}
+                          currentRole={e.role}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
                 {employees.length === 0 && (
                   <tr>
                     <td colSpan={6} className="px-6 py-6 text-center text-[color:var(--muted-foreground)]">

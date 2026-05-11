@@ -25,7 +25,7 @@ export function NameCrudForm({ action, label, placeholder, submitLabel }: NameCr
   const [state, formAction, pending] = useActionState(action, initial);
 
   return (
-    <form action={formAction} className="flex flex-col gap-3 sm:flex-row sm:items-end" key={state.status === "ok" ? state.message : "form"}>
+    <form action={formAction} className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end" key={state.status === "ok" ? state.message : "form"}>
       <div className="flex-1 space-y-1.5">
         <Label htmlFor={`field-${label}`}>{label}</Label>
         <Input

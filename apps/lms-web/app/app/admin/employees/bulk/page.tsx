@@ -71,7 +71,7 @@ export default async function BulkUploadPage({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form action={bulkUploadEmployeesAction} encType="multipart/form-data" className="space-y-3">
+          <form action={bulkUploadEmployeesAction} className="space-y-3">
             <input type="file" name="csv" accept=".csv,text/csv" required />
             <div className="flex gap-2">
               <Button type="submit">Upload</Button>

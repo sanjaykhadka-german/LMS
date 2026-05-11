@@ -5,7 +5,11 @@ import {
   lmsAssignments,
   lmsDepartmentModulePolicies,
   lmsModules,
+  lmsUsers,
 } from "@tracey/db";
+import { formatDate } from "~/lib/format/datetime";
+import { createNotifications } from "./notifications";
+import { sendAssignmentsAddedEmail } from "./notify-admin";
 
 const DEFAULT_ASSIGNMENT_VALIDITY_DAYS = 180;
 
@@ -29,11 +33,13 @@ export async function autoAssignForDepartment(opts: {
   userId: number;
   departmentId: number | null;
   traceyTenantId: string;
+  tenantTimezone: string;
 }): Promise<number> {
   if (!opts.departmentId) return 0;
   const tid = opts.traceyTenantId;
 
-  return forTenant(tid).run(async (tx) => {
+  const tdb = forTenant(tid);
+  const insertResult = await tdb.run(async (tx) => {
     const policyRows = await tx
       .select({ moduleId: lmsDepartmentModulePolicies.moduleId })
       .from(lmsDepartmentModulePolicies)
@@ -44,7 +50,7 @@ export async function autoAssignForDepartment(opts: {
         ),
       );
     const policyModuleIds = policyRows.map((r) => r.moduleId);
-    if (policyModuleIds.length === 0) return 0;
+    if (policyModuleIds.length === 0) return { count: 0, inserted: [] as Array<{ moduleId: number; title: string; dueAt: Date | null }> };
 
     const existingRows = await tx
       .select({ moduleId: lmsAssignments.moduleId })
@@ -55,11 +61,12 @@ export async function autoAssignForDepartment(opts: {
     const existing = new Set(existingRows.map((r) => r.moduleId));
 
     const candidateIds = policyModuleIds.filter((mid) => !existing.has(mid));
-    if (candidateIds.length === 0) return 0;
+    if (candidateIds.length === 0) return { count: 0, inserted: [] };
 
     const candidateModules = await tx
       .select({
         id: lmsModules.id,
+        title: lmsModules.title,
         isPublished: lmsModules.isPublished,
         validForDays: lmsModules.validForDays,
       })
@@ -67,32 +74,101 @@ export async function autoAssignForDepartment(opts: {
       .where(and(inArray(lmsModules.id, candidateIds), eq(lmsModules.traceyTenantId, tid)));
 
     const now = new Date();
-    const valuesToInsert = candidateModules
-      .filter((m) => m.isPublished === true)
-      .map((m) => ({
-        userId: opts.userId,
-        moduleId: m.id,
-        assignedAt: now,
-        dueAt: computeDueAt(m.validForDays, now),
-        traceyTenantId: tid,
-      }));
+    const publishedById = new Map(
+      candidateModules
+        .filter((m) => m.isPublished === true)
+        .map((m) => [m.id, { title: m.title, dueAt: computeDueAt(m.validForDays, now) }]),
+    );
+    const valuesToInsert = Array.from(publishedById.entries()).map(([moduleId, meta]) => ({
+      userId: opts.userId,
+      moduleId,
+      assignedAt: now,
+      dueAt: meta.dueAt,
+      traceyTenantId: tid,
+    }));
 
-    if (valuesToInsert.length === 0) return 0;
+    if (valuesToInsert.length === 0) return { count: 0, inserted: [] };
     // Insert in one batch; if a concurrent insert wins the race on
     // (user_id, module_id), Postgres raises 23505 — swallow and refetch
     // count to stay idempotent.
     try {
-      const inserted = await tx
+      const insertedRows = await tx
         .insert(lmsAssignments)
         .values(valuesToInsert)
         .onConflictDoNothing({ target: [lmsAssignments.userId, lmsAssignments.moduleId] })
-        .returning({ id: lmsAssignments.id });
-      return inserted.length;
+        .returning({ id: lmsAssignments.id, moduleId: lmsAssignments.moduleId, dueAt: lmsAssignments.dueAt });
+      const inserted = insertedRows.map((r) => {
+        const meta = publishedById.get(r.moduleId);
+        return {
+          moduleId: r.moduleId,
+          title: meta?.title ?? "",
+          dueAt: r.dueAt ?? null,
+        };
+      });
+      return { count: insertedRows.length, inserted };
     } catch (err) {
       console.error("[autoAssignForDepartment]", err);
-      return 0;
+      return { count: 0, inserted: [] };
     }
   });
+
+  if (insertResult.count > 0 && insertResult.inserted.length > 0) {
+    await notifyAssignmentsAdded(
+      tdb,
+      opts.userId,
+      tid,
+      opts.tenantTimezone,
+      insertResult.inserted,
+    );
+  }
+  return insertResult.count;
+}
+
+async function notifyAssignmentsAdded(
+  tdb: ReturnType<typeof forTenant>,
+  userId: number,
+  tid: string,
+  tenantTimezone: string,
+  inserted: Array<{ moduleId: number; title: string; dueAt: Date | null }>,
+): Promise<void> {
+  try {
+    const [recipient] = await tdb.run((tx) =>
+      tx
+        .select({
+          email: lmsUsers.email,
+          name: lmsUsers.name,
+          traceyUserId: lmsUsers.traceyUserId,
+        })
+        .from(lmsUsers)
+        .where(and(eq(lmsUsers.id, userId), eq(lmsUsers.traceyTenantId, tid)))
+        .limit(1),
+    );
+    if (!recipient) return;
+
+    if (recipient.traceyUserId) {
+      await createNotifications(
+        tdb,
+        inserted.map((m) => ({
+          recipientUserId: recipient.traceyUserId!,
+          kind: "assignment.created",
+          title: `New training: ${m.title}`,
+          body: m.dueAt ? `Due ${formatDate(m.dueAt, tenantTimezone)}` : null,
+          actionUrl: "/app/my/modules",
+        })),
+      );
+    }
+
+    if (recipient.email) {
+      await sendAssignmentsAddedEmail({
+        to: recipient.email,
+        name: recipient.name ?? null,
+        timezone: tenantTimezone,
+        modules: inserted.map((m) => ({ title: m.title, dueAt: m.dueAt })),
+      });
+    }
+  } catch (err) {
+    console.error("[autoAssignForDepartment] notify failed", err);
+  }
 }
 
 /** True iff (departmentId, moduleId) is currently in

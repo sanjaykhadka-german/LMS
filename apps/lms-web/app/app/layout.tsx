@@ -129,6 +129,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           status={membership.tenant.status}
           trialEndsAt={membership.tenant.trialEndsAt?.toISOString() ?? null}
           currentPeriodEnd={membership.tenant.currentPeriodEnd?.toISOString() ?? null}
+          timezone={membership.tenant.timezone}
         />
       )}
       <main className="flex-1">{children}</main>

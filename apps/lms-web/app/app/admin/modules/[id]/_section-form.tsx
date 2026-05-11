@@ -91,7 +91,6 @@ export function SectionForm({
   return (
     <form
       action={updateContentItemAction}
-      encType="multipart/form-data"
       className="space-y-3"
     >
       <input type="hidden" name="id" value={itemId} />

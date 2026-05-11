@@ -1,6 +1,7 @@
 import "server-only";
 import { Resend } from "resend";
 import { siteConfig } from "~/lib/site-config";
+import { formatDate as formatDateInTz } from "~/lib/format/datetime";
 
 // Ports of email_service.py notify_invite + notify_password_reset, sent
 // via the same Resend account already used by /sign-up + invitations.
@@ -75,6 +76,45 @@ export async function sendAssignmentReminderEmail(opts: {
     return true;
   } catch (err) {
     console.error("[admin/reminder] email failed:", err);
+    return false;
+  }
+}
+
+export async function sendAssignmentsAddedEmail(opts: {
+  to: string;
+  name: string | null;
+  timezone: string;
+  modules: Array<{ title: string; dueAt: Date | null }>;
+}): Promise<boolean> {
+  if (!apiKey) return false;
+  if (opts.modules.length === 0) return false;
+  const greeting = opts.name ? `Hi ${opts.name},` : "Hi,";
+  const items = opts.modules
+    .map((m) => {
+      const due = m.dueAt
+        ? `due ${formatDateInTz(m.dueAt, opts.timezone, { day: "2-digit", month: "short", year: "numeric" })}`
+        : "no expiry";
+      return `<li>${escapeHtml(m.title)} — ${due}</li>`;
+    })
+    .join("");
+  const count = opts.modules.length;
+  const subject =
+    count === 1 ? "New training assigned" : `${count} new trainings assigned`;
+  const html =
+    `<p>${greeting}</p>` +
+    `<p>${count === 1 ? "A new training module has" : `${count} new training modules have`} been assigned to you:</p>` +
+    `<ul>${items}</ul>` +
+    `<p><a href="${baseUrl()}/app/my/modules">Open your portal</a> to get started.</p>`;
+  try {
+    await client().emails.send({
+      from,
+      to: opts.to,
+      subject,
+      html,
+    });
+    return true;
+  } catch (err) {
+    console.error("[admin/assignments-added] email failed:", err);
     return false;
   }
 }

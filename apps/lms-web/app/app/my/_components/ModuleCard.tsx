@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
+import { formatDate } from "~/lib/format/datetime";
 
 export type ModuleStatus = "completed" | "overdue" | "due_soon" | "open";
 
@@ -13,6 +14,7 @@ interface ModuleCardProps {
   bestScore: number | null;
   lastAttemptAt: Date | null;
   dueAt: Date | null;
+  timezone: string;
 }
 
 export function ModuleCard(props: ModuleCardProps) {
@@ -34,14 +36,14 @@ export function ModuleCard(props: ModuleCardProps) {
             {props.attempts} attempt{props.attempts === 1 ? "" : "s"}
             {props.lastAttemptAt && (
               <>
-                {" · "}Last {formatShortDate(props.lastAttemptAt)}
+                {" · "}Last {formatDate(props.lastAttemptAt, props.timezone, { month: "short", day: "numeric" })}
               </>
             )}
           </>
         ) : (
           <>No attempts yet</>
         )}
-        {props.dueAt && <> · Due {formatShortDate(props.dueAt)}</>}
+        {props.dueAt && <> · Due {formatDate(props.dueAt, props.timezone, { month: "short", day: "numeric" })}</>}
       </div>
       <div>
         <Button asChild>
@@ -57,8 +59,4 @@ function StatusBadge({ status }: { status: ModuleStatus }) {
   if (status === "overdue") return <Badge variant="destructive">Overdue</Badge>;
   if (status === "due_soon") return <Badge variant="warning">Due soon</Badge>;
   return <Badge variant="outline">Outstanding</Badge>;
-}
-
-function formatShortDate(d: Date): string {
-  return d.toLocaleDateString("en-AU", { month: "short", day: "numeric" });
 }

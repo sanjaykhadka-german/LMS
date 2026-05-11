@@ -13,6 +13,7 @@ import {
   lmsUsers,
 } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
+import { formatDateTime } from "~/lib/format/datetime";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -282,7 +283,7 @@ export default async function ModuleEditPage({
           ) : (
             <p className="text-sm text-[color:var(--muted-foreground)]">No cover set.</p>
           )}
-          <form action={setModuleCoverAction} encType="multipart/form-data" className="flex flex-wrap items-center gap-2">
+          <form action={setModuleCoverAction} className="flex flex-wrap items-center gap-2">
             <input type="hidden" name="id" value={module.id} />
             <input
               type="file"
@@ -321,7 +322,6 @@ export default async function ModuleEditPage({
           </div>
           <form
             action={addModuleMediaAction}
-            encType="multipart/form-data"
             className="flex flex-wrap items-center gap-2"
           >
             <input type="hidden" name="id" value={module.id} />
@@ -440,7 +440,7 @@ export default async function ModuleEditPage({
                     {v.summary && <span className="text-[color:var(--muted-foreground)]"> — {v.summary}</span>}
                   </span>
                   <span className="text-xs text-[color:var(--muted-foreground)]">
-                    {v.createdAt ? new Date(v.createdAt).toLocaleString("en-AU") : ""}
+                    {formatDateTime(v.createdAt, ctx.tenantTimezone)}
                   </span>
                 </li>
               ))}
@@ -507,7 +507,7 @@ function ContentItemEditor({
             </div>
           ))}
         </div>
-        <form action={addContentMediaAction} encType="multipart/form-data" className="flex flex-wrap items-center gap-2">
+        <form action={addContentMediaAction} className="flex flex-wrap items-center gap-2">
           <input type="hidden" name="content_item_id" value={item.id} />
           <input type="hidden" name="module_id" value={moduleId} />
           <input type="file" name="media" required accept="image/*,video/*" />

@@ -192,6 +192,7 @@ export async function createEmployeeAction(_prev: FormState, formData: FormData)
         userId: newId,
         departmentId: data.departmentId,
         traceyTenantId: tid,
+        tenantTimezone: ctx.tenantTimezone,
       })
     : 0;
 
@@ -500,6 +501,7 @@ export async function updateEmployeeAction(formData: FormData): Promise<void> {
       userId: data.id,
       departmentId: data.departmentId,
       traceyTenantId: tid,
+      tenantTimezone: ctx.tenantTimezone,
     });
   }
 

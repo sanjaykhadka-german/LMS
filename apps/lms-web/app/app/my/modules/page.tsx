@@ -6,6 +6,7 @@ import {
   requireLearner,
   type AssignmentRow,
 } from "~/lib/lms/learner";
+import { formatDate, formatDateTime } from "~/lib/format/datetime";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { StatCard } from "../_components/StatCard";
@@ -14,7 +15,7 @@ import { ModuleCard, type ModuleStatus } from "../_components/ModuleCard";
 export const metadata = { title: "My training" };
 
 export default async function MyModulesPage() {
-  const { lmsUser, traceyTenantId } = await requireLearner();
+  const { lmsUser, traceyTenantId, tenantTimezone } = await requireLearner();
   const [rows, recent, agg] = await Promise.all([
     listAssignmentsForUser(lmsUser.id, traceyTenantId),
     listRecentAttempts(lmsUser.id, traceyTenantId, 5),
@@ -99,7 +100,7 @@ export default async function MyModulesPage() {
             />
           </section>
 
-          {nextUp && <NextUpCard row={nextUp} />}
+          {nextUp && <NextUpCard row={nextUp} timezone={tenantTimezone} />}
 
           <section className="space-y-4">
             <h2 className="text-sm font-semibold uppercase tracking-wider text-[color:var(--muted-foreground)]">
@@ -117,6 +118,7 @@ export default async function MyModulesPage() {
                   bestScore={r.bestScore}
                   lastAttemptAt={r.lastAttemptAt}
                   dueAt={r.assignment.dueAt}
+                  timezone={tenantTimezone}
                 />
               ))}
             </div>
@@ -144,7 +146,7 @@ export default async function MyModulesPage() {
                     {recent.map((a) => (
                       <tr key={a.id}>
                         <td className="py-2 pr-3 align-middle">
-                          {a.createdAt.toLocaleString("en-AU", {
+                          {formatDateTime(a.createdAt, tenantTimezone, {
                             year: "numeric",
                             month: "2-digit",
                             day: "2-digit",
@@ -174,7 +176,13 @@ export default async function MyModulesPage() {
   );
 }
 
-function NextUpCard({ row }: { row: AssignmentRow & { status: ModuleStatus } }) {
+function NextUpCard({
+  row,
+  timezone,
+}: {
+  row: AssignmentRow & { status: ModuleStatus };
+  timezone: string;
+}) {
   return (
     <div className="rounded-xl border-2 border-[color:var(--foreground)] bg-[color:var(--card)] p-5">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -196,7 +204,7 @@ function NextUpCard({ row }: { row: AssignmentRow & { status: ModuleStatus } }) 
             {row.assignment.dueAt && (
               <>
                 {" · Due "}
-                {row.assignment.dueAt.toLocaleDateString("en-AU", {
+                {formatDate(row.assignment.dueAt, timezone, {
                   month: "short",
                   day: "numeric",
                   year: "numeric",

@@ -6,6 +6,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { lmsAssignments, lmsModules, lmsUsers } from "@tracey/db";
 import { requireAdminAction } from "~/lib/auth/admin";
 import { logAuditEvent } from "~/lib/audit";
+import { formatDate } from "~/lib/format/datetime";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
 import { createNotifications } from "~/lib/lms/notifications";
 
@@ -72,7 +73,7 @@ export async function bulkAssignModuleAction(formData: FormData): Promise<void> 
           ),
         ),
     );
-    const dueLine = dueAt ? `Due ${dueAt.toLocaleDateString()}` : null;
+    const dueLine = dueAt ? `Due ${formatDate(dueAt, ctx.tenantTimezone)}` : null;
     await createNotifications(
       ctx.db,
       recipients

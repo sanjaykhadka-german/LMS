@@ -12,6 +12,7 @@ import {
   lmsUsers,
 } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
+import { formatDateTime } from "~/lib/format/datetime";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
 import { buildDashboardModel } from "~/lib/lms/dashboard";
 import { AssignmentReminderButton } from "./_components/ReminderButtons";
@@ -313,7 +314,7 @@ export default async function AdminOverviewPage({
                       <strong>{r.userName}</strong> → {r.moduleTitle}
                     </div>
                     <div className="text-xs text-[color:var(--muted-foreground)]">
-                      {r.createdAt.toLocaleString("en-AU")}
+                      {formatDateTime(r.createdAt, ctx.tenantTimezone)}
                     </div>
                   </div>
                   <div className="flex items-center gap-2 pl-3">

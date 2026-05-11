@@ -1,0 +1,2 @@
+ALTER TABLE "app"."tenants" ADD COLUMN "timezone" text DEFAULT 'Australia/Sydney' NOT NULL;--> statement-breakpoint
+ALTER TABLE "app"."tenants" ADD CONSTRAINT "tenants_timezone_chk" CHECK (length("app"."tenants"."timezone") > 0);

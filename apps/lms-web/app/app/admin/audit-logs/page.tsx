@@ -1,6 +1,7 @@
 import { auditEvents, db, lmsAuditLogs } from "@tracey/db";
 import { desc, eq } from "drizzle-orm";
 import { requireAdmin } from "~/lib/auth/admin";
+import { formatDateTime } from "~/lib/format/datetime";
 import { Badge } from "~/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { PruneForm } from "./PruneForm";
@@ -150,7 +151,7 @@ export default async function AuditLogsPage({
                   rows.map((r) => (
                     <tr key={r.id}>
                       <td className="px-6 py-2 align-middle">
-                        {r.createdAt.toLocaleString("en-AU")}
+                        {formatDateTime(r.createdAt, ctx.tenantTimezone)}
                       </td>
                       <td className="px-3 py-2 align-middle">
                         <Badge variant={r.source === "tracey" ? "default" : "secondary"}>

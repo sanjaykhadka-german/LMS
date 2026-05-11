@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db, lmsUsers, members, users, type Role } from "@tracey/db";
 import { hashPassword, verifyWerkzeugHash } from "./passwords";
 import { logAuditEvent } from "~/lib/audit";
+import { isEffectivelyActive } from "~/lib/lms/employee-status";
 
 // Flask roles: employee | qaqc | admin (free-text on lmsUsers.role).
 // Tracey roles: owner | admin | member (enum on app.members.role).
@@ -38,7 +39,7 @@ export async function tryLegacyAuth(
     .where(eq(lmsUsers.email, email))
     .limit(1);
   if (!legacy) return null;
-  if (!legacy.isActiveFlag) return null;
+  if (!isEffectivelyActive(legacy)) return null;
 
   // tracey_tenant_id is required so we know which workspace to add them
   // to. Slice 3's migration backfilled this on prod; if it's still NULL

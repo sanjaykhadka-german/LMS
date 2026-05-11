@@ -128,7 +128,6 @@ export default async function EditEmployeePage({
         <CardContent>
           <form
             action={updateEmployeeAction}
-            encType="multipart/form-data"
             className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
           >
             <input type="hidden" name="id" value={user.id} />

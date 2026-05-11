@@ -6,6 +6,7 @@ import {
   lmsUsers,
 } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
+import { formatDate, formatDateTime } from "~/lib/format/datetime";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
 import { Badge } from "~/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
@@ -100,7 +101,7 @@ export default async function AssignmentsPage() {
                   <strong>{r.userName}</strong> → {r.moduleTitle}
                 </span>
                 <span className="text-xs text-[color:var(--muted-foreground)]">
-                  {r.assignedAt ? r.assignedAt.toLocaleString("en-AU") : ""}
+                  {r.assignedAt ? formatDateTime(r.assignedAt, ctx.tenantTimezone) : ""}
                 </span>
               </div>
             ))}
@@ -156,10 +157,10 @@ export default async function AssignmentsPage() {
                           <div className="text-xs text-[color:var(--muted-foreground)]">{r.userEmail}</div>
                         </td>
                         <td className="px-3 py-3 align-middle">
-                          {r.assignedAt ? r.assignedAt.toLocaleDateString("en-AU") : "—"}
+                          {r.assignedAt ? formatDate(r.assignedAt, ctx.tenantTimezone) : "—"}
                         </td>
                         <td className="px-3 py-3 align-middle">
-                          {r.dueAt ? r.dueAt.toLocaleDateString("en-AU") : "—"}
+                          {r.dueAt ? formatDate(r.dueAt, ctx.tenantTimezone) : "—"}
                         </td>
                         <td className="px-3 py-3 align-middle">
                           <StatusBadge status={status} />

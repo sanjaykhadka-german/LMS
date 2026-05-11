@@ -35,6 +35,7 @@ import {
 import { PASS_THRESHOLD } from "~/lib/site-config";
 import { notifyAttempt } from "./notify";
 import { createNotifications } from "./notifications";
+import { isEffectivelyActive } from "./employee-status";
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -68,6 +69,7 @@ export interface LearnerModule {
 export interface LearnerContext {
   traceyUserId: string;
   traceyTenantId: string;
+  tenantTimezone: string;
   lmsUser: LmsUser;
   /** Tenant-scoped transaction runner. Use `ctx.db.run(tx => ...)` for any
    *  query that touches a `tracey_tenant_id`-bearing table — it injects
@@ -171,13 +173,15 @@ export async function requireLearner(): Promise<LearnerContext> {
     email: user.email,
     name: user.name,
   });
-  if (!lmsUser.isActiveFlag) {
+  if (!isEffectivelyActive(lmsUser)) {
     // Match Flask: a deactivated learner can't proceed.
+    // Also catches employees whose termination_date has passed.
     redirect("/sign-in?reason=deactivated");
   }
   return {
     traceyUserId: user.id,
     traceyTenantId: tenant.id,
+    tenantTimezone: tenant.timezone,
     lmsUser,
     db: forTenant(tenant.id),
   };

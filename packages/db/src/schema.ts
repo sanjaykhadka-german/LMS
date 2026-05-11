@@ -91,6 +91,7 @@ export const tenants = appSchema.table(
     stripeCustomerId: text("stripe_customer_id"),
     stripeSubscriptionId: text("stripe_subscription_id"),
     seatsPurchased: integer("seats_purchased").notNull().default(0),
+    timezone: text("timezone").notNull().default("Australia/Sydney"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -103,6 +104,7 @@ export const tenants = appSchema.table(
       "tenants_status_chk",
       sql`${t.status} in ('trialing','active','past_due','canceled')`,
     ),
+    check("tenants_timezone_chk", sql`length(${t.timezone}) > 0`),
   ],
 );
 

@@ -8,6 +8,7 @@ import {
   lmsUsers,
 } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
+import { formatDate } from "~/lib/format/datetime";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
@@ -176,8 +177,8 @@ export default async function AssignModulePage({
                   <div className="text-sm font-medium">{r.userName}</div>
                   <div className="text-xs text-[color:var(--muted-foreground)]">
                     {r.userEmail}
-                    {r.dueAt && <> · Due {r.dueAt.toLocaleDateString("en-AU")}</>}
-                    {r.completedAt && <> · Completed {r.completedAt.toLocaleDateString("en-AU")}</>}
+                    {r.dueAt && <> · Due {formatDate(r.dueAt, ctx.tenantTimezone)}</>}
+                    {r.completedAt && <> · Completed {formatDate(r.completedAt, ctx.tenantTimezone)}</>}
                   </div>
                 </div>
                 <form action={unassignModuleAction}>
