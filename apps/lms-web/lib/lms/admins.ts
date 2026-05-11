@@ -1,11 +1,13 @@
 import "server-only";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db, members, users } from "@tracey/db";
 
-// Returns owner+admin email addresses for the given tenant. Empty when the
-// tenant has no admins (shouldn't happen post-onboarding, but defended
-// against by callers).
-export async function getTenantAdminEmails(tenantId: string): Promise<string[]> {
+// Returns the email of every member with role='owner' for the given tenant.
+// Plural because the schema allows multiple owners (members_tenant_user_uq
+// constrains (tenant,user) only — promote-to-owner from the members UI can
+// produce N>1). Admins are intentionally excluded from email recipients;
+// they still see the in-app notification (learner.ts:564-576).
+export async function getTenantOwnerEmails(tenantId: string): Promise<string[]> {
   const rows = await db
     .select({ email: users.email })
     .from(members)
@@ -13,7 +15,7 @@ export async function getTenantAdminEmails(tenantId: string): Promise<string[]> 
     .where(
       and(
         eq(members.tenantId, tenantId),
-        inArray(members.role, ["owner", "admin"]),
+        eq(members.role, "owner"),
       ),
     );
   return [...new Set(rows.map((r) => r.email))];

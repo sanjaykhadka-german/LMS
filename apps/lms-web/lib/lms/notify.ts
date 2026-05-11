@@ -1,12 +1,14 @@
 import "server-only";
 import { Resend } from "resend";
 import { siteConfig } from "~/lib/site-config";
-import { getTenantAdminEmails } from "./admins";
+import { getTenantOwnerEmails } from "./admins";
 
-// Resolves the tenant's owner + admin members and emails them a one-line
-// summary of the learner's quiz attempt. Multi-tenant aware: the legacy
-// LMS_ADMIN_EMAIL / ADMIN_EMAIL env vars are no longer consulted (every
-// tenant routed mail to a single global address before this change).
+// Resolves the tenant's owner(s) and emails them a one-line summary of the
+// learner's quiz attempt. Admins are intentionally not emailed — they get
+// the in-app notification at learner.ts:564-576 instead, to keep mail
+// volume tight. The legacy LMS_ADMIN_EMAIL / ADMIN_EMAIL env vars are no
+// longer consulted (every tenant routed mail to a single global address
+// before this change).
 
 const apiKey = process.env.RESEND_API_KEY;
 const from = `${process.env.MAIL_FROM_NAME ?? "Tracey"} <${
@@ -28,7 +30,7 @@ export async function notifyAttempt(opts: {
   passed: boolean;
 }): Promise<void> {
   if (!apiKey) return;
-  const recipients = await getTenantAdminEmails(opts.tenantId);
+  const recipients = await getTenantOwnerEmails(opts.tenantId);
   if (recipients.length === 0) return;
   const verdict = opts.passed ? "PASSED" : "did NOT pass";
   const subject = `[${siteConfig.name}] ${opts.learnerName} ${verdict} ${opts.moduleTitle} (${opts.score}%)`;
