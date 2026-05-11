@@ -124,9 +124,10 @@ export default async function BillingPage() {
         </Card>
       )}
 
-      {(reason === "canceled" ||
-        reason === "trialing_expired" ||
-        reason === "trialing") && (
+      {!tenant.stripeCustomerId &&
+        (reason === "canceled" ||
+          reason === "trialing_expired" ||
+          reason === "trialing") && (
         <div className="grid gap-4 md:grid-cols-2">
           {subscribable.map((tier) => {
             const monthly = tier.prices?.monthly.perSeatPerMonth ?? 0;
