@@ -26,7 +26,8 @@ function subscriptionEvent(
     subId: string;
     plan: string;
     status: Stripe.Subscription.Status;
-    currentPeriodEnd: number;
+    currentPeriodEnd: number | undefined;
+    itemPeriodEnd: number | undefined;
     seats: number;
     cancelAtPeriodEnd: boolean;
     canceledAt: number | null;
@@ -39,12 +40,21 @@ function subscriptionEvent(
     subId = "sub_123",
     plan = "pro",
     status = "active",
-    currentPeriodEnd = 1735689600, // 2025-01-01
     seats = 5,
     cancelAtPeriodEnd = false,
     canceledAt = null,
     trialEnd = null,
   } = overrides;
+  // Default keeps prior tests' behaviour: top-level field set, item field
+  // absent. New tests can flip these to mimic the 2026-04-22.dahlia API
+  // shape where current_period_end lives on each subscription item. Use the
+  // `in` operator instead of destructuring defaults so callers can pass
+  // `undefined` explicitly to mean "omit this field" — destructuring
+  // defaults conflate undefined with not-passed.
+  const currentPeriodEnd =
+    "currentPeriodEnd" in overrides ? overrides.currentPeriodEnd : 1735689600;
+  const itemPeriodEnd =
+    "itemPeriodEnd" in overrides ? overrides.itemPeriodEnd : undefined;
   return {
     id,
     type,
@@ -71,6 +81,7 @@ function subscriptionEvent(
               id: "si_1",
               price: { id: "price_1", metadata: { plan } },
               quantity: seats,
+              current_period_end: itemPeriodEnd,
             },
           ],
         },
@@ -137,6 +148,33 @@ describe("handleStripeEvent — customer.subscription.updated", () => {
     const t = getTenant("tenant-1") as { cancelAtPeriodEnd?: boolean; canceledAt?: Date };
     expect(t.cancelAtPeriodEnd).toBe(true);
     expect(t.canceledAt).toEqual(new Date(canceledAtSec * 1000));
+  });
+
+  it("reads current_period_end from the subscription item when API moved it off the top level", async () => {
+    // Stripe API 2026-04-22.dahlia moved current_period_end onto each
+    // SubscriptionItem. Simulate the runtime drift: top-level undefined,
+    // item-level populated.
+    const itemPeriodEndSec = 1738368000; // 2025-02-01
+    const event = subscriptionEvent("customer.subscription.updated", {
+      currentPeriodEnd: undefined,
+      itemPeriodEnd: itemPeriodEndSec,
+    });
+    await handleStripeEvent(event);
+    const t = getTenant("tenant-1");
+    expect(t!.currentPeriodEnd).toEqual(new Date(itemPeriodEndSec * 1000));
+  });
+
+  it("falls back to trial_end for currentPeriodEnd when neither subscription nor item has a period end", async () => {
+    const trialEndSec = 1738972800; // 2025-02-08
+    const event = subscriptionEvent("customer.subscription.created", {
+      status: "trialing",
+      currentPeriodEnd: undefined,
+      itemPeriodEnd: undefined,
+      trialEnd: trialEndSec,
+    });
+    await handleStripeEvent(event);
+    const t = getTenant("tenant-1");
+    expect(t!.currentPeriodEnd).toEqual(new Date(trialEndSec * 1000));
   });
 
   it("syncs trialEndsAt from sub.trial_end so the local field tracks Stripe", async () => {

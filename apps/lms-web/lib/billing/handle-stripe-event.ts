@@ -69,6 +69,20 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<HandleResu
       const item = sub.items.data[0];
       const plan = planFromPrice(item?.price);
       const seats = item?.quantity ?? 0;
+      // current_period_end moved from the Subscription onto each
+      // SubscriptionItem in Stripe API version 2026-04-22.dahlia. The
+      // stripe@17.7.0 TS types still declare it on Subscription, so cast
+      // structurally and read from the item first, fall back to the
+      // (deprecated) top-level field for older API versions still in use,
+      // and finally fall back to trial_end so a still-in-trial subscription
+      // always lands with a sane next-billing date. null is acceptable —
+      // the column is nullable in the schema.
+      const itemPeriodEnd = (item as { current_period_end?: number | null } | undefined)
+        ?.current_period_end;
+      const subPeriodEnd = (sub as { current_period_end?: number | null })
+        .current_period_end;
+      const periodEndSec = itemPeriodEnd ?? subPeriodEnd ?? sub.trial_end ?? null;
+      const currentPeriodEnd = periodEndSec ? new Date(periodEndSec * 1000) : null;
       // Stripe reports a pending cancellation as `status=active` +
       // `cancel_at_period_end=true` until the period ends, then fires
       // `customer.subscription.deleted`. Mirror both flags so the dashboard
@@ -89,7 +103,7 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<HandleResu
           stripeSubscriptionId: sub.id,
           plan,
           status: statusFromStripe(sub.status),
-          currentPeriodEnd: new Date(sub.current_period_end * 1000),
+          currentPeriodEnd,
           cancelAtPeriodEnd,
           canceledAt,
           seatsPurchased: seats,
