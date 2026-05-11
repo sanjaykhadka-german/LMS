@@ -66,7 +66,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <div className="flex items-center gap-4">
             <Link href="/app" className="flex items-center" aria-label={siteConfig.name}>
               <span
-                className="text-3xl leading-none tracking-tight"
+                className="text-4xl leading-none tracking-tight"
                 style={{ fontFamily: "var(--font-heading), ui-serif, Georgia, serif" }}
               >
                 tr<span className="text-[color:var(--primary)]">a</span>cey

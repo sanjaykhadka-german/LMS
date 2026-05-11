@@ -1,5 +1,4 @@
 import Link from "next/link";
-import Image from "next/image";
 import { auth } from "~/auth";
 import { Button } from "~/components/ui/button";
 import { siteConfig } from "~/lib/site-config";
@@ -12,14 +11,12 @@ export async function Header() {
     <header className="sticky top-0 z-40 w-full border-b border-[color:var(--border)] bg-[color:var(--background)]/80 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
         <Link href="/" className="flex items-center" aria-label={siteConfig.name}>
-          <Image
-            src="/tracey-wordmark.png"
-            alt={siteConfig.name}
-            width={1323}
-            height={605}
-            priority
-            className="h-14 w-auto"
-          />
+          <span
+            className="text-4xl leading-none tracking-tight"
+            style={{ fontFamily: "var(--font-heading), ui-serif, Georgia, serif" }}
+          >
+            tr<span className="text-[color:var(--primary)]">a</span>cey
+          </span>
         </Link>
         <nav className="flex items-center gap-2">
           <Link
