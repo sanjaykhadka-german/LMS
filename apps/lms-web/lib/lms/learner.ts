@@ -553,6 +553,7 @@ export async function submitAttempt(opts: {
 
   // Fire-and-forget — don't block the redirect on email I/O.
   void notifyAttempt({
+    tenantId: tid,
     learnerEmail: opts.lmsUser.email,
     learnerName: opts.lmsUser.name,
     moduleTitle: opts.module.title,

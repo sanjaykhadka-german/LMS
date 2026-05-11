@@ -1,13 +1,14 @@
 import "server-only";
 import { Resend } from "resend";
 import { siteConfig } from "~/lib/site-config";
+import { getTenantAdminEmails } from "./admins";
 
-// Port of Flask's notify_attempt. Sends a one-line summary to LMS_ADMIN_EMAIL
-// after a learner submits a quiz. No-op when LMS_ADMIN_EMAIL is unset, which
-// matches Flask's behavior of skipping send when ADMIN_EMAIL is empty.
+// Resolves the tenant's owner + admin members and emails them a one-line
+// summary of the learner's quiz attempt. Multi-tenant aware: the legacy
+// LMS_ADMIN_EMAIL / ADMIN_EMAIL env vars are no longer consulted (every
+// tenant routed mail to a single global address before this change).
 
 const apiKey = process.env.RESEND_API_KEY;
-const adminEmail = process.env.LMS_ADMIN_EMAIL ?? process.env.ADMIN_EMAIL ?? "";
 const from = `${process.env.MAIL_FROM_NAME ?? "Tracey"} <${
   process.env.MAIL_FROM ?? "no-reply@example.com"
 }>`;
@@ -19,20 +20,23 @@ function client(): Resend {
 }
 
 export async function notifyAttempt(opts: {
+  tenantId: string;
   learnerEmail: string;
   learnerName: string;
   moduleTitle: string;
   score: number;
   passed: boolean;
 }): Promise<void> {
-  if (!adminEmail || !apiKey) return; // intentional no-op
+  if (!apiKey) return;
+  const recipients = await getTenantAdminEmails(opts.tenantId);
+  if (recipients.length === 0) return;
   const verdict = opts.passed ? "PASSED" : "did NOT pass";
   const subject = `[${siteConfig.name}] ${opts.learnerName} ${verdict} ${opts.moduleTitle} (${opts.score}%)`;
   const text =
     `${opts.learnerName} <${opts.learnerEmail}> ${verdict} the quiz for ` +
     `"${opts.moduleTitle}" with a score of ${opts.score}%.`;
   try {
-    await client().emails.send({ from, to: adminEmail, subject, text });
+    await client().emails.send({ from, to: recipients, subject, text });
   } catch (err) {
     // Don't let a Resend hiccup roll back a successful attempt insert.
     console.error("notifyAttempt failed", err);
