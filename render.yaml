@@ -102,6 +102,11 @@ services:
       # super-admin surface. Keep tightly scoped to actual operators.
       - key: PLATFORM_ADMIN_EMAILS
         sync: false
+      # Phase 7a — auto-provision a per-tenant schema for every new signup
+      # via onboarding/actions.ts. Off would silently leave new tenants on
+      # the legacy public.lms_* fallback (the DIGITECH bug, 2026-05-11).
+      - key: PER_TENANT_SCHEMA_ENABLED
+        value: "true"
 
   - type: cron
     name: lms-stripe-reconcile
