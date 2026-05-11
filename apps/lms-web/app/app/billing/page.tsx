@@ -14,6 +14,12 @@ import {
 } from "~/components/ui/card";
 import { pricingTiers, formatPrice } from "~/lib/site-config";
 
+function daysUntil(date: Date | null): number | null {
+  if (!date) return null;
+  const ms = date.getTime() - Date.now();
+  return Math.max(0, Math.ceil(ms / (1000 * 60 * 60 * 24)));
+}
+
 const REASON_COPY = {
   canceled: {
     title: "Your subscription was canceled",
@@ -70,10 +76,27 @@ export default async function BillingPage() {
   const copy = REASON_COPY[reason];
   const subscribable = pricingTiers.filter((t) => t.cta.kind === "signup");
 
+  const trialDaysLeft =
+    reason === "trialing" ? daysUntil(tenant.trialEndsAt) : null;
+  const trialEndsAtLabel =
+    reason === "trialing" && tenant.trialEndsAt
+      ? tenant.trialEndsAt.toLocaleDateString(undefined, {
+          day: "numeric",
+          month: "long",
+          year: "numeric",
+        })
+      : null;
+
   return (
     <div className="mx-auto max-w-4xl px-4 py-10">
       <div className="mb-8">
         <h1 className="text-2xl font-semibold tracking-tight">{copy.title}</h1>
+        {trialDaysLeft !== null && (
+          <p className="mt-1 text-sm font-medium text-[color:var(--foreground)]">
+            {trialDaysLeft} {trialDaysLeft === 1 ? "day" : "days"} remaining
+            {trialEndsAtLabel ? ` — until ${trialEndsAtLabel}` : ""}
+          </p>
+        )}
         <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">{copy.body}</p>
         {platformAdmin && level !== "full" && (
           <p className="mt-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900">
