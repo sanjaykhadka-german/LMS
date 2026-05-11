@@ -3,6 +3,7 @@ import { and, asc, desc, eq } from "drizzle-orm";
 import { lmsUsers, lmsWhsRecords } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
+import { ensureSystemKinds, listWhsKinds } from "~/lib/lms/whs-kinds";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
@@ -11,13 +12,6 @@ import { WhsReminderButton } from "../_components/ReminderButtons";
 import { deleteWhsRecordAction } from "./actions";
 
 export const metadata = { title: "WHS register" };
-
-const KIND_LABELS: Record<string, string> = {
-  high_risk_licence: "High-risk licence",
-  fire_warden: "Fire warden",
-  first_aider: "First aider",
-  incident: "Incident",
-};
 
 const SEVERITY_VARIANT: Record<string, "secondary" | "warning" | "destructive"> = {
   low: "secondary",
@@ -34,10 +28,13 @@ export default async function WhsPage({
   const sp = await searchParams;
   const ctx = await requireAdmin();
   const tid = ctx.traceyTenantId;
+  await ensureSystemKinds({ db: ctx.db, traceyTenantId: tid });
 
-  const baseFilter = sp.kind && KIND_LABELS[sp.kind]
-    ? eq(lmsWhsRecords.kind, sp.kind)
-    : undefined;
+  const kindRows = await listWhsKinds({ db: ctx.db, traceyTenantId: tid });
+  const kindBySlug = new Map(kindRows.map((k) => [k.slug, k]));
+
+  const baseFilter =
+    sp.kind && kindBySlug.has(sp.kind) ? eq(lmsWhsRecords.kind, sp.kind) : undefined;
 
   const records = await ctx.db.run((tx) =>
     tx
@@ -49,6 +46,7 @@ export default async function WhsPage({
         expiresOn: lmsWhsRecords.expiresOn,
         severity: lmsWhsRecords.severity,
         incidentDate: lmsWhsRecords.incidentDate,
+        documentFilename: lmsWhsRecords.documentFilename,
         userName: lmsUsers.name,
       })
       .from(lmsWhsRecords)
@@ -73,6 +71,9 @@ export default async function WhsPage({
         </div>
         <div className="flex items-center gap-2">
           <WhsReminderButton />
+          <Button asChild variant="outline">
+            <Link href="/app/admin/whs/kinds">Manage kinds</Link>
+          </Button>
           <Button asChild>
             <Link href="/app/admin/whs/new">Add record</Link>
           </Button>
@@ -95,8 +96,8 @@ export default async function WhsPage({
 
       <nav className="flex flex-wrap gap-2 text-xs">
         <KindLink current={sp.kind} kind={null} label="All" />
-        {Object.entries(KIND_LABELS).map(([k, label]) => (
-          <KindLink key={k} current={sp.kind} kind={k} label={label} />
+        {kindRows.map((k) => (
+          <KindLink key={k.slug} current={sp.kind} kind={k.slug} label={k.label} />
         ))}
       </nav>
 
@@ -114,18 +115,21 @@ export default async function WhsPage({
                   <th className="px-3 py-2">Person</th>
                   <th className="px-3 py-2">Expires</th>
                   <th className="px-3 py-2">Severity</th>
+                  <th className="px-3 py-2">Document</th>
                   <th className="px-6 py-2 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[color:var(--border)]">
                 {records.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-6 py-6 text-center text-[color:var(--muted-foreground)]">
+                    <td colSpan={7} className="px-6 py-6 text-center text-[color:var(--muted-foreground)]">
                       No WHS records yet.
                     </td>
                   </tr>
                 ) : (
                   records.map((r) => {
+                    const kind = kindBySlug.get(r.kind);
+                    const isIncident = kind?.category === "incident";
                     const exp = r.expiresOn ? new Date(r.expiresOn) : null;
                     const expSoon = exp && exp.getTime() < today.getTime() + soonMs;
                     const expired = exp && exp.getTime() < today.getTime();
@@ -136,10 +140,10 @@ export default async function WhsPage({
                             {r.title}
                           </Link>
                         </td>
-                        <td className="px-3 py-3 align-middle">{KIND_LABELS[r.kind] ?? r.kind}</td>
+                        <td className="px-3 py-3 align-middle">{kind?.label ?? r.kind}</td>
                         <td className="px-3 py-3 align-middle">{r.userName ?? "—"}</td>
                         <td className="px-3 py-3 align-middle">
-                          {r.expiresOn ?? (r.kind === "incident" ? "—" : "")}
+                          {r.expiresOn ?? (isIncident ? "—" : "")}
                           {expired && <Badge className="ml-2" variant="destructive">Expired</Badge>}
                           {!expired && expSoon && <Badge className="ml-2" variant="warning">Soon</Badge>}
                         </td>
@@ -148,6 +152,20 @@ export default async function WhsPage({
                             <Badge variant={SEVERITY_VARIANT[r.severity] ?? "secondary"}>
                               {r.severity}
                             </Badge>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                        <td className="px-3 py-3 align-middle">
+                          {r.documentFilename ? (
+                            <a
+                              href={`/uploads/${r.documentFilename}`}
+                              className="underline"
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              View
+                            </a>
                           ) : (
                             "—"
                           )}
@@ -201,4 +219,3 @@ function KindLink({
     </Link>
   );
 }
-

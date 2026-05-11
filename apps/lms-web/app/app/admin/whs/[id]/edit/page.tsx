@@ -4,6 +4,7 @@ import { and, asc, eq } from "drizzle-orm";
 import { lmsUsers, lmsWhsRecords } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
+import { ensureSystemKinds, listWhsKinds } from "~/lib/lms/whs-kinds";
 import { WhsForm } from "../../_form";
 import { updateWhsRecordAction } from "../../actions";
 
@@ -23,8 +24,9 @@ export default async function EditWhsRecordPage({
 
   const ctx = await requireAdmin();
   const tid = ctx.traceyTenantId;
+  await ensureSystemKinds({ db: ctx.db, traceyTenantId: tid });
 
-  const [[record], staff] = await Promise.all([
+  const [[record], staff, kindRows] = await Promise.all([
     ctx.db.run((tx) =>
       tx
         .select()
@@ -39,15 +41,19 @@ export default async function EditWhsRecordPage({
         .where(eq(lmsUsers.traceyTenantId, tid))
         .orderBy(asc(lmsUsers.name)),
     ),
+    listWhsKinds({ db: ctx.db, traceyTenantId: tid }),
   ]);
   if (!record) notFound();
+  const kinds = kindRows.map((k) => ({ slug: k.slug, label: k.label, category: k.category }));
 
   const banner =
     sp.error === "date"
       ? "Date format wrong. Use YYYY-MM-DD."
       : sp.error === "invalid"
         ? "Some required fields are missing or invalid."
-        : undefined;
+        : sp.error === "upload"
+          ? "Couldn't save the attached document. Check file type and size (max 10 MB)."
+          : undefined;
 
   return (
     <div className="space-y-4">
@@ -57,6 +63,7 @@ export default async function EditWhsRecordPage({
       <WhsForm
         action={updateWhsRecordAction}
         staff={staff}
+        kinds={kinds}
         errorBanner={banner}
         record={{
           id: record.id,
@@ -69,6 +76,7 @@ export default async function EditWhsRecordPage({
           incidentDate: record.incidentDate,
           severity: record.severity,
           reportedById: record.reportedById,
+          documentFilename: record.documentFilename,
         }}
       />
     </div>

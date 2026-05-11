@@ -43,6 +43,7 @@ export const LMS_TABLES_WITH_ID = [
   "attempts",
   "audit_logs",
   "whs_records",
+  "whs_kinds",
   "department_module_policies",
 ] as const;
 

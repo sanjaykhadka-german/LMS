@@ -223,6 +223,21 @@ export const lmsWhsRecords = pgTable("whs_records", {
   traceyTenantId: text("tracey_tenant_id").notNull(),
 });
 
+// Per-tenant taxonomy for WHS record kinds. Slug stays as the value written
+// into whs_records.kind (text, no FK) so historic records survive deletion of
+// their kind. `category` drives the form's conditional fields (expiry vs
+// incident block); `is_system` marks the four seeded rows that can't be
+// deleted by admins.
+export const lmsWhsKinds = pgTable("whs_kinds", {
+  id: integer("id").generatedByDefaultAsIdentity().primaryKey(),
+  slug: text("slug").notNull(),
+  label: text("label").notNull(),
+  category: text("category").notNull(),
+  isSystem: boolean("is_system").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  traceyTenantId: text("tracey_tenant_id").notNull(),
+});
+
 export const lmsAuditLogs = pgTable("audit_logs", {
   id: integer("id").generatedByDefaultAsIdentity().primaryKey(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -256,6 +271,8 @@ export type LmsEmployer = typeof lmsEmployers.$inferSelect;
 export type LmsMachine = typeof lmsMachines.$inferSelect;
 export type LmsWhsRecord = typeof lmsWhsRecords.$inferSelect;
 export type NewLmsWhsRecord = typeof lmsWhsRecords.$inferInsert;
+export type LmsWhsKind = typeof lmsWhsKinds.$inferSelect;
+export type NewLmsWhsKind = typeof lmsWhsKinds.$inferInsert;
 export type LmsAuditLog = typeof lmsAuditLogs.$inferSelect;
 export type LmsPosition = typeof lmsPositions.$inferSelect;
 export type LmsModule = typeof lmsModules.$inferSelect;

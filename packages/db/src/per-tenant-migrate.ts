@@ -131,6 +131,12 @@ async function main() {
           await tx.execute(
             drizzleSql.raw(`SET LOCAL search_path = "${schema}", public`),
           );
+          // Set app.tenant_id so any INSERT/UPDATE inside the migration
+          // satisfies the tenant_isolation RLS policy and so the same
+          // SQL can derive tracey_tenant_id via current_setting().
+          await tx.execute(
+            drizzleSql`SELECT set_config('app.tenant_id', ${tenant.id}, true)`,
+          );
           await tx.execute(drizzleSql.raw(m.sql));
           await tx.execute(
             drizzleSql`INSERT INTO app.tenant_migrations (tenant_id, migration_name) VALUES (${tenant.id}, ${m.name}) ON CONFLICT DO NOTHING`,
