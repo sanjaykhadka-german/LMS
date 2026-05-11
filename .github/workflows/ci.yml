@@ -102,13 +102,15 @@ jobs:
       #      (does NOT touch public.lms_* — those tables are owned by the
       #      committed pg_dump fixture, see Phase 5 retirement).
       #   2. LMS schema fixture seeds public.lms_*.
-      #   3. Manual migration 0004_ai_studio_sessions creates app.ai_studio_sessions
+      #   3. 0005_whs_kinds_public adds the public.whs_kinds LIKE-template
+      #      (post-dates the pg_dump fixture, so applied separately here).
+      #   4. Manual migration 0004_ai_studio_sessions creates app.ai_studio_sessions
       #      (intentionally stripped from Drizzle's 0004_brown_wasp per the
       #      snapshot-gotcha comment in that file).
-      #   4. 0006 creates app.tenant_migrations ledger.
-      #   5. 0004_enable_rls enables RLS on public.lms_* + ai_studio_sessions.
-      #   6. 0009 enables RLS on app.notifications (table created by Drizzle 0005).
-      #   7. Test RLS role for the per-tenant-rls regression.
+      #   5. 0006 creates app.tenant_migrations ledger.
+      #   6. 0004_enable_rls enables RLS on public.lms_* + ai_studio_sessions.
+      #   7. 0009 enables RLS on app.notifications (table created by Drizzle 0005).
+      #   8. Test RLS role for the per-tenant-rls regression.
       - name: DB setup (migrations + RLS + test role)
         run: |
           set -euo pipefail
@@ -117,6 +119,9 @@ jobs:
           echo '::endgroup::'
           echo '::group::Apply LMS schema fixture (public.lms_*)'
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/db/fixtures/lms-public-schema.sql
+          echo '::endgroup::'
+          echo '::group::Apply manual migration: whs_kinds LIKE-template'
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/db/migrations/manual/0005_whs_kinds_public.sql
           echo '::endgroup::'
           echo '::group::Apply manual migration: ai_studio_sessions'
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/db/migrations/manual/0004_ai_studio_sessions.sql
