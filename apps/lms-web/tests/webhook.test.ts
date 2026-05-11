@@ -177,6 +177,24 @@ describe("handleStripeEvent — customer.subscription.updated", () => {
     expect(t!.currentPeriodEnd).toEqual(new Date(trialEndSec * 1000));
   });
 
+  it("extracts customer ID from an expanded Customer object (Stripe API 2026-04-22.preview)", async () => {
+    // Stripe API 2026-04-22.preview ships sub.customer as the expanded
+    // Customer object on webhook payloads in some scenarios. The handler
+    // must read the id off the object, not silently null it out.
+    const event = subscriptionEvent("customer.subscription.updated");
+    // Mutate the constructed event to swap the bare-string customer for an
+    // expanded object. Keep the id matching the seed tenant so the WHERE
+    // clause still finds the row.
+    (event.data.object as unknown as { customer: unknown }).customer = {
+      id: "cus_123",
+      object: "customer",
+      email: "test@example.com",
+    };
+    const result = await handleStripeEvent(event);
+    expect(result.status).toBe("processed");
+    expect(getTenant("tenant-1")!.plan).toBe("pro");
+  });
+
   it("syncs trialEndsAt from sub.trial_end so the local field tracks Stripe", async () => {
     const trialEndSec = 1736899200; // 2025-01-15
     const event = subscriptionEvent("customer.subscription.updated", {
@@ -274,6 +292,38 @@ describe("handleStripeEvent — checkout.session.completed", () => {
     const t = getTenant("tenant-2");
     expect(t!.stripeCustomerId).toBe("cus_456");
     expect(t!.stripeSubscriptionId).toBe("sub_456");
+    expect(t!.status).toBe("active");
+  });
+
+  it("extracts customer/subscription IDs from expanded objects (API 2026-04-22.preview)", async () => {
+    // Stripe API 2026-04-22.preview ships session.customer + .subscription
+    // as expanded objects rather than bare strings. The handler must pull
+    // .id off the object instead of treating it as null.
+    const event = {
+      id: "evt_checkout_expanded_1",
+      type: "checkout.session.completed",
+      object: "event",
+      api_version: "2026-04-22.preview",
+      created: 0,
+      livemode: false,
+      pending_webhooks: 0,
+      request: { id: null, idempotency_key: null },
+      data: {
+        object: {
+          id: "cs_expanded",
+          object: "checkout.session",
+          client_reference_id: "tenant-2",
+          customer: { id: "cus_exp_999", object: "customer" },
+          subscription: { id: "sub_exp_999", object: "subscription" },
+        },
+      },
+    } as unknown as Stripe.Event;
+
+    const result = await handleStripeEvent(event);
+    expect(result.status).toBe("processed");
+    const t = getTenant("tenant-2");
+    expect(t!.stripeCustomerId).toBe("cus_exp_999");
+    expect(t!.stripeSubscriptionId).toBe("sub_exp_999");
     expect(t!.status).toBe("active");
   });
 });

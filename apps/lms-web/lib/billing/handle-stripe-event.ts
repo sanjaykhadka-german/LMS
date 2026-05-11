@@ -16,6 +16,28 @@ export interface HandleResult {
   type: string;
 }
 
+// Normalises a Stripe reference field (e.g. session.customer, sub.customer,
+// invoice.customer, session.subscription) to its bare ID. Stripe webhook
+// payloads can deliver these as either the bare ID string OR the expanded
+// object — the API version determines which, and `2026-04-22.preview` ships
+// them expanded on Checkout.Session in particular. A strict
+// `typeof === "string"` check silently drops the expanded shape and writes
+// nulls into the DB, so do this once for every Stripe reference read.
+function idOf(
+  ref: string | { id?: unknown } | null | undefined,
+): string | null {
+  if (typeof ref === "string") return ref;
+  if (
+    ref &&
+    typeof ref === "object" &&
+    "id" in ref &&
+    typeof ref.id === "string"
+  ) {
+    return ref.id;
+  }
+  return null;
+}
+
 /**
  * Apply a verified Stripe webhook event to the tenant table.
  *
@@ -43,10 +65,8 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<HandleResu
       await db
         .update(tenants)
         .set({
-          stripeCustomerId:
-            typeof session.customer === "string" ? session.customer : null,
-          stripeSubscriptionId:
-            typeof session.subscription === "string" ? session.subscription : null,
+          stripeCustomerId: idOf(session.customer),
+          stripeSubscriptionId: idOf(session.subscription),
           status: "active",
           updatedAt: new Date(),
         })
@@ -64,7 +84,7 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<HandleResu
     case "customer.subscription.created":
     case "customer.subscription.updated": {
       const sub = event.data.object as Stripe.Subscription;
-      const customerId = typeof sub.customer === "string" ? sub.customer : null;
+      const customerId = idOf(sub.customer);
       if (!customerId) return { status: "missing_tenant", type: event.type };
       const item = sub.items.data[0];
       const plan = planFromPrice(item?.price);
@@ -132,7 +152,7 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<HandleResu
 
     case "customer.subscription.deleted": {
       const sub = event.data.object as Stripe.Subscription;
-      const customerId = typeof sub.customer === "string" ? sub.customer : null;
+      const customerId = idOf(sub.customer);
       if (!customerId) return { status: "missing_tenant", type: event.type };
       const canceledAt = sub.canceled_at
         ? new Date(sub.canceled_at * 1000)
@@ -162,7 +182,7 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<HandleResu
 
     case "invoice.paid": {
       const invoice = event.data.object as Stripe.Invoice;
-      const customerId = typeof invoice.customer === "string" ? invoice.customer : null;
+      const customerId = idOf(invoice.customer);
       if (!customerId) return { status: "missing_tenant", type: event.type };
       const result = await db
         .update(tenants)
@@ -184,7 +204,7 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<HandleResu
 
     case "invoice.payment_failed": {
       const invoice = event.data.object as Stripe.Invoice;
-      const customerId = typeof invoice.customer === "string" ? invoice.customer : null;
+      const customerId = idOf(invoice.customer);
       if (!customerId) return { status: "missing_tenant", type: event.type };
       const result = await db
         .update(tenants)
