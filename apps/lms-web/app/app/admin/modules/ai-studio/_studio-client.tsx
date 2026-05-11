@@ -646,14 +646,6 @@ function ModulePreview({ json }: { json: string }) {
           </ol>
         </div>
       )}
-      <details>
-        <summary className="cursor-pointer text-xs text-[color:var(--muted-foreground)]">
-          Show raw JSON
-        </summary>
-        <pre className="mt-2 max-h-[280px] overflow-auto rounded-md border border-[color:var(--border)] bg-[color:var(--secondary)]/30 p-2 text-xs">
-          {json}
-        </pre>
-      </details>
     </div>
   );
 }
