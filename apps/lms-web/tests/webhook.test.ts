@@ -30,6 +30,7 @@ function subscriptionEvent(
     seats: number;
     cancelAtPeriodEnd: boolean;
     canceledAt: number | null;
+    trialEnd: number | null;
   }> = {},
 ): Stripe.Event {
   const {
@@ -42,6 +43,7 @@ function subscriptionEvent(
     seats = 5,
     cancelAtPeriodEnd = false,
     canceledAt = null,
+    trialEnd = null,
   } = overrides;
   return {
     id,
@@ -61,6 +63,7 @@ function subscriptionEvent(
         current_period_end: currentPeriodEnd,
         cancel_at_period_end: cancelAtPeriodEnd,
         canceled_at: canceledAt,
+        trial_end: trialEnd,
         items: {
           object: "list",
           data: [
@@ -134,6 +137,17 @@ describe("handleStripeEvent — customer.subscription.updated", () => {
     const t = getTenant("tenant-1") as { cancelAtPeriodEnd?: boolean; canceledAt?: Date };
     expect(t.cancelAtPeriodEnd).toBe(true);
     expect(t.canceledAt).toEqual(new Date(canceledAtSec * 1000));
+  });
+
+  it("syncs trialEndsAt from sub.trial_end so the local field tracks Stripe", async () => {
+    const trialEndSec = 1736899200; // 2025-01-15
+    const event = subscriptionEvent("customer.subscription.updated", {
+      status: "trialing",
+      trialEnd: trialEndSec,
+    });
+    await handleStripeEvent(event);
+    const t = getTenant("tenant-1") as { trialEndsAt?: Date };
+    expect(t.trialEndsAt).toEqual(new Date(trialEndSec * 1000));
   });
 
   it("clears cancel_at_period_end when subscription resumes", async () => {

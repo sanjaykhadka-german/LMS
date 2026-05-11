@@ -75,6 +75,14 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<HandleResu
       // can warn before the grace window expires.
       const cancelAtPeriodEnd = Boolean(sub.cancel_at_period_end);
       const canceledAt = sub.canceled_at ? new Date(sub.canceled_at * 1000) : null;
+      // Keep our trialEndsAt in lockstep with whatever Stripe is actually
+      // enforcing. Without this, the local field would still point at the
+      // original signup-trial deadline even after Subscribe was clicked, and
+      // /app/billing would falsely render "Your free trial ended" while the
+      // Stripe-side trial was still running. If Stripe has no trial_end on
+      // the subscription, we leave the existing value alone — Stripe keeps
+      // trial_end set after expiry, so once we sync we stay in sync.
+      const trialEndsAt = sub.trial_end ? new Date(sub.trial_end * 1000) : null;
       const result = await db
         .update(tenants)
         .set({
@@ -85,6 +93,7 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<HandleResu
           cancelAtPeriodEnd,
           canceledAt,
           seatsPurchased: seats,
+          ...(trialEndsAt ? { trialEndsAt } : {}),
           updatedAt: new Date(),
         })
         .where(eq(tenants.stripeCustomerId, customerId))

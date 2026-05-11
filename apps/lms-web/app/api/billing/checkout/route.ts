@@ -1,8 +1,26 @@
 import { NextResponse, type NextRequest } from "next/server";
+import type { Tenant } from "@tracey/db";
 import { currentUser, currentTenant } from "~/lib/auth/current";
 import { stripe } from "~/lib/stripe";
 import { siteConfig, priceIdFor, type Billing } from "~/lib/site-config";
 import type { Plan } from "@tracey/types";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+// Stripe's hard cap on trial_period_days. We'll never approach this with a
+// 14-day product trial, but clamp anyway so a corrupt trialEndsAt can't
+// produce an API error from Stripe.
+const STRIPE_MAX_TRIAL_DAYS = 730;
+
+// Days left of the tenant's existing trial, to pass to Stripe so we don't
+// gift a second trial on top. Returns 0 for non-trialing tenants (they get
+// charged immediately) or tenants whose trial has already expired.
+function remainingTrialDays(tenant: Tenant): number {
+  if (tenant.status !== "trialing") return 0;
+  if (!tenant.trialEndsAt) return 0;
+  const ms = tenant.trialEndsAt.getTime() - Date.now();
+  const days = Math.ceil(ms / DAY_MS);
+  return Math.max(0, Math.min(STRIPE_MAX_TRIAL_DAYS, days));
+}
 
 export async function POST(req: NextRequest) {
   const user = await currentUser();
@@ -33,6 +51,7 @@ export async function POST(req: NextRequest) {
   }
 
   const customerEmail = user.email;
+  const trialDays = remainingTrialDays(tenant);
 
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
@@ -41,7 +60,7 @@ export async function POST(req: NextRequest) {
     customer: tenant.stripeCustomerId ?? undefined,
     customer_email: tenant.stripeCustomerId ? undefined : customerEmail,
     subscription_data: {
-      trial_period_days: siteConfig.trialDays,
+      ...(trialDays > 0 ? { trial_period_days: trialDays } : {}),
       metadata: { tenant_id: tenant.id, plan, billing },
     },
     allow_promotion_codes: true,
