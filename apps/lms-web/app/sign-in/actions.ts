@@ -49,6 +49,13 @@ export async function signInAction(
             "Please verify your email before signing in. Check your inbox for the verification link.",
         };
       }
+      if (cause === "AccountDeactivated") {
+        return {
+          status: "error",
+          message:
+            "This account has been deactivated. Contact your administrator to restore access.",
+        };
+      }
       if (err.type === "CredentialsSignin") {
         return { status: "error", message: "Wrong email or password." };
       }

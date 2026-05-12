@@ -4,9 +4,10 @@
 
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { db, users } from "@tracey/db";
+import { db, lmsUsers, users } from "@tracey/db";
 import { verifyPassword } from "./passwords";
 import { tryLegacyAuth } from "./legacy-bridge";
+import { isEffectivelyActive } from "~/lib/lms/employee-status";
 
 const credentialsSchema = z.object({
   email: z.string().trim().toLowerCase().email(),
@@ -53,6 +54,21 @@ export async function authorizeCredentials(raw: unknown): Promise<AuthorizedUser
     }
     const bcryptOk = await verifyPassword(password, user.passwordHash);
     if (bcryptOk) {
+      // Block sign-in if every linked employee row is deactivated/terminated.
+      // Per-tenant gates (requireLearner/requireAdmin) already kick deactivated
+      // users out of protected pages, but failing at auth-time gives a clear
+      // message instead of a redirect-loop. If the user has no lmsUsers rows
+      // (pure Tracey-only signup), nothing to gate on — let them through.
+      const lmsRows = await db
+        .select({
+          isActiveFlag: lmsUsers.isActiveFlag,
+          terminationDate: lmsUsers.terminationDate,
+        })
+        .from(lmsUsers)
+        .where(eq(lmsUsers.traceyUserId, user.id));
+      if (lmsRows.length > 0 && !lmsRows.some(isEffectivelyActive)) {
+        throw new Error("AccountDeactivated");
+      }
       return {
         id: user.id,
         name: user.name ?? null,

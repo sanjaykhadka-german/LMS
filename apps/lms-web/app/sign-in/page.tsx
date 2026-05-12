@@ -6,12 +6,12 @@ import { SignInForm } from "./_form";
 export default async function SignInPage({
   searchParams,
 }: {
-  searchParams: Promise<{ email?: string; returnTo?: string }>;
+  searchParams: Promise<{ email?: string; returnTo?: string; reason?: string }>;
 }) {
   const session = await auth();
   if (session?.user) redirect("/app");
 
-  const { email, returnTo } = await searchParams;
+  const { email, returnTo, reason } = await searchParams;
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4 py-12">
@@ -22,6 +22,11 @@ export default async function SignInPage({
             Welcome back to Tracey.
           </p>
         </div>
+        {reason === "deactivated" && (
+          <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
+            Your account has been deactivated. Contact your administrator to restore access.
+          </div>
+        )}
         <SignInForm prefilledEmail={email} returnTo={returnTo} />
         <p className="text-center text-sm text-[color:var(--muted-foreground)]">
           New here?{" "}
