@@ -370,9 +370,9 @@ export async function resetEmployeePasswordAction(formData: FormData): Promise<v
   // bridge will provision app.users with this new hash on first login.
   // passwordChangedAt bumps so any existing JWT for this user gets
   // revoked the next time it hits requireUser().
-  // allow-cross-tenant: app.users is uuid-keyed, not RLS-covered.
   if (target.traceyUserId) {
     const now = new Date();
+    // allow-cross-tenant: app.users is uuid-keyed, not RLS-covered.
     await db
       .update(users)
       .set({ passwordHash: hash, passwordChangedAt: now, updatedAt: now })

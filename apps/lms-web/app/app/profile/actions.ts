@@ -157,10 +157,10 @@ export async function changePasswordAction(
   }
 
   const hash = await hashPassword(data.next);
-  // allow-cross-tenant: Tracey app.users; updating the caller's own row by uuid.
   // passwordChangedAt bumps so JWTs minted before this change get revoked
   // at the next requireUser() call.
   const now = new Date();
+  // allow-cross-tenant: Tracey app.users; updating the caller's own row by uuid.
   await db
     .update(users)
     .set({ passwordHash: hash, passwordChangedAt: now, updatedAt: now })
