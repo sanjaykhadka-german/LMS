@@ -7,6 +7,7 @@ import { ensureSystemKinds, listWhsKinds } from "~/lib/lms/whs-kinds";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import { HelpPopover } from "~/components/ui/help-popover";
 import { DeleteRowForm } from "../_components/DeleteRowForm";
 import { WhsReminderButton } from "../_components/ReminderButtons";
 import { deleteWhsRecordAction } from "./actions";
@@ -64,7 +65,17 @@ export default async function WhsPage({
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">WHS register</h1>
+          <h1 className="flex items-center gap-1.5 text-2xl font-semibold tracking-tight">
+            WHS register
+            <HelpPopover label="About the WHS register">
+              Work Health &amp; Safety records — high-risk licences (forklift,
+              first-aid certificates), nominated fire wardens / first aiders,
+              and incident reports. Each record belongs to a <em>kind</em>{" "}
+              (manage them via the button on the right). Expiry-style records
+              get an expiry date and trigger reminder emails; incident-style
+              records get a severity and reporter field.
+            </HelpPopover>
+          </h1>
           <p className="text-sm text-[color:var(--muted-foreground)]">
             High-risk licences, fire wardens, first aiders, and incident reports.
           </p>

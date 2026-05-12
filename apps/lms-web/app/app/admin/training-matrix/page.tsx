@@ -15,6 +15,7 @@ import {
 } from "~/lib/lms/dashboard";
 import { formatDate } from "~/lib/format/datetime";
 import { Button } from "~/components/ui/button";
+import { HelpPopover } from "~/components/ui/help-popover";
 
 export const metadata = { title: "Training matrix" };
 
@@ -119,8 +120,15 @@ export default async function TrainingMatrixPage({
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
+          <h1 className="flex items-center gap-1.5 text-2xl font-semibold tracking-tight">
             Training matrix
+            <HelpPopover label="About the training matrix">
+              A grid of every active employee × every published module. Each
+              cell shows the latest result: <strong>✓</strong> = passed (with
+              date), <strong>✗</strong> = failed, <strong>•</strong> =
+              assigned but not yet attempted, blank = not assigned. Use the
+              filters above to narrow by department, single module, or name.
+            </HelpPopover>
           </h1>
           <p className="text-sm text-[color:var(--muted-foreground)]">
             Pass / fail status for every active employee across every published

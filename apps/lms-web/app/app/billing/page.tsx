@@ -14,6 +14,7 @@ import {
   CardHeader,
   CardTitle,
 } from "~/components/ui/card";
+import { HelpPopover } from "~/components/ui/help-popover";
 import { pricingTiers, formatPrice } from "~/lib/site-config";
 
 function daysUntil(date: Date | null): number | null {
@@ -94,9 +95,13 @@ export default async function BillingPage() {
       <div className="mb-8">
         <h1 className="text-2xl font-semibold tracking-tight">{copy.title}</h1>
         {trialDaysLeft !== null && (
-          <p className="mt-1 text-sm font-medium text-[color:var(--foreground)]">
+          <p className="mt-1 inline-flex items-center gap-1.5 text-sm font-medium text-[color:var(--foreground)]">
             {trialDaysLeft} {trialDaysLeft === 1 ? "day" : "days"} remaining
             {trialEndsAtLabel ? ` — until ${trialEndsAtLabel}` : ""}
+            <HelpPopover label="About the trial">
+              After the trial ends you&apos;ll be asked to choose a plan and add
+              a card. We never auto-charge — you have to subscribe yourself.
+            </HelpPopover>
           </p>
         )}
         <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">{copy.body}</p>
@@ -111,7 +116,15 @@ export default async function BillingPage() {
       {tenant.stripeCustomerId && (
         <Card className="mb-6">
           <CardHeader>
-            <CardTitle className="text-lg">Stripe billing portal</CardTitle>
+            <CardTitle className="flex items-center gap-1.5 text-lg">
+              Stripe billing portal
+              <HelpPopover label="About the billing portal">
+                Click <strong>Open billing portal</strong> to see and download
+                your invoices, change your card, switch plan, or cancel. We
+                use Stripe to host the portal — your card details never touch
+                our servers.
+              </HelpPopover>
+            </CardTitle>
             <CardDescription>
               Update card, view invoices, change plan, or cancel.
             </CardDescription>
@@ -137,7 +150,14 @@ export default async function BillingPage() {
             return (
               <Card key={tier.id}>
                 <CardHeader>
-                  <CardTitle className="text-lg">{tier.name}</CardTitle>
+                  <CardTitle className="flex items-center gap-1.5 text-lg">
+                    {tier.name}
+                    <HelpPopover label="About this plan">
+                      Annual billing saves 20% — you pay once, no monthly
+                      invoices. Either plan can be cancelled any time from the
+                      billing portal after subscribing.
+                    </HelpPopover>
+                  </CardTitle>
                   <CardDescription>{tier.description}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm">

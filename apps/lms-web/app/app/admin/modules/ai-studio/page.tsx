@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { BackLink } from "~/components/ui/back-link";
+import { HelpPopover } from "~/components/ui/help-popover";
 import { Sparkles } from "lucide-react";
 import { requireAdmin } from "~/lib/auth/admin";
 import { getClaudeApiKey, splitReplyAndJson } from "~/lib/ai/claude";
@@ -69,7 +70,16 @@ export default async function AiStudioPage({
       <div className="flex items-center gap-3">
         <Sparkles className="h-7 w-7 text-amber-500" aria-hidden />
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">AI Studio</h1>
+          <h1 className="flex items-center gap-1.5 text-2xl font-semibold tracking-tight">
+            AI Studio
+            <HelpPopover label="About AI Studio">
+              Upload an SOP, SQF policy, or any reference doc (PDF, DOCX, TXT),
+              then chat with Claude to draft a full module — content sections
+              and a quiz — without writing it from scratch. Review the draft on
+              this page, then save it; the result becomes a normal draft module
+              you can edit and publish like any other.
+            </HelpPopover>
+          </h1>
           <p className="text-sm text-[color:var(--muted-foreground)]">
             Upload an SOP / SQF document and have Claude draft a training module
             and quiz from it.

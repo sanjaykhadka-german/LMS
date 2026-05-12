@@ -6,6 +6,7 @@ import { tenantWhere } from "~/lib/lms/tenant-scope";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
+import { HelpPopover } from "~/components/ui/help-popover";
 import { NameCrudForm } from "../_components/NameCrudForm";
 import { DeleteRowForm } from "../_components/DeleteRowForm";
 import { createModuleAction, deleteModuleAction } from "./actions";
@@ -89,7 +90,16 @@ export default async function ModulesPage() {
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Modules</h1>
+          <h1 className="flex items-center gap-1.5 text-2xl font-semibold tracking-tight">
+            Modules
+            <HelpPopover label="About modules">
+              A <strong>module</strong> is one unit of training — e.g. &quot;Knife
+              safety basics&quot; — with content sections and an optional quiz.
+              Create one here, then either assign it manually to specific staff
+              or auto-assign it via department policy. New modules start as
+              <em> drafts</em>; publish from the edit page when ready.
+            </HelpPopover>
+          </h1>
           <p className="text-sm text-[color:var(--muted-foreground)]">
             The training units staff complete. Each module has content sections, an
             optional quiz, and can be assigned to specific staff or auto-assigned

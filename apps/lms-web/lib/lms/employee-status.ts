@@ -1,5 +1,3 @@
-import "server-only";
-
 export interface ActiveCheckUser {
   isActiveFlag: boolean | null;
   terminationDate: string | null;

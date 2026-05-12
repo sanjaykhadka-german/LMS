@@ -1,17 +1,19 @@
-import Link from "next/link";
-import { asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import {
   lmsAssignments,
+  lmsDepartments,
   lmsModules,
   lmsUsers,
 } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
-import { formatDate, formatDateTime } from "~/lib/format/datetime";
+import { formatDateTime } from "~/lib/format/datetime";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
 import { Badge } from "~/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
-import { DeleteRowForm } from "../_components/DeleteRowForm";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
+import { HelpPopover } from "~/components/ui/help-popover";
 import { deleteAssignmentAction } from "./actions";
+import { bulkAssignModuleAction } from "../modules/[id]/assign/actions";
+import { AssignmentsTable, BulkAssign } from "./_filtered";
 
 export const metadata = { title: "Assignments" };
 
@@ -19,7 +21,7 @@ export default async function AssignmentsPage() {
   const ctx = await requireAdmin();
   const tid = ctx.traceyTenantId;
 
-  const [rows, recent] = await Promise.all([
+  const [rows, recent, employees, modulesList] = await Promise.all([
     ctx.db.run((tx) =>
       tx
         .select({
@@ -32,10 +34,12 @@ export default async function AssignmentsPage() {
           assignedAt: lmsAssignments.assignedAt,
           dueAt: lmsAssignments.dueAt,
           completedAt: lmsAssignments.completedAt,
+          departmentName: lmsDepartments.name,
         })
         .from(lmsAssignments)
         .innerJoin(lmsModules, eq(lmsModules.id, lmsAssignments.moduleId))
         .innerJoin(lmsUsers, eq(lmsUsers.id, lmsAssignments.userId))
+        .leftJoin(lmsDepartments, eq(lmsDepartments.id, lmsUsers.departmentId))
         .where(tenantWhere(lmsAssignments, tid))
         .orderBy(asc(lmsModules.title), asc(lmsUsers.name)),
     ),
@@ -54,7 +58,38 @@ export default async function AssignmentsPage() {
         .orderBy(desc(lmsAssignments.assignedAt))
         .limit(5),
     ),
+    ctx.db.run((tx) =>
+      tx
+        .select({
+          id: lmsUsers.id,
+          name: lmsUsers.name,
+          email: lmsUsers.email,
+          isActiveFlag: lmsUsers.isActiveFlag,
+          terminationDate: lmsUsers.terminationDate,
+          departmentName: lmsDepartments.name,
+        })
+        .from(lmsUsers)
+        .leftJoin(lmsDepartments, eq(lmsDepartments.id, lmsUsers.departmentId))
+        .where(eq(lmsUsers.traceyTenantId, tid))
+        .orderBy(asc(lmsUsers.name)),
+    ),
+    ctx.db.run((tx) =>
+      tx
+        .select({ id: lmsModules.id, title: lmsModules.title })
+        .from(lmsModules)
+        .where(and(eq(lmsModules.isPublished, true), tenantWhere(lmsModules, tid)))
+        .orderBy(asc(lmsModules.title)),
+    ),
   ]);
+
+  const deptOptions = Array.from(
+    new Set(
+      [
+        ...rows.map((r) => r.departmentName),
+        ...employees.map((e) => e.departmentName),
+      ].filter((d): d is string => Boolean(d)),
+    ),
+  ).sort((a, b) => a.localeCompare(b));
 
   const now = Date.now();
   const soonMs = 14 * 24 * 60 * 60 * 1000;
@@ -75,12 +110,41 @@ export default async function AssignmentsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Assignments</h1>
+        <h1 className="flex items-center gap-1.5 text-2xl font-semibold tracking-tight">
+          Assignments
+          <HelpPopover label="About assignments">
+            An <strong>assignment</strong> means a specific employee is
+            expected to complete a specific module. Assign in bulk from the
+            card below, or auto-assign via department policy. Statuses:
+            <strong> Open</strong> = not yet attempted,
+            <strong> Due ≤14d</strong> = due within two weeks,
+            <strong> Overdue</strong> = past the due date,
+            <strong> Completed</strong> = passed the quiz.
+          </HelpPopover>
+        </h1>
         <p className="text-sm text-[color:var(--muted-foreground)]">
-          Every (user, module) pair across the workspace. Use a module page to
-          bulk-assign. Use this page to spot-check status and unassign individual rows.
+          Pick a module and the staff to enrol in one go below. Use the table
+          to spot-check status and unassign individual rows.
         </p>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Bulk assign</CardTitle>
+          <CardDescription>
+            Already-assigned (user, module) pairs are silently skipped. Each
+            new recipient gets an in-app notification and a summary email.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <BulkAssign
+            employees={employees}
+            modules={modulesList}
+            departments={deptOptions}
+            bulkAssignAction={bulkAssignModuleAction}
+          />
+        </CardContent>
+      </Card>
 
       <div className="grid gap-3 sm:grid-cols-4">
         <SummaryStat label="Total" value={total} />
@@ -114,73 +178,12 @@ export default async function AssignmentsPage() {
           <CardTitle className="text-lg">All assignments ({rows.length})</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-left text-xs uppercase tracking-wider text-[color:var(--muted-foreground)]">
-                <tr>
-                  <th className="px-6 py-2">Module</th>
-                  <th className="px-3 py-2">Person</th>
-                  <th className="px-3 py-2">Assigned</th>
-                  <th className="px-3 py-2">Due</th>
-                  <th className="px-3 py-2">Status</th>
-                  <th className="px-6 py-2 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[color:var(--border)]">
-                {rows.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-6 py-6 text-center text-[color:var(--muted-foreground)]">
-                      No assignments yet — use a module page to assign training.
-                    </td>
-                  </tr>
-                ) : (
-                  rows.map((r) => {
-                    const status = r.completedAt
-                      ? "completed"
-                      : r.dueAt && r.dueAt.getTime() < now
-                        ? "overdue"
-                        : r.dueAt && r.dueAt.getTime() < now + soonMs
-                          ? "due_soon"
-                          : "open";
-                    return (
-                      <tr key={r.id}>
-                        <td className="px-6 py-3 align-middle">
-                          <Link
-                            href={`/app/admin/modules/${r.moduleId}`}
-                            className="font-medium hover:underline"
-                          >
-                            {r.moduleTitle}
-                          </Link>
-                        </td>
-                        <td className="px-3 py-3 align-middle">
-                          <div>{r.userName}</div>
-                          <div className="text-xs text-[color:var(--muted-foreground)]">{r.userEmail}</div>
-                        </td>
-                        <td className="px-3 py-3 align-middle">
-                          {r.assignedAt ? formatDate(r.assignedAt, ctx.tenantTimezone) : "—"}
-                        </td>
-                        <td className="px-3 py-3 align-middle">
-                          {r.dueAt ? formatDate(r.dueAt, ctx.tenantTimezone) : "—"}
-                        </td>
-                        <td className="px-3 py-3 align-middle">
-                          <StatusBadge status={status} />
-                        </td>
-                        <td className="px-6 py-3 align-middle text-right">
-                          <DeleteRowForm
-                            action={deleteAssignmentAction}
-                            id={r.id}
-                            label="Unassign"
-                            tooltip="Remove this training assignment from the employee"
-                            confirmMessage={`Unassign ${r.userName} from '${r.moduleTitle}'?`}
-                          />
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+          <AssignmentsTable
+            rows={rows}
+            departments={deptOptions}
+            deleteAction={deleteAssignmentAction}
+            tenantTimezone={ctx.tenantTimezone}
+          />
         </CardContent>
       </Card>
     </div>
@@ -205,11 +208,4 @@ function SummaryStat({
       </div>
     </div>
   );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  if (status === "completed") return <Badge variant="success">Completed</Badge>;
-  if (status === "overdue") return <Badge variant="destructive">Overdue</Badge>;
-  if (status === "due_soon") return <Badge variant="warning">Due soon</Badge>;
-  return <Badge variant="outline">Open</Badge>;
 }
