@@ -62,11 +62,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex min-h-screen flex-col">
       <header className="sticky top-0 z-40 w-full border-b border-[color:var(--border)] bg-[color:var(--background)]/80 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
+        <div className="mx-auto flex h-16 max-w-screen-2xl items-center justify-between px-4">
           <div className="flex items-center gap-4">
             <Link href="/app" className="flex items-center" aria-label={siteConfig.name}>
               <span
-                className="text-4xl leading-none tracking-tight"
+                className="text-[2.7rem] leading-none tracking-tight"
                 style={{ fontFamily: "var(--font-heading), ui-serif, Georgia, serif" }}
               >
                 tr<span className="text-[color:var(--primary)]">a</span>cey
