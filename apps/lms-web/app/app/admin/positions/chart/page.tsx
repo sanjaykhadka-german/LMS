@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BackLink } from "~/components/ui/back-link";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { lmsDepartments, lmsPositions, lmsUsers } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
@@ -79,12 +80,7 @@ export default async function OrgChartPage() {
 
   return (
     <div className="space-y-6">
-      <Link
-        href="/app/admin/positions"
-        className="text-sm text-[color:var(--muted-foreground)] underline"
-      >
-        ← Back to positions
-      </Link>
+      <BackLink href="/app/admin/positions">Back to positions</BackLink>
 
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Org chart</h1>

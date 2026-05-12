@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BackLink } from "~/components/ui/back-link";
 import { notFound } from "next/navigation";
 import { Button } from "~/components/ui/button";
 import {
@@ -31,12 +32,7 @@ export default async function MyModulePage({
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-4 py-10">
-      <Link
-        href="/app/my/modules"
-        className="text-sm text-[color:var(--muted-foreground)] underline"
-      >
-        ← Back to my training
-      </Link>
+      <BackLink href="/app/my/modules">Back to my training</BackLink>
 
       <header>
         <div className="text-xs font-semibold uppercase tracking-wider text-[color:var(--muted-foreground)]">
@@ -69,12 +65,7 @@ export default async function MyModulePage({
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Link
-          href="/app/my/modules"
-          className="text-sm text-[color:var(--muted-foreground)] underline"
-        >
-          ← Back to my training
-        </Link>
+        <BackLink href="/app/my/modules">Back to my training</BackLink>
         {hasQuiz ? (
           <Button asChild size="lg">
             <Link href={`/app/my/modules/${mod.id}/quiz`}>Take the quiz</Link>

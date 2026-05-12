@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BackLink } from "~/components/ui/back-link";
 import { notFound } from "next/navigation";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import {
@@ -244,12 +245,7 @@ export default async function EmployeeDetailPage({
 
   return (
     <div className="space-y-6">
-      <Link
-        href="/app/admin/employees"
-        className="text-sm text-[color:var(--muted-foreground)] underline"
-      >
-        ← Back to employees
-      </Link>
+      <BackLink href="/app/admin/employees">Back to employees</BackLink>
 
       <Card>
         <CardContent className="flex flex-col gap-6 p-6 sm:flex-row">

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BackLink } from "~/components/ui/back-link";
 import { notFound } from "next/navigation";
 import { and, asc, eq } from "drizzle-orm";
 import {
@@ -94,9 +95,7 @@ export default async function EditEmployeePage({
 
   return (
     <div className="space-y-4">
-      <Link href="/app/admin/employees" className="text-sm text-[color:var(--muted-foreground)] underline">
-        ← Back to employees
-      </Link>
+      <BackLink href="/app/admin/employees">Back to employees</BackLink>
 
       {sp.reset === "1" && sp.pw && (
         <div className="rounded-md border border-emerald-500 bg-emerald-50/50 px-4 py-3 text-sm dark:bg-emerald-900/10">

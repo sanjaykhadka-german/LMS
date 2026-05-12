@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BackLink } from "~/components/ui/back-link";
 import { notFound } from "next/navigation";
 import { and, asc, eq } from "drizzle-orm";
 import { lmsUsers, lmsWhsRecords } from "@tracey/db";
@@ -57,9 +58,7 @@ export default async function EditWhsRecordPage({
 
   return (
     <div className="space-y-4">
-      <Link href="/app/admin/whs" className="text-sm text-[color:var(--muted-foreground)] underline">
-        ← Back to register
-      </Link>
+      <BackLink href="/app/admin/whs">Back to register</BackLink>
       <WhsForm
         action={updateWhsRecordAction}
         staff={staff}

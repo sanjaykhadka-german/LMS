@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BackLink } from "~/components/ui/back-link";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
@@ -18,9 +19,7 @@ export default async function WhsKindsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <Link href="/app/admin/whs" className="text-sm text-[color:var(--muted-foreground)] underline">
-          ← Back to register
-        </Link>
+        <BackLink href="/app/admin/whs">Back to register</BackLink>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight">WHS kinds</h1>
         <p className="text-sm text-[color:var(--muted-foreground)]">
           The types of records you keep in the WHS register — licences, certifications, incident

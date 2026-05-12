@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BackLink } from "~/components/ui/back-link";
 import { notFound } from "next/navigation";
 import { and, asc, eq } from "drizzle-orm";
 import {
@@ -68,9 +69,7 @@ export default async function EditMachinePage({
 
   return (
     <div className="space-y-4">
-      <Link href="/app/admin/machines" className="text-sm text-[color:var(--muted-foreground)] underline">
-        ← Back to machines
-      </Link>
+      <BackLink href="/app/admin/machines">Back to machines</BackLink>
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Edit machine</CardTitle>

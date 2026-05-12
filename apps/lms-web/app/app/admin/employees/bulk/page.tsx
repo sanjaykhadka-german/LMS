@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BackLink } from "~/components/ui/back-link";
 import { cookies } from "next/headers";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
@@ -40,9 +41,7 @@ export default async function BulkUploadPage({
 
   return (
     <div className="space-y-6">
-      <Link href="/app/admin/employees" className="text-sm text-[color:var(--muted-foreground)] underline">
-        ← Back to employees
-      </Link>
+      <BackLink href="/app/admin/employees">Back to employees</BackLink>
 
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Bulk-upload employees</h1>

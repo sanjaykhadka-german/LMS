@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BackLink } from "~/components/ui/back-link";
 import { notFound } from "next/navigation";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import {
@@ -117,16 +118,15 @@ export default async function ModulePreviewPage({
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <Link
+        <BackLink
           href={
             fromAiStudio
               ? `/app/admin/modules/ai-studio?module_id=${module.id}`
               : `/app/admin/modules/${module.id}`
           }
-          className="text-sm text-[color:var(--muted-foreground)] underline"
         >
-          {fromAiStudio ? "← Back to AI Studio" : "← Back to edit"}
-        </Link>
+          {fromAiStudio ? "Back to AI Studio" : "Back to edit"}
+        </BackLink>
         <span className="text-xs uppercase tracking-wider text-[color:var(--muted-foreground)]">
           Preview — exactly what employees see
         </span>

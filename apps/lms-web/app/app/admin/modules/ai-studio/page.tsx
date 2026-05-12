@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BackLink } from "~/components/ui/back-link";
 import { Sparkles } from "lucide-react";
 import { requireAdmin } from "~/lib/auth/admin";
 import { getClaudeApiKey, splitReplyAndJson } from "~/lib/ai/claude";
@@ -63,12 +64,7 @@ export default async function AiStudioPage({
 
   return (
     <div className="space-y-6">
-      <Link
-        href="/app/admin/modules"
-        className="text-sm text-[color:var(--muted-foreground)] underline"
-      >
-        ← Back to modules
-      </Link>
+      <BackLink href="/app/admin/modules">Back to modules</BackLink>
 
       <div className="flex items-center gap-3">
         <Sparkles className="h-7 w-7 text-amber-500" aria-hidden />

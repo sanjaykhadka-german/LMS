@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BackLink } from "~/components/ui/back-link";
 import { and, asc, eq } from "drizzle-orm";
 import {
   lmsDepartmentModulePolicies,
@@ -51,9 +52,7 @@ export default async function DepartmentPoliciesPage({
 
   return (
     <div className="space-y-6">
-      <Link href="/app/admin/departments" className="text-sm text-[color:var(--muted-foreground)] underline">
-        ← Back to departments
-      </Link>
+      <BackLink href="/app/admin/departments">Back to departments</BackLink>
 
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Department policies</h1>

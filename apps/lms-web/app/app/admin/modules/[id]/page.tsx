@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { BackLink } from "~/components/ui/back-link";
 import { and, asc, desc, eq } from "drizzle-orm";
 import {
   lmsAssignments,
@@ -178,16 +179,15 @@ export default async function ModuleEditPage({
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-3">
-        <Link
+        <BackLink
           href={
             fromAiStudio
               ? `/app/admin/modules/ai-studio?module_id=${moduleId}`
               : "/app/admin/modules"
           }
-          className="text-sm text-[color:var(--muted-foreground)] underline"
         >
-          {fromAiStudio ? "← Back to AI Studio" : "← Back to modules"}
-        </Link>
+          {fromAiStudio ? "Back to AI Studio" : "Back to modules"}
+        </BackLink>
         <div className="flex items-center gap-2">
           <Button asChild variant="outline" size="sm" tooltip="Preview this module as a learner would see it">
             <Link

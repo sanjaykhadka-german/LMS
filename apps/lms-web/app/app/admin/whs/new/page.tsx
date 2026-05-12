@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BackLink } from "~/components/ui/back-link";
 import { asc, eq } from "drizzle-orm";
 import { lmsUsers } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
@@ -40,9 +41,7 @@ export default async function NewWhsRecordPage({
 
   return (
     <div className="space-y-4">
-      <Link href="/app/admin/whs" className="text-sm text-[color:var(--muted-foreground)] underline">
-        ← Back to register
-      </Link>
+      <BackLink href="/app/admin/whs">Back to register</BackLink>
       <WhsForm action={createWhsRecordAction} staff={staff} kinds={kinds} errorBanner={banner} />
     </div>
   );

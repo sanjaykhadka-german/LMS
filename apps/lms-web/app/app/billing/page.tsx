@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BackLink } from "~/components/ui/back-link";
 import { redirect } from "next/navigation";
 import { currentMembership, currentUser } from "~/lib/auth/current";
 import { isPlatformAdmin } from "~/lib/auth/platform";
@@ -175,12 +176,7 @@ export default async function BillingPage() {
       )}
 
       <div className="mt-8 text-sm">
-        <Link
-          href="/app"
-          className="text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)]"
-        >
-          ← Back to dashboard
-        </Link>
+        <BackLink href="/app">Back to dashboard</BackLink>
       </div>
     </div>
   );

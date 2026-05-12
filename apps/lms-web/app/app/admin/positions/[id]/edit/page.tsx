@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BackLink } from "~/components/ui/back-link";
 import { notFound } from "next/navigation";
 import { and, asc, eq, ne } from "drizzle-orm";
 import { lmsDepartments, lmsPositions } from "@tracey/db";
@@ -54,12 +55,7 @@ export default async function EditPositionPage({
 
   return (
     <div className="space-y-4">
-      <Link
-        href="/app/admin/positions"
-        className="text-sm text-[color:var(--muted-foreground)] underline"
-      >
-        ← Back to positions
-      </Link>
+      <BackLink href="/app/admin/positions">Back to positions</BackLink>
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Edit position</CardTitle>
