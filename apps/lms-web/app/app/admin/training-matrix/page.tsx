@@ -9,7 +9,11 @@ import {
 } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
-import { latestAttemptsByUserModule } from "~/lib/lms/dashboard";
+import {
+  latestAttemptsByUserModule,
+  type LatestAttemptCell,
+} from "~/lib/lms/dashboard";
+import { formatDate } from "~/lib/format/datetime";
 import { Button } from "~/components/ui/button";
 
 export const metadata = { title: "Training matrix" };
@@ -23,6 +27,7 @@ export default async function TrainingMatrixPage({
 }) {
   const ctx = await requireAdmin();
   const tid = ctx.traceyTenantId;
+  const tz = ctx.tenantTimezone;
   const sp = await searchParams;
 
   const deptFilter = sp.dept && sp.dept !== "all" ? Number(sp.dept) : null;
@@ -230,15 +235,15 @@ export default async function TrainingMatrixPage({
                       </div>
                     </th>
                     {modules.map((m) => {
-                      const passed = userLatest?.get(m.id);
+                      const entry = userLatest?.get(m.id);
                       const isAssigned = assignmentSet.has(`${u.id}|${m.id}`);
                       return (
                         <td
                           key={m.id}
-                          className="px-3 py-2 text-center"
-                          aria-label={cellLabel(passed, isAssigned, u.name, m.title)}
+                          className="px-3 py-2 text-center align-middle"
+                          aria-label={cellLabel(entry, isAssigned, u.name, m.title, tz)}
                         >
-                          {renderCell(passed, isAssigned)}
+                          {renderCell(entry, isAssigned, tz)}
                         </td>
                       );
                     })}
@@ -274,15 +279,33 @@ function FilterField({
   );
 }
 
-function renderCell(passed: boolean | undefined, isAssigned: boolean) {
-  if (passed === true) {
+const DATE_OPTS: Intl.DateTimeFormatOptions = {
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+};
+
+function renderCell(
+  entry: LatestAttemptCell | undefined,
+  isAssigned: boolean,
+  timezone: string | null,
+) {
+  if (entry?.passed === true) {
+    const dateText = entry.passedAt ? formatDate(entry.passedAt, timezone, DATE_OPTS) : "";
     return (
-      <span className="text-emerald-600 dark:text-emerald-400" aria-hidden>
-        ✓
-      </span>
+      <div className="flex flex-col items-center leading-tight">
+        <span className="text-emerald-600 dark:text-emerald-400" aria-hidden>
+          ✓
+        </span>
+        {dateText ? (
+          <span className="mt-0.5 text-xs whitespace-nowrap text-[color:var(--muted-foreground)]">
+            {dateText}
+          </span>
+        ) : null}
+      </div>
     );
   }
-  if (passed === false) {
+  if (entry?.passed === false) {
     return (
       <span className="text-red-600 dark:text-red-400" aria-hidden>
         ✗
@@ -304,13 +327,17 @@ function renderCell(passed: boolean | undefined, isAssigned: boolean) {
 }
 
 function cellLabel(
-  passed: boolean | undefined,
+  entry: LatestAttemptCell | undefined,
   isAssigned: boolean,
   user: string,
   mod: string,
+  timezone: string | null,
 ): string {
-  if (passed === true) return `${user} passed ${mod}`;
-  if (passed === false) return `${user} failed ${mod}`;
+  if (entry?.passed === true) {
+    const when = entry.passedAt ? formatDate(entry.passedAt, timezone, DATE_OPTS) : "";
+    return when ? `${user} passed ${mod} on ${when}` : `${user} passed ${mod}`;
+  }
+  if (entry?.passed === false) return `${user} failed ${mod}`;
   if (isAssigned) return `${user} assigned ${mod}, no attempt yet`;
   return `${user} not assigned ${mod}`;
 }

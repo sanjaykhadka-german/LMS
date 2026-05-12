@@ -83,34 +83,49 @@ export type DashboardModel = {
   }>;
 };
 
+export type LatestAttemptCell = { passed: boolean; passedAt: Date | null };
+
 /**
  * Latest attempt per (userId, moduleId) in the tenant. Used by the matrix
- * for pass/fail/not-yet cell semantics. Returns Map<userId, Map<moduleId, passed>>.
+ * for pass/fail/not-yet cell semantics. `passedAt` is the latest attempt's
+ * `created_at` and is only populated for passed cells.
  */
 export async function latestAttemptsByUserModule(
   tid: string,
-): Promise<Map<number, Map<number, boolean>>> {
+): Promise<Map<number, Map<number, LatestAttemptCell>>> {
   const rows = (await forTenant(tid).run((tx) =>
     tx.execute(sql`
-    select user_id, module_id, passed
+    select user_id, module_id, passed, created_at
     from (
-      select user_id, module_id, passed,
+      select user_id, module_id, passed, created_at,
              row_number() over (partition by user_id, module_id order by created_at desc) as rn
       from attempts
       where tracey_tenant_id = ${tid}
     ) t
     where rn = 1
   `),
-  )) as unknown as Array<{ user_id: number; module_id: number; passed: boolean | null }>;
+  )) as unknown as Array<{
+    user_id: number;
+    module_id: number;
+    passed: boolean | null;
+    created_at: string | Date | null;
+  }>;
 
-  const out = new Map<number, Map<number, boolean>>();
+  const out = new Map<number, Map<number, LatestAttemptCell>>();
   for (const r of rows) {
     let inner = out.get(r.user_id);
     if (!inner) {
       inner = new Map();
       out.set(r.user_id, inner);
     }
-    inner.set(r.module_id, r.passed === true);
+    const passed = r.passed === true;
+    const passedAt =
+      passed && r.created_at
+        ? r.created_at instanceof Date
+          ? r.created_at
+          : new Date(r.created_at)
+        : null;
+    inner.set(r.module_id, { passed, passedAt });
   }
   return out;
 }
