@@ -38,23 +38,33 @@ export async function autoAssignForDepartment(opts: {
    *  Used by the retroactive policy-save sweep to avoid a burst of emails
    *  when a single tick affects many existing staff. */
   skipEmail?: boolean;
+  /** Extra modules to assign on top of the department's policy modules.
+   *  Used by the new-employee confirmation modal so admin can pick a few
+   *  ad-hoc modules without leaving the create-employee form. Same dedupe,
+   *  same notification + email pipeline as the policy modules. */
+  additionalModuleIds?: number[];
 }): Promise<number> {
-  if (!opts.departmentId) return 0;
+  const additional = opts.additionalModuleIds ?? [];
+  if (!opts.departmentId && additional.length === 0) return 0;
   const tid = opts.traceyTenantId;
 
   const tdb = forTenant(tid);
   const insertResult = await tdb.run(async (tx) => {
-    const policyRows = await tx
-      .select({ moduleId: lmsDepartmentModulePolicies.moduleId })
-      .from(lmsDepartmentModulePolicies)
-      .where(
-        and(
-          eq(lmsDepartmentModulePolicies.departmentId, opts.departmentId!),
-          eq(lmsDepartmentModulePolicies.traceyTenantId, tid),
-        ),
-      );
-    const policyModuleIds = policyRows.map((r) => r.moduleId);
-    if (policyModuleIds.length === 0) return { count: 0, inserted: [] as Array<{ moduleId: number; title: string; dueAt: Date | null }> };
+    const policyRows = opts.departmentId
+      ? await tx
+          .select({ moduleId: lmsDepartmentModulePolicies.moduleId })
+          .from(lmsDepartmentModulePolicies)
+          .where(
+            and(
+              eq(lmsDepartmentModulePolicies.departmentId, opts.departmentId),
+              eq(lmsDepartmentModulePolicies.traceyTenantId, tid),
+            ),
+          )
+      : [];
+    const requestedIds = Array.from(
+      new Set([...policyRows.map((r) => r.moduleId), ...additional]),
+    );
+    if (requestedIds.length === 0) return { count: 0, inserted: [] as Array<{ moduleId: number; title: string; dueAt: Date | null }> };
 
     const existingRows = await tx
       .select({ moduleId: lmsAssignments.moduleId })
@@ -64,7 +74,7 @@ export async function autoAssignForDepartment(opts: {
       );
     const existing = new Set(existingRows.map((r) => r.moduleId));
 
-    const candidateIds = policyModuleIds.filter((mid) => !existing.has(mid));
+    const candidateIds = requestedIds.filter((mid) => !existing.has(mid));
     if (candidateIds.length === 0) return { count: 0, inserted: [] };
 
     const candidateModules = await tx

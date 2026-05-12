@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BackLink } from "~/components/ui/back-link";
+import { HelpPopover } from "~/components/ui/help-popover";
 import { and, asc, desc, eq } from "drizzle-orm";
 import {
   lmsAssignments,
@@ -220,7 +221,19 @@ export default async function ModuleEditPage({
       {/* Basic fields */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Module</CardTitle>
+          <CardTitle className="flex items-center gap-1.5 text-lg">
+            Module
+            <HelpPopover label="About editing a module">
+              Edit the module&apos;s title, description, and expiry window
+              here. <strong>Valid for (days)</strong> controls how long a
+              passed attempt counts as current — leave blank for no expiry.
+              Set <strong>Status</strong> to <em>Published</em> once content
+              and the quiz are ready; only published modules can be assigned.
+              Use <strong>Preview</strong> to see what a learner sees, and
+              <strong>Save version</strong> to pin a snapshot before making
+              big changes (existing assignments keep the pinned version).
+            </HelpPopover>
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <form action={updateModuleAction} className="space-y-4">

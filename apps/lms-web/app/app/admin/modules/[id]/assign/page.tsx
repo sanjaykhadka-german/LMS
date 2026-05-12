@@ -8,11 +8,10 @@ import {
   lmsUsers,
 } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
-import { formatDate } from "~/lib/format/datetime";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
-import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { bulkAssignModuleAction, unassignModuleAction } from "./actions";
+import { AssignedList, StaffPicker } from "./_filtered-lists";
 
 export const metadata = { title: "Assign module" };
 
@@ -65,9 +64,11 @@ export default async function AssignModulePage({
           assignedAt: lmsAssignments.assignedAt,
           dueAt: lmsAssignments.dueAt,
           completedAt: lmsAssignments.completedAt,
+          departmentName: lmsDepartments.name,
         })
         .from(lmsAssignments)
         .innerJoin(lmsUsers, eq(lmsUsers.id, lmsAssignments.userId))
+        .leftJoin(lmsDepartments, eq(lmsDepartments.id, lmsUsers.departmentId))
         .where(
           and(
             eq(lmsAssignments.moduleId, moduleId),
@@ -77,7 +78,15 @@ export default async function AssignModulePage({
         .orderBy(asc(lmsUsers.name)),
     ),
   ]);
-  const alreadyAssigned = new Set(currentRows.map((r) => r.userId));
+  const alreadyAssignedIds = currentRows.map((r) => r.userId);
+  const deptOptions = Array.from(
+    new Set(
+      [
+        ...employees.map((e) => e.departmentName),
+        ...currentRows.map((r) => r.departmentName),
+      ].filter((d): d is string => Boolean(d)),
+    ),
+  ).sort((a, b) => a.localeCompare(b));
 
   return (
     <div className="space-y-6">
@@ -117,47 +126,13 @@ export default async function AssignModulePage({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form action={bulkAssignModuleAction} className="space-y-3">
-            <input type="hidden" name="module_id" value={module.id} />
-            <div className="max-h-96 overflow-y-auto rounded-md border border-[color:var(--border)] p-3">
-              {employees.length === 0 ? (
-                <p className="text-sm text-[color:var(--muted-foreground)]">
-                  No staff in this workspace yet.
-                </p>
-              ) : (
-                <ul className="divide-y divide-[color:var(--border)]">
-                  {employees.map((e) => {
-                    const already = alreadyAssigned.has(e.id);
-                    return (
-                      <li key={e.id} className="flex items-center gap-3 py-2 text-sm">
-                        <input
-                          type="checkbox"
-                          name="user_ids"
-                          value={e.id}
-                          defaultChecked={already}
-                          disabled={already}
-                          className="h-4 w-4"
-                        />
-                        <div className="min-w-0 flex-1">
-                          <div className="font-medium">
-                            {e.name}
-                            {!e.isActiveFlag && (
-                              <span className="ml-2 text-xs text-[color:var(--muted-foreground)]">(disabled)</span>
-                            )}
-                          </div>
-                          <div className="text-xs text-[color:var(--muted-foreground)]">
-                            {e.email}
-                            {e.departmentName && <> · {e.departmentName}</>}
-                          </div>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
-            <Button type="submit">Assign selected</Button>
-          </form>
+          <StaffPicker
+            moduleId={module.id}
+            employees={employees}
+            alreadyAssignedIds={alreadyAssignedIds}
+            departments={deptOptions}
+            bulkAssignAction={bulkAssignModuleAction}
+          />
         </CardContent>
       </Card>
 
@@ -165,30 +140,14 @@ export default async function AssignModulePage({
         <CardHeader>
           <CardTitle className="text-lg">Already assigned ({currentRows.length})</CardTitle>
         </CardHeader>
-        <CardContent className="divide-y divide-[color:var(--border)] p-0">
-          {currentRows.length === 0 ? (
-            <p className="px-6 py-4 text-sm text-[color:var(--muted-foreground)]">
-              No assignments yet.
-            </p>
-          ) : (
-            currentRows.map((r) => (
-              <div key={r.id} className="flex items-center justify-between gap-3 px-6 py-3">
-                <div className="min-w-0">
-                  <div className="text-sm font-medium">{r.userName}</div>
-                  <div className="text-xs text-[color:var(--muted-foreground)]">
-                    {r.userEmail}
-                    {r.dueAt && <> · Due {formatDate(r.dueAt, ctx.tenantTimezone)}</>}
-                    {r.completedAt && <> · Completed {formatDate(r.completedAt, ctx.tenantTimezone)}</>}
-                  </div>
-                </div>
-                <form action={unassignModuleAction}>
-                  <input type="hidden" name="module_id" value={module.id} />
-                  <input type="hidden" name="id" value={r.id} />
-                  <Button type="submit" variant="outline" size="sm">Unassign</Button>
-                </form>
-              </div>
-            ))
-          )}
+        <CardContent className="p-0">
+          <AssignedList
+            moduleId={module.id}
+            rows={currentRows}
+            departments={deptOptions}
+            unassignAction={unassignModuleAction}
+            tenantTimezone={ctx.tenantTimezone}
+          />
         </CardContent>
       </Card>
     </div>

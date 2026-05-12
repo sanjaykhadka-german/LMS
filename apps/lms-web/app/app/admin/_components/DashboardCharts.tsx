@@ -1,13 +1,13 @@
 "use client";
 
 import {
+  Area,
+  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
   Cell,
   Legend,
-  Line,
-  LineChart,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -65,27 +65,39 @@ export function DashboardCharts({
     <div className="grid gap-4 lg:grid-cols-2">
       <ChartCard title="Attempts (passed vs failed)">
         <ResponsiveContainer width="100%" height={260}>
-          <LineChart data={timeseries}>
+          <AreaChart data={timeseries}>
+            <defs>
+              <linearGradient id="passedFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={PASSED_COLOR} stopOpacity={0.35} />
+                <stop offset="100%" stopColor={PASSED_COLOR} stopOpacity={0} />
+              </linearGradient>
+              <linearGradient id="failedFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={FAILED_COLOR} stopOpacity={0.3} />
+                <stop offset="100%" stopColor={FAILED_COLOR} stopOpacity={0} />
+              </linearGradient>
+            </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
             <XAxis dataKey="date" tick={{ fontSize: 11 }} />
             <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
             <Tooltip />
             <Legend />
-            <Line
+            <Area
               type="monotone"
               dataKey="passed"
               stroke={PASSED_COLOR}
               strokeWidth={2}
+              fill="url(#passedFill)"
               dot={false}
             />
-            <Line
+            <Area
               type="monotone"
               dataKey="failed"
               stroke={FAILED_COLOR}
               strokeWidth={2}
+              fill="url(#failedFill)"
               dot={false}
             />
-          </LineChart>
+          </AreaChart>
         </ResponsiveContainer>
       </ChartCard>
 

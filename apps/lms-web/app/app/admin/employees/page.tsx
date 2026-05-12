@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { Upload } from "lucide-react";
-import { asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import {
+  lmsDepartmentModulePolicies,
   lmsDepartments,
   lmsEmployers,
+  lmsModules,
   lmsPositions,
   lmsUsers,
 } from "@tracey/db";
@@ -27,7 +29,7 @@ export default async function EmployeesPage({
   const ctx = await requireAdmin();
   const tid = ctx.traceyTenantId;
 
-  const [employees, departments, employers, positions] = await Promise.all([
+  const [employees, departments, employers, positions, publishedModules, policyRows] = await Promise.all([
     ctx.db.run((tx) =>
       tx
         .select({
@@ -69,7 +71,28 @@ export default async function EmployeesPage({
         .where(tenantWhere(lmsPositions, tid))
         .orderBy(asc(lmsPositions.name)),
     ),
+    ctx.db.run((tx) =>
+      tx
+        .select({ id: lmsModules.id, title: lmsModules.title })
+        .from(lmsModules)
+        .where(and(eq(lmsModules.isPublished, true), tenantWhere(lmsModules, tid)))
+        .orderBy(asc(lmsModules.title)),
+    ),
+    ctx.db.run((tx) =>
+      tx
+        .select({
+          departmentId: lmsDepartmentModulePolicies.departmentId,
+          moduleId: lmsDepartmentModulePolicies.moduleId,
+        })
+        .from(lmsDepartmentModulePolicies)
+        .where(tenantWhere(lmsDepartmentModulePolicies, tid)),
+    ),
   ]);
+
+  const policiesByDept: Record<number, number[]> = {};
+  for (const p of policyRows) {
+    (policiesByDept[p.departmentId] ??= []).push(p.moduleId);
+  }
 
   const activeCount = employees.filter(isEffectivelyActive).length;
   const disabledCount = employees.length - activeCount;
@@ -104,6 +127,8 @@ export default async function EmployeesPage({
             departments={departments}
             employers={employers}
             positions={positions}
+            publishedModules={publishedModules}
+            policiesByDept={policiesByDept}
           />
         </CardContent>
       </Card>

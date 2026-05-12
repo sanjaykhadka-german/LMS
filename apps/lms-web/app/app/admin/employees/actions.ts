@@ -186,6 +186,12 @@ export async function createEmployeeAction(_prev: FormState, formData: FormData)
     details: { email: data.email, role },
   });
 
+  const extraModuleIds = formData
+    .getAll("extra_module_ids")
+    .map(String)
+    .filter((s) => /^\d+$/.test(s))
+    .map((s) => parseInt(s, 10));
+
   const newId = row?.id;
   const autoAssigned = newId
     ? await autoAssignForDepartment({
@@ -193,6 +199,7 @@ export async function createEmployeeAction(_prev: FormState, formData: FormData)
         departmentId: data.departmentId,
         traceyTenantId: tid,
         tenantTimezone: ctx.tenantTimezone,
+        additionalModuleIds: extraModuleIds,
       })
     : 0;
 
@@ -208,7 +215,7 @@ export async function createEmployeeAction(_prev: FormState, formData: FormData)
     emailed ? "Invite emailed." : `Email not sent â€” temp password: ${tempPw}`,
   ];
   if (autoAssigned > 0) {
-    parts.push(`${autoAssigned} module${autoAssigned === 1 ? "" : "s"} auto-assigned from department policy.`);
+    parts.push(`${autoAssigned} module${autoAssigned === 1 ? "" : "s"} assigned.`);
   }
   return { status: "ok", message: parts.join(" ") };
 }
