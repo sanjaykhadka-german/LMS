@@ -9,7 +9,7 @@ import { isEffectivelyActive } from "~/lib/lms/employee-status";
 // Tracey roles: owner | admin | member (enum on app.members.role).
 // QA/QC has no Tracey equivalent — collapse it into admin so QA/QC users
 // keep author-level access. Schema migration to extend the enum is deferred.
-function mapFlaskRole(flaskRole: string | null | undefined): Role {
+export function mapFlaskRole(flaskRole: string | null | undefined): Role {
   if (flaskRole === "admin" || flaskRole === "qaqc") return "admin";
   return "member";
 }
@@ -56,6 +56,11 @@ export async function tryLegacyAuth(
   const bcryptHash = await hashPassword(plaintext);
   const now = new Date();
   const result = await db.transaction(async (tx) => {
+    // Upsert: if an app.users row exists for this email (abandoned signup,
+    // race, or historical drift), realign its credential-bearing fields to
+    // what we just verified against the legacy hash. Leaves `name` alone so
+    // a user-customised Tracey display name isn't overwritten on every
+    // legacy fallback.
     const inserted = await tx
       .insert(users)
       .values({
@@ -64,25 +69,19 @@ export async function tryLegacyAuth(
         passwordHash: bcryptHash,
         emailVerified: now,
       })
-      .onConflictDoNothing({ target: users.email })
+      .onConflictDoUpdate({
+        target: users.email,
+        set: {
+          passwordHash: bcryptHash,
+          emailVerified: now,
+          updatedAt: now,
+        },
+      })
       .returning({ id: users.id, email: users.email, name: users.name });
 
-    let userRow = inserted[0];
+    const userRow = inserted[0];
     if (!userRow) {
-      // Lost a race OR repairing an orphan: an app.users row already
-      // exists for this email (either from concurrent sign-in or an
-      // abandoned signup). Refetch and fall through to membership upsert
-      // so we heal accounts that were stuck on /onboarding because they
-      // had a Tracey user but no membership.
-      const [existing] = await tx
-        .select({ id: users.id, email: users.email, name: users.name })
-        .from(users)
-        .where(eq(users.email, email))
-        .limit(1);
-      if (!existing) {
-        throw new Error("Legacy bridge: insert returned no row and refetch found nothing");
-      }
-      userRow = existing;
+      throw new Error("Legacy bridge: upsert returned no row");
     }
 
     // Idempotent: only inserts when no membership for this (tenant, user)

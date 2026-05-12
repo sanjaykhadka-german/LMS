@@ -13,9 +13,11 @@ import {
   lmsMachines,
   lmsUserMachines,
   lmsUsers,
+  members,
   users,
 } from "@tracey/db";
 import { requireAdminAction } from "~/lib/auth/admin";
+import { mapFlaskRole } from "~/lib/auth/legacy-bridge";
 import { logAuditEvent } from "~/lib/audit";
 import { sendInviteEmail, sendPasswordResetEmail } from "~/lib/lms/notify-admin";
 import { deleteStoredPhoto, PhotoUploadError, saveUserPhoto } from "~/lib/lms/photos";
@@ -308,6 +310,22 @@ export async function changeEmployeeRoleAction(formData: FormData): Promise<void
       .where(and(eq(lmsUsers.id, parsed.data.id), eq(lmsUsers.traceyTenantId, tid))),
   );
 
+  // Mirror into Tracey membership so requireAdmin's role check stays in
+  // sync. Skip if the employee hasn't bridged yet — the legacy bridge
+  // picks the right members.role on first sign-in via mapFlaskRole.
+  // allow-cross-tenant: app.members is uuid-keyed, not RLS-covered.
+  if (target.traceyUserId) {
+    await db
+      .update(members)
+      .set({ role: mapFlaskRole(parsed.data.role) })
+      .where(
+        and(
+          eq(members.tenantId, tid),
+          eq(members.userId, target.traceyUserId),
+        ),
+      );
+  }
+
   await logAuditEvent({
     tenantId: tid,
     actorUserId: ctx.traceyUserId,
@@ -467,13 +485,14 @@ export async function updateEmployeeAction(formData: FormData): Promise<void> {
     await deleteStoredPhoto(target.photoFilename, tid);
   }
 
+  const fullName = `${data.firstName} ${data.lastName}`.trim();
   await ctx.db.run(async (tx) => {
     await tx
       .update(lmsUsers)
       .set({
         firstName: data.firstName,
         lastName: data.lastName,
-        name: `${data.firstName} ${data.lastName}`.trim(),
+        name: fullName,
         phone: data.phone,
         departmentId: data.departmentId,
         employerId,
@@ -502,6 +521,17 @@ export async function updateEmployeeAction(formData: FormData): Promise<void> {
       }
     }
   });
+
+  // Mirror the display name into Tracey so the topbar greeting and any
+  // other UI reading users.name stays in sync. Same pattern as
+  // updateProfileAction. Skip if the employee hasn't bridged yet.
+  // allow-cross-tenant: app.users is uuid-keyed, not RLS-covered.
+  if (target.traceyUserId) {
+    await db
+      .update(users)
+      .set({ name: fullName, updatedAt: new Date() })
+      .where(eq(users.id, target.traceyUserId));
+  }
 
   await logAuditEvent({
     tenantId: tid,

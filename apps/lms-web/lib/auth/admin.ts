@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { forTenant } from "@tracey/db";
 import { requireTenant } from "./current";
 import { getOrProvisionLmsUser, type LearnerContext } from "~/lib/lms/learner";
+import { isEffectivelyActive } from "~/lib/lms/employee-status";
 import { assertWriteAccess } from "~/lib/billing/guard";
 
 /**
@@ -28,6 +29,11 @@ export async function requireAdmin(): Promise<LearnerContext & { role: "owner" |
     email: user.email,
     name: user.name,
   });
+  // Mirror the requireLearner gate: deactivated/terminated employees lose
+  // admin access too, not just learner pages.
+  if (!isEffectivelyActive(lmsUser)) {
+    redirect("/sign-in?reason=deactivated");
+  }
   return {
     traceyUserId: user.id,
     traceyTenantId: tenant.id,
