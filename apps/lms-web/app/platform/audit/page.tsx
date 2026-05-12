@@ -2,6 +2,7 @@ import Link from "next/link";
 import { desc, eq, lt } from "drizzle-orm";
 import { db, auditEvents, tenants } from "@tracey/db";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
+import { formatDateTime } from "~/lib/format/datetime";
 
 const PAGE_SIZE = 200;
 
@@ -25,6 +26,7 @@ export default async function PlatformAuditPage({ searchParams }: PageProps) {
       createdAt: auditEvents.createdAt,
       tenantId: auditEvents.tenantId,
       tenantName: tenants.name,
+      tenantTimezone: tenants.timezone,
     })
     .from(auditEvents)
     .leftJoin(tenants, eq(tenants.id, auditEvents.tenantId))
@@ -53,7 +55,7 @@ export default async function PlatformAuditPage({ searchParams }: PageProps) {
             {rows.length} {rows.length === 1 ? "event" : "events"}
             {cursorOk && (
               <span className="ml-2 text-sm font-normal text-[color:var(--muted-foreground)]">
-                before {beforeDate!.toISOString().slice(0, 19).replace("T", " ")}
+                before {formatDateTime(beforeDate, null)}
               </span>
             )}
           </CardTitle>
@@ -73,7 +75,7 @@ export default async function PlatformAuditPage({ searchParams }: PageProps) {
                   <div className="flex items-baseline justify-between gap-3">
                     <code className="text-xs font-medium">{e.action}</code>
                     <span className="text-xs text-[color:var(--muted-foreground)]">
-                      {e.createdAt.toISOString().replace("T", " ").slice(0, 19)}
+                      {formatDateTime(e.createdAt, e.tenantTimezone)}
                     </span>
                   </div>
                   <div className="mt-1 text-xs text-[color:var(--muted-foreground)]">
