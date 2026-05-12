@@ -59,7 +59,7 @@ export function WhsForm({ action, record, staff, kinds, errorBanner }: WhsFormPr
             {errorBanner}
           </div>
         )}
-        <form action={action} encType="multipart/form-data" className="grid gap-3 sm:grid-cols-2">
+        <form action={action} className="grid gap-3 sm:grid-cols-2">
           {record && <input type="hidden" name="id" value={record.id} />}
 
           <div className="space-y-1">
