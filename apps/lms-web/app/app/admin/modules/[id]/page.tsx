@@ -529,37 +529,39 @@ function QuestionEditor({
 }) {
   return (
     <div className="rounded-md border border-[color:var(--border)] p-3 space-y-3">
-      <form action={updateQuestionAction} className="flex flex-wrap items-end gap-2">
-        <input type="hidden" name="id" value={question.id} />
-        <input type="hidden" name="module_id" value={moduleId} />
-        <div className="flex-1 space-y-1">
-          <Label htmlFor={`q-${question.id}-prompt`}>Question</Label>
-          <Input
-            id={`q-${question.id}-prompt`}
-            name="prompt"
-            defaultValue={question.prompt}
-            required
-          />
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor={`q-${question.id}-kind`}>Type</Label>
-          <select
-            id={`q-${question.id}-kind`}
-            name="kind"
-            defaultValue={question.kind ?? "single"}
-            className="flex h-9 rounded-md border border-[color:var(--input)] bg-transparent px-3 text-sm shadow-sm"
-          >
-            <option value="single">Single</option>
-            <option value="multi">Multi</option>
-          </select>
-        </div>
-        <Button type="submit" size="sm">Save</Button>
+      <div className="flex flex-wrap items-end gap-2">
+        <form action={updateQuestionAction} className="flex flex-1 flex-wrap items-end gap-2">
+          <input type="hidden" name="id" value={question.id} />
+          <input type="hidden" name="module_id" value={moduleId} />
+          <div className="flex-1 space-y-1">
+            <Label htmlFor={`q-${question.id}-prompt`}>Question</Label>
+            <Input
+              id={`q-${question.id}-prompt`}
+              name="prompt"
+              defaultValue={question.prompt}
+              required
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor={`q-${question.id}-kind`}>Type</Label>
+            <select
+              id={`q-${question.id}-kind`}
+              name="kind"
+              defaultValue={question.kind ?? "single"}
+              className="flex h-9 rounded-md border border-[color:var(--input)] bg-transparent px-3 text-sm shadow-sm"
+            >
+              <option value="single">Single</option>
+              <option value="multi">Multi</option>
+            </select>
+          </div>
+          <Button type="submit" size="sm">Save</Button>
+        </form>
         <form action={deleteQuestionAction}>
           <input type="hidden" name="id" value={question.id} />
           <input type="hidden" name="module_id" value={moduleId} />
           <Button type="submit" variant="outline" size="sm">Delete</Button>
         </form>
-      </form>
+      </div>
 
       {/* Choices */}
       <ul className="space-y-2">

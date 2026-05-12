@@ -16,7 +16,7 @@ export const metadata = { title: "Department policies" };
 export default async function DepartmentPoliciesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ok?: string; added?: string; removed?: string; info?: string }>;
+  searchParams: Promise<{ ok?: string; added?: string; removed?: string; assigned?: string; info?: string }>;
 }) {
   const sp = await searchParams;
   const ctx = await requireAdmin();
@@ -63,11 +63,15 @@ export default async function DepartmentPoliciesPage({
         </p>
       </div>
 
-      {sp.ok === "1" && (
-        <div className="rounded-md border border-emerald-500 bg-emerald-50/50 px-4 py-2 text-sm dark:bg-emerald-900/10">
-          Saved — {sp.added ?? 0} added, {sp.removed ?? 0} removed.
-        </div>
-      )}
+      {sp.ok === "1" && (() => {
+        const assigned = parseInt(sp.assigned ?? "0", 10) || 0;
+        return (
+          <div className="rounded-md border border-emerald-500 bg-emerald-50/50 px-4 py-2 text-sm dark:bg-emerald-900/10">
+            Saved — {sp.added ?? 0} added, {sp.removed ?? 0} removed.
+            {assigned > 0 && ` ${assigned} new assignment${assigned === 1 ? "" : "s"} created for existing staff.`}
+          </div>
+        );
+      })()}
       {sp.info === "nochange" && (
         <div className="rounded-md border border-[color:var(--border)] bg-[color:var(--secondary)] px-4 py-2 text-sm">
           No changes.

@@ -34,6 +34,10 @@ export async function autoAssignForDepartment(opts: {
   departmentId: number | null;
   traceyTenantId: string;
   tenantTimezone: string;
+  /** Suppress the summary email side-effect. In-app notifications still fire.
+   *  Used by the retroactive policy-save sweep to avoid a burst of emails
+   *  when a single tick affects many existing staff. */
+  skipEmail?: boolean;
 }): Promise<number> {
   if (!opts.departmentId) return 0;
   const tid = opts.traceyTenantId;
@@ -119,6 +123,7 @@ export async function autoAssignForDepartment(opts: {
       tid,
       opts.tenantTimezone,
       insertResult.inserted,
+      opts.skipEmail === true,
     );
   }
   return insertResult.count;
@@ -130,6 +135,7 @@ async function notifyAssignmentsAdded(
   tid: string,
   tenantTimezone: string,
   inserted: Array<{ moduleId: number; title: string; dueAt: Date | null }>,
+  skipEmail: boolean,
 ): Promise<void> {
   try {
     const [recipient] = await tdb.run((tx) =>
@@ -158,7 +164,7 @@ async function notifyAssignmentsAdded(
       );
     }
 
-    if (recipient.email) {
+    if (recipient.email && !skipEmail) {
       await sendAssignmentsAddedEmail({
         to: recipient.email,
         name: recipient.name ?? null,

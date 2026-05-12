@@ -36,6 +36,25 @@ export function verifyWerkzeugHash(plaintext: string, stored: string | null | un
   return false;
 }
 
+// Unified verifier for everything that can land in public.users.password_hash:
+// werkzeug-format hashes imported from Flask AND bcrypt hashes written by
+// admin-side actions (createEmployeeAction, resetEmployeePasswordAction).
+// The legacy bridge calls this so admin-created users can sign in on day one.
+export async function verifyLegacyHash(
+  plaintext: string,
+  stored: string | null | undefined,
+): Promise<boolean> {
+  if (!stored) return false;
+  if (stored.startsWith("$2a$") || stored.startsWith("$2b$") || stored.startsWith("$2y$")) {
+    try {
+      return await bcrypt.compare(plaintext, stored);
+    } catch {
+      return false;
+    }
+  }
+  return verifyWerkzeugHash(plaintext, stored);
+}
+
 const PBKDF2_RE = /^pbkdf2:sha256:(\d+)\$([^$]+)\$([0-9a-f]+)$/;
 const PBKDF2_KEY_LEN = 32; // werkzeug defaults to 32 bytes (64 hex chars)
 

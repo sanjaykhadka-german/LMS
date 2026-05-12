@@ -1,7 +1,7 @@
 import "server-only";
 import { eq } from "drizzle-orm";
 import { db, lmsUsers, members, users, type Role } from "@tracey/db";
-import { hashPassword, verifyWerkzeugHash } from "./passwords";
+import { hashPassword, verifyLegacyHash } from "./passwords";
 import { logAuditEvent } from "~/lib/audit";
 import { isEffectivelyActive } from "~/lib/lms/employee-status";
 
@@ -46,9 +46,11 @@ export async function tryLegacyAuth(
   // we refuse rather than guess.
   if (!legacy.traceyTenantId) return null;
 
-  // 2. Verify the password against werkzeug (handles both pbkdf2:sha256:
-  //    and scrypt: schemes — see lib/auth/passwords.ts).
-  if (!verifyWerkzeugHash(plaintext, legacy.passwordHash)) return null;
+  // 2. Verify the password. verifyLegacyHash accepts both werkzeug
+  //    (pbkdf2:sha256:, scrypt:) AND bcrypt — the latter is what
+  //    createEmployeeAction / resetEmployeePasswordAction write directly
+  //    into public.users for admin-invited employees.
+  if (!(await verifyLegacyHash(plaintext, legacy.passwordHash))) return null;
 
   // 3. Provision app.users + app.members + link tracey_user_id atomically.
   const bcryptHash = await hashPassword(plaintext);

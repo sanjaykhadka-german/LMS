@@ -7,9 +7,12 @@ import {
   lmsDepartmentModulePolicies,
   lmsDepartments,
   lmsModules,
+  lmsUsers,
 } from "@tracey/db";
 import { requireAdminAction } from "~/lib/auth/admin";
 import { logAuditEvent } from "~/lib/audit";
+import { autoAssignForDepartment } from "~/lib/lms/admin";
+import { isEffectivelyActive } from "~/lib/lms/employee-status";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
 
 // Port of /admin/departments/policies POST (app.py:3299-3339). Form posts
@@ -100,6 +103,41 @@ export async function saveDepartmentPoliciesAction(formData: FormData): Promise<
     }
   });
 
+  // Retroactive sweep: for every department that just gained a new policy,
+  // auto-assign the policy modules to existing active staff in that department
+  // so they see the new training without waiting for a department change.
+  // In-app notifications fire; email is suppressed to avoid a burst when a
+  // single tick affects many staff.
+  let assignedTotal = 0;
+  const affectedDeptIds = Array.from(new Set(toAdd.map((r) => r.departmentId)));
+  for (const did of affectedDeptIds) {
+    const staff = await ctx.db.run((tx) =>
+      tx
+        .select({
+          id: lmsUsers.id,
+          isActiveFlag: lmsUsers.isActiveFlag,
+          terminationDate: lmsUsers.terminationDate,
+        })
+        .from(lmsUsers)
+        .where(and(eq(lmsUsers.departmentId, did), tenantWhere(lmsUsers, tid))),
+    );
+    for (const u of staff) {
+      if (!isEffectivelyActive(u)) continue;
+      try {
+        const n = await autoAssignForDepartment({
+          userId: u.id,
+          departmentId: did,
+          traceyTenantId: tid,
+          tenantTimezone: ctx.tenantTimezone,
+          skipEmail: true,
+        });
+        assignedTotal += n;
+      } catch (err) {
+        console.error("[policies.sweep] user", u.id, "failed:", err);
+      }
+    }
+  }
+
   await logAuditEvent({
     tenantId: tid,
     actorUserId: ctx.traceyUserId,
@@ -107,11 +145,11 @@ export async function saveDepartmentPoliciesAction(formData: FormData): Promise<
     action: "department.policies_updated",
     targetKind: "department",
     targetId: null as unknown as string,
-    details: { added: toAdd.length, removed: toDeleteIds.length },
+    details: { added: toAdd.length, removed: toDeleteIds.length, assigned: assignedTotal },
   });
 
   revalidatePath("/app/admin/departments/policies");
   redirect(
-    `/app/admin/departments/policies?ok=1&added=${toAdd.length}&removed=${toDeleteIds.length}`,
+    `/app/admin/departments/policies?ok=1&added=${toAdd.length}&removed=${toDeleteIds.length}&assigned=${assignedTotal}`,
   );
 }

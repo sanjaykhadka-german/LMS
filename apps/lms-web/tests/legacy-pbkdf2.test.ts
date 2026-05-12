@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { pbkdf2Sync, scryptSync } from "node:crypto";
+import bcrypt from "bcryptjs";
 import {
+  verifyLegacyHash,
   verifyWerkzeugHash,
   verifyWerkzeugPbkdf2,
   verifyWerkzeugScrypt,
@@ -165,5 +167,36 @@ describe("verifyWerkzeugHash (dispatcher)", () => {
     expect(verifyWerkzeugHash("anything", "")).toBe(false);
     expect(verifyWerkzeugHash("anything", null)).toBe(false);
     expect(verifyWerkzeugHash("anything", undefined)).toBe(false);
+  });
+});
+
+describe("verifyLegacyHash", () => {
+  // bcryptjs rounds=4 keeps the suite fast; the legacy bridge runs against
+  // rounds=12 hashes in production but the verification path is identical.
+  const BCRYPT_ROUNDS = 4;
+
+  it("verifies bcrypt hashes (createEmployeeAction / resetEmployeePassword)", async () => {
+    const stored = await bcrypt.hash("hunter2", BCRYPT_ROUNDS);
+    expect(await verifyLegacyHash("hunter2", stored)).toBe(true);
+    expect(await verifyLegacyHash("hunter3", stored)).toBe(false);
+    expect(await verifyLegacyHash("", stored)).toBe(false);
+  });
+
+  it("delegates to verifyWerkzeugHash for pbkdf2 and scrypt", async () => {
+    const pb = pbkdf2Vector("p1", "s1", 1000);
+    const sc = scryptVector("p2", "s2", 2048, 8, 1);
+    expect(await verifyLegacyHash("p1", pb)).toBe(true);
+    expect(await verifyLegacyHash("p2", sc)).toBe(true);
+    expect(await verifyLegacyHash("wrong", pb)).toBe(false);
+    expect(await verifyLegacyHash("wrong", sc)).toBe(false);
+  });
+
+  it("safely handles null / undefined / empty / malformed stored", async () => {
+    expect(await verifyLegacyHash("anything", "")).toBe(false);
+    expect(await verifyLegacyHash("anything", null)).toBe(false);
+    expect(await verifyLegacyHash("anything", undefined)).toBe(false);
+    expect(await verifyLegacyHash("anything", "not a hash")).toBe(false);
+    // bcrypt-looking but truncated — bcrypt.compare throws, we swallow.
+    expect(await verifyLegacyHash("anything", "$2b$12$too-short")).toBe(false);
   });
 });
