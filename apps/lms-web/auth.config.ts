@@ -43,6 +43,10 @@ export const authConfig = {
         token.id = user.id;
         token.email = user.email;
         token.name = user.name;
+        // Stamp the token with the user's password-changed timestamp so
+        // requireUser() can later detect tokens issued before a reset.
+        token.passwordChangedAt = (user as { passwordChangedAt?: number })
+          .passwordChangedAt;
       }
       // Allow client to push activeTenantId updates via update() / useSession({ update })
       if (trigger === "update" && session?.activeTenantId !== undefined) {
@@ -57,6 +61,10 @@ export const authConfig = {
       if (token?.activeTenantId !== undefined) {
         (session as { activeTenantId?: string | null }).activeTenantId =
           token.activeTenantId as string | null;
+      }
+      if (token?.passwordChangedAt !== undefined) {
+        (session as { passwordChangedAt?: number }).passwordChangedAt =
+          token.passwordChangedAt as number;
       }
       return session;
     },

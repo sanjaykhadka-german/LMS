@@ -26,6 +26,7 @@ export interface BridgedUser {
   email: string;
   name: string | null;
   emailVerified: Date;
+  passwordChangedAt: number; // epoch ms
 }
 
 export async function tryLegacyAuth(
@@ -68,12 +69,14 @@ export async function tryLegacyAuth(
         name: legacy.name,
         passwordHash: bcryptHash,
         emailVerified: now,
+        passwordChangedAt: now,
       })
       .onConflictDoUpdate({
         target: users.email,
         set: {
           passwordHash: bcryptHash,
           emailVerified: now,
+          passwordChangedAt: now,
           updatedAt: now,
         },
       })
@@ -120,5 +123,6 @@ export async function tryLegacyAuth(
     email: result.email,
     name: result.name ?? legacy.name,
     emailVerified: now,
+    passwordChangedAt: now.getTime(),
   };
 }

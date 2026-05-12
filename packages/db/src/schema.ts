@@ -27,6 +27,9 @@ export const users = appSchema.table("users", {
   emailVerified: timestamp("email_verified", { withTimezone: true, mode: "date" }),
   image: text("image"),
   passwordHash: text("password_hash"), // bcrypt hash; null for OAuth-only users
+  // Bumped to NOW() on every password reset/change. JWTs minted before this
+  // timestamp are revoked at the next requireUser() call.
+  passwordChangedAt: timestamp("password_changed_at", { withTimezone: true }).notNull().defaultNow(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [uniqueIndex("users_email_uq").on(t.email)]);

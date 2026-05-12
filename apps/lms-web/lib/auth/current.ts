@@ -35,9 +35,32 @@ export async function currentUser(): Promise<CurrentUser | null> {
 }
 
 export async function requireUser(): Promise<CurrentUser> {
-  const u = await currentUser();
-  if (!u) redirect("/sign-in");
-  return u;
+  const session = await auth();
+  const u = session?.user;
+  if (!u?.id || !u.email) redirect("/sign-in");
+
+  // Session revocation: if the user's password has changed since this JWT
+  // was minted, force re-sign-in. Tokens missing passwordChangedAt are
+  // legacy (issued before this field was introduced) and pass through —
+  // they'll get the field on their next sign-in.
+  const tokenPwAt = (session as { passwordChangedAt?: number }).passwordChangedAt;
+  if (tokenPwAt !== undefined) {
+    const [row] = await db
+      .select({ passwordChangedAt: users.passwordChangedAt })
+      .from(users)
+      .where(eq(users.id, u.id))
+      .limit(1);
+    if (row && row.passwordChangedAt.getTime() > tokenPwAt) {
+      redirect("/sign-in?reason=revoked");
+    }
+  }
+
+  return {
+    id: u.id,
+    email: u.email,
+    name: u.name ?? null,
+    image: u.image ?? null,
+  };
 }
 
 /**

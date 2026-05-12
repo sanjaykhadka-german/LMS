@@ -19,6 +19,9 @@ export interface AuthorizedUser {
   name: string | null;
   email: string;
   image: string | null;
+  // Epoch ms of last password change — embedded in the JWT so requireUser()
+  // can revoke sessions issued before a password reset.
+  passwordChangedAt: number;
 }
 
 /**
@@ -74,6 +77,7 @@ export async function authorizeCredentials(raw: unknown): Promise<AuthorizedUser
         name: user.name ?? null,
         email: user.email,
         image: user.image ?? null,
+        passwordChangedAt: user.passwordChangedAt.getTime(),
       };
     }
     // Bcrypt failed → likely they typed their original Flask password
@@ -87,6 +91,7 @@ export async function authorizeCredentials(raw: unknown): Promise<AuthorizedUser
       name: legacy.name,
       email: legacy.email,
       image: null,
+      passwordChangedAt: legacy.passwordChangedAt,
     };
   }
 

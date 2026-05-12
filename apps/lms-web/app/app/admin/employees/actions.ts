@@ -368,11 +368,14 @@ export async function resetEmployeePasswordAction(formData: FormData): Promise<v
   // Mirror into the Tracey/Auth.js store so the old hash can't authorize.
   // Skip if the employee has never signed in via Auth.js — the legacy
   // bridge will provision app.users with this new hash on first login.
+  // passwordChangedAt bumps so any existing JWT for this user gets
+  // revoked the next time it hits requireUser().
   // allow-cross-tenant: app.users is uuid-keyed, not RLS-covered.
   if (target.traceyUserId) {
+    const now = new Date();
     await db
       .update(users)
-      .set({ passwordHash: hash, updatedAt: new Date() })
+      .set({ passwordHash: hash, passwordChangedAt: now, updatedAt: now })
       .where(eq(users.id, target.traceyUserId));
   }
 

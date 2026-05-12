@@ -158,9 +158,12 @@ export async function changePasswordAction(
 
   const hash = await hashPassword(data.next);
   // allow-cross-tenant: Tracey app.users; updating the caller's own row by uuid.
+  // passwordChangedAt bumps so JWTs minted before this change get revoked
+  // at the next requireUser() call.
+  const now = new Date();
   await db
     .update(users)
-    .set({ passwordHash: hash, updatedAt: new Date() })
+    .set({ passwordHash: hash, passwordChangedAt: now, updatedAt: now })
     .where(eq(users.id, ctx.traceyUserId));
 
   // Mirror into the legacy Flask store so the old hash can't authorize via

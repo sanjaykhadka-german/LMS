@@ -27,6 +27,11 @@ export default async function SignInPage({
             Your account has been deactivated. Contact your administrator to restore access.
           </div>
         )}
+        {reason === "revoked" && (
+          <div className="rounded-md border border-blue-500/40 bg-blue-500/10 px-3 py-2 text-sm text-blue-800 dark:text-blue-200">
+            Your password was changed. Please sign in again with the new password.
+          </div>
+        )}
         <SignInForm prefilledEmail={email} returnTo={returnTo} />
         <p className="text-center text-sm text-[color:var(--muted-foreground)]">
           New here?{" "}
