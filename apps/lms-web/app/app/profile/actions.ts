@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db, lmsUsers, users } from "@tracey/db";
 import { requireLearner } from "~/lib/lms/learner";
 import { logAuditEvent } from "~/lib/audit";
@@ -162,6 +162,20 @@ export async function changePasswordAction(
     .update(users)
     .set({ passwordHash: hash, updatedAt: new Date() })
     .where(eq(users.id, ctx.traceyUserId));
+
+  // Mirror into the legacy Flask store so the old hash can't authorize via
+  // the legacy bridge fallback. Tenant-scoped per LMS write convention.
+  await ctx.db.run((tx) =>
+    tx
+      .update(lmsUsers)
+      .set({ passwordHash: hash })
+      .where(
+        and(
+          eq(lmsUsers.traceyUserId, ctx.traceyUserId),
+          eq(lmsUsers.traceyTenantId, ctx.traceyTenantId),
+        ),
+      ),
+  );
 
   await logAuditEvent({
     tenantId: ctx.traceyTenantId,

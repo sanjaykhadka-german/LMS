@@ -13,6 +13,7 @@ import {
   lmsMachines,
   lmsUserMachines,
   lmsUsers,
+  users,
 } from "@tracey/db";
 import { requireAdminAction } from "~/lib/auth/admin";
 import { logAuditEvent } from "~/lib/audit";
@@ -345,6 +346,17 @@ export async function resetEmployeePasswordAction(formData: FormData): Promise<v
       .set({ passwordHash: hash })
       .where(and(eq(lmsUsers.id, id), eq(lmsUsers.traceyTenantId, tid))),
   );
+
+  // Mirror into the Tracey/Auth.js store so the old hash can't authorize.
+  // Skip if the employee has never signed in via Auth.js — the legacy
+  // bridge will provision app.users with this new hash on first login.
+  // allow-cross-tenant: app.users is uuid-keyed, not RLS-covered.
+  if (target.traceyUserId) {
+    await db
+      .update(users)
+      .set({ passwordHash: hash, updatedAt: new Date() })
+      .where(eq(users.id, target.traceyUserId));
+  }
 
   await logAuditEvent({
     tenantId: tid,
