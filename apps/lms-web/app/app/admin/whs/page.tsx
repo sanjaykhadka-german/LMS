@@ -71,10 +71,10 @@ export default async function WhsPage({
         </div>
         <div className="flex items-center gap-2">
           <WhsReminderButton />
-          <Button asChild variant="outline">
+          <Button asChild variant="outline" tooltip="Manage the list of WHS record types">
             <Link href="/app/admin/whs/kinds">Manage kinds</Link>
           </Button>
-          <Button asChild>
+          <Button asChild tooltip="Add a new WHS record for an employee">
             <Link href="/app/admin/whs/new">Add record</Link>
           </Button>
         </div>
@@ -172,12 +172,13 @@ export default async function WhsPage({
                         </td>
                         <td className="px-6 py-3 align-middle text-right">
                           <div className="flex items-center justify-end gap-2">
-                            <Button asChild variant="outline" size="sm">
+                            <Button asChild variant="outline" size="sm" tooltip="Edit this WHS record">
                               <Link href={`/app/admin/whs/${r.id}/edit`}>Edit</Link>
                             </Button>
                             <DeleteRowForm
                               action={deleteWhsRecordAction}
                               id={r.id}
+                              tooltip="Delete this WHS record"
                               confirmMessage={`Delete '${r.title}'?`}
                             />
                           </div>

@@ -18,13 +18,20 @@ interface Props {
 export function RowActions({ id, isActive, currentRole }: Props) {
   return (
     <div className="flex items-center justify-end gap-1">
-      <Button asChild variant="outline" size="sm">
+      <Button asChild variant="outline" size="sm" tooltip="Edit this employee's profile">
         <Link href={`/app/admin/employees/${id}/edit`}>Edit</Link>
       </Button>
 
       <form action={toggleEmployeeActiveAction}>
         <input type="hidden" name="id" value={id} />
-        <SubmitButton label={isActive ? "Disable" : "Enable"} />
+        <SubmitButton
+          label={isActive ? "Disable" : "Enable"}
+          tooltip={
+            isActive
+              ? "Disable this employee — they can no longer sign in"
+              : "Re-enable this employee so they can sign in again"
+          }
+        />
       </form>
 
       <RolePicker id={id} currentRole={currentRole} />
@@ -38,7 +45,7 @@ export function RowActions({ id, isActive, currentRole }: Props) {
         }}
       >
         <input type="hidden" name="id" value={id} />
-        <SubmitButton label="Reset PW" />
+        <SubmitButton label="Reset PW" tooltip="Reset this employee's password" />
       </form>
     </div>
   );
@@ -63,10 +70,10 @@ function RolePicker({ id, currentRole }: { id: number; currentRole: string }) {
   );
 }
 
-function SubmitButton({ label }: { label: string }) {
+function SubmitButton({ label, tooltip }: { label: string; tooltip?: string }) {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" variant="outline" size="sm" disabled={pending}>
+    <Button type="submit" variant="outline" size="sm" disabled={pending} tooltip={tooltip}>
       {pending ? "…" : label}
     </Button>
   );

@@ -17,6 +17,7 @@ import { GlobalSearch } from "./_components/global-search";
 import { NotificationBell } from "./_components/notification-bell";
 import { ReadOnlyBanner } from "./_components/read-only-banner";
 import { InstallAppButton } from "~/components/pwa/InstallAppButton";
+import { TooltipProvider } from "~/components/ui/tooltip";
 
 // Pages that must remain reachable when a tenant is `blocked`. The billing
 // page is the re-subscribe escape hatch. Sign-out is a server action invoked
@@ -60,8 +61,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     : null;
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <header className="sticky top-0 z-40 w-full border-b border-[color:var(--border)] bg-[color:var(--background)]/80 backdrop-blur">
+    <TooltipProvider delayDuration={300}>
+      <div className="flex min-h-screen flex-col">
+        <header className="sticky top-0 z-40 w-full border-b border-[color:var(--border)] bg-[color:var(--background)]/80 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-screen-2xl items-center justify-between px-4">
           <div className="flex items-center gap-4">
             <Link href="/app" className="flex items-center" aria-label={siteConfig.name}>
@@ -134,5 +136,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       )}
       <main className="flex-1">{children}</main>
     </div>
+    </TooltipProvider>
   );
 }

@@ -189,7 +189,7 @@ export default async function ModuleEditPage({
           {fromAiStudio ? "← Back to AI Studio" : "← Back to modules"}
         </Link>
         <div className="flex items-center gap-2">
-          <Button asChild variant="outline" size="sm">
+          <Button asChild variant="outline" size="sm" tooltip="Preview this module as a learner would see it">
             <Link
               href={
                 fromAiStudio
@@ -200,7 +200,7 @@ export default async function ModuleEditPage({
               Preview
             </Link>
           </Button>
-          <Button asChild variant="outline" size="sm">
+          <Button asChild variant="outline" size="sm" tooltip="Choose staff to assign this module to">
             <Link href={`/app/admin/modules/${moduleId}/assign`}>
               Assign ({assignmentRows.length})
             </Link>
@@ -291,12 +291,12 @@ export default async function ModuleEditPage({
               required
               accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime,application/pdf"
             />
-            <Button type="submit" size="sm">Upload cover</Button>
+            <Button type="submit" size="sm" tooltip="Upload an image or video as this module's cover">Upload cover</Button>
           </form>
           {module.coverPath && (
             <form action={clearModuleCoverAction}>
               <input type="hidden" name="id" value={module.id} />
-              <Button type="submit" variant="outline" size="sm">Remove cover</Button>
+              <Button type="submit" variant="outline" size="sm" tooltip="Remove the current cover image">Remove cover</Button>
             </form>
           )}
         </CardContent>
@@ -315,7 +315,7 @@ export default async function ModuleEditPage({
                 <form action={removeModuleMediaAction} className="mt-2">
                   <input type="hidden" name="module_id" value={module.id} />
                   <input type="hidden" name="id" value={m.id} />
-                  <Button type="submit" variant="outline" size="sm">Remove</Button>
+                  <Button type="submit" variant="outline" size="sm" tooltip="Remove this title-area media item">Remove</Button>
                 </form>
               </div>
             ))}
@@ -326,7 +326,7 @@ export default async function ModuleEditPage({
           >
             <input type="hidden" name="id" value={module.id} />
             <input type="file" name="media" required accept="image/*,video/*" />
-            <Button type="submit" size="sm">Add media</Button>
+            <Button type="submit" size="sm" tooltip="Upload another image or video to show under the module title">Add media</Button>
           </form>
         </CardContent>
       </Card>
@@ -356,7 +356,7 @@ export default async function ModuleEditPage({
               <Label htmlFor="new-content-title">Title</Label>
               <Input id="new-content-title" name="title" placeholder="New section" />
             </div>
-            <Button type="submit" size="sm">Add section</Button>
+            <Button type="submit" size="sm" tooltip="Add a new content section to this module">Add section</Button>
           </form>
 
           {contentItems.map((ci, idx) => (
@@ -395,7 +395,7 @@ export default async function ModuleEditPage({
                 <option value="multi">Multi answer</option>
               </select>
             </div>
-            <Button type="submit" size="sm">Add question</Button>
+            <Button type="submit" size="sm" tooltip="Add a new quiz question">Add question</Button>
           </form>
 
           {questions.map((q) => (
@@ -421,7 +421,7 @@ export default async function ModuleEditPage({
               <Label htmlFor="version-summary">Summary (optional)</Label>
               <Input id="version-summary" name="summary" placeholder="What changed in this snapshot?" />
             </div>
-            <Button type="submit" size="sm">Save version</Button>
+            <Button type="submit" size="sm" tooltip="Pin a snapshot of the current content and quiz">Save version</Button>
           </form>
           <p className="text-xs text-[color:var(--muted-foreground)]">
             Saving a version pins a snapshot of the current content + questions.
@@ -478,7 +478,7 @@ function ContentItemEditor({
         <form action={deleteContentItemAction}>
           <input type="hidden" name="id" value={item.id} />
           <input type="hidden" name="module_id" value={moduleId} />
-          <Button type="submit" variant="outline" size="sm">Delete</Button>
+          <Button type="submit" variant="outline" size="sm" tooltip="Delete this content section">Delete</Button>
         </form>
       </div>
       <SectionForm
@@ -502,7 +502,7 @@ function ContentItemEditor({
               <form action={removeContentMediaAction} className="mt-2">
                 <input type="hidden" name="id" value={m.id} />
                 <input type="hidden" name="module_id" value={moduleId} />
-                <Button type="submit" variant="outline" size="sm">Remove</Button>
+                <Button type="submit" variant="outline" size="sm" tooltip="Remove this media item from the section">Remove</Button>
               </form>
             </div>
           ))}
@@ -511,7 +511,7 @@ function ContentItemEditor({
           <input type="hidden" name="content_item_id" value={item.id} />
           <input type="hidden" name="module_id" value={moduleId} />
           <input type="file" name="media" required accept="image/*,video/*" />
-          <Button type="submit" size="sm">Add</Button>
+          <Button type="submit" size="sm" tooltip="Upload an image or video to this section">Add</Button>
         </form>
       </div>
     </div>
@@ -554,12 +554,12 @@ function QuestionEditor({
               <option value="multi">Multi</option>
             </select>
           </div>
-          <Button type="submit" size="sm">Save</Button>
+          <Button type="submit" size="sm" tooltip="Save changes to this question">Save</Button>
         </form>
         <form action={deleteQuestionAction}>
           <input type="hidden" name="id" value={question.id} />
           <input type="hidden" name="module_id" value={moduleId} />
-          <Button type="submit" variant="outline" size="sm">Delete</Button>
+          <Button type="submit" variant="outline" size="sm" tooltip="Delete this question and its answer choices">Delete</Button>
         </form>
       </div>
 
@@ -580,12 +580,12 @@ function QuestionEditor({
                 />
                 Correct
               </label>
-              <Button type="submit" size="sm">Save</Button>
+              <Button type="submit" size="sm" tooltip="Save this answer choice">Save</Button>
             </form>
             <form action={deleteChoiceAction}>
               <input type="hidden" name="id" value={c.id} />
               <input type="hidden" name="module_id" value={moduleId} />
-              <Button type="submit" variant="outline" size="sm">×</Button>
+              <Button type="submit" variant="outline" size="sm" tooltip="Delete this answer choice">×</Button>
             </form>
           </li>
         ))}
@@ -600,7 +600,7 @@ function QuestionEditor({
           <input type="checkbox" name="is_correct" value="1" />
           Correct
         </label>
-        <Button type="submit" size="sm">Add</Button>
+        <Button type="submit" size="sm" tooltip="Add this answer choice to the question">Add</Button>
       </form>
     </div>
   );

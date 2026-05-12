@@ -60,7 +60,7 @@ export default async function PositionsPage() {
             positions, not people — when staff change, the chart stays.
           </p>
         </div>
-        <Button asChild variant="outline">
+        <Button asChild variant="outline" tooltip="View the organisation chart">
           <Link href="/app/admin/positions/chart">View org chart →</Link>
         </Button>
       </div>

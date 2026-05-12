@@ -170,6 +170,7 @@ export default async function AssignmentsPage() {
                             action={deleteAssignmentAction}
                             id={r.id}
                             label="Unassign"
+                            tooltip="Remove this training assignment from the employee"
                             confirmMessage={`Unassign ${r.userName} from '${r.moduleTitle}'?`}
                           />
                         </td>

@@ -17,11 +17,12 @@ interface NameCrudFormProps {
   label: string;
   placeholder: string;
   submitLabel: string;
+  submitTooltip?: string;
 }
 
 /** Shared "single text field, list-style add" form used across the admin
  *  config screens (departments, employers, etc). */
-export function NameCrudForm({ action, label, placeholder, submitLabel }: NameCrudFormProps) {
+export function NameCrudForm({ action, label, placeholder, submitLabel, submitTooltip }: NameCrudFormProps) {
   const [state, formAction, pending] = useActionState(action, initial);
 
   return (
@@ -39,7 +40,7 @@ export function NameCrudForm({ action, label, placeholder, submitLabel }: NameCr
           <p className="text-xs text-[color:var(--destructive)]">{state.fieldErrors.name[0]}</p>
         )}
       </div>
-      <Button type="submit" disabled={pending}>
+      <Button type="submit" disabled={pending} tooltip={submitTooltip}>
         {pending ? "Saving…" : submitLabel}
       </Button>
       {state.status === "ok" && (

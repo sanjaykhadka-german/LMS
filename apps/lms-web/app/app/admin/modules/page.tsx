@@ -96,7 +96,7 @@ export default async function ModulesPage() {
             via department policy.
           </p>
         </div>
-        <Button asChild variant="outline">
+        <Button asChild variant="outline" tooltip="Open the AI module-authoring studio">
           <Link href="/app/admin/modules/ai-studio">AI Studio →</Link>
         </Button>
       </div>
@@ -114,6 +114,7 @@ export default async function ModulesPage() {
             label="Module title"
             placeholder="e.g. Knife safety basics"
             submitLabel="Create"
+            submitTooltip="Create a new module — it'll start as a draft"
           />
         </CardContent>
       </Card>
@@ -148,12 +149,13 @@ export default async function ModulesPage() {
                   ) : (
                     <Badge variant="secondary">Draft</Badge>
                   )}
-                  <Button asChild variant="outline" size="sm">
+                  <Button asChild variant="outline" size="sm" tooltip="Open this module to edit content and quiz">
                     <Link href={`/app/admin/modules/${m.id}`}>Edit</Link>
                   </Button>
                   <DeleteRowForm
                     action={deleteModuleAction}
                     id={m.id}
+                    tooltip="Delete this module and all its content"
                     confirmMessage={`Delete '${m.title}'? Content, questions, and assignments will be removed.`}
                   />
                 </div>

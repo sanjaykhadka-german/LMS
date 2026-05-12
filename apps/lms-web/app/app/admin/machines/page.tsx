@@ -78,12 +78,13 @@ export default async function MachinesPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Button asChild variant="outline" size="sm">
+                  <Button asChild variant="outline" size="sm" tooltip="Edit this machine's details">
                     <Link href={`/app/admin/machines/${m.id}/edit`}>Edit</Link>
                   </Button>
                   <DeleteRowForm
                     action={deleteMachineAction}
                     id={m.id}
+                    tooltip="Delete this machine"
                     confirmMessage={`Delete machine '${m.name}'?`}
                   />
                 </div>

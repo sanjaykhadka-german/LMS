@@ -23,7 +23,12 @@ export function ResetPasswordForm({ id, email }: { id: number; email: string }) 
 function SubmitButton() {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" variant="outline" disabled={pending}>
+    <Button
+      type="submit"
+      variant="outline"
+      disabled={pending}
+      tooltip="Generate a new password and email it to the employee"
+    >
       {pending ? "Resetting…" : "Reset password"}
     </Button>
   );

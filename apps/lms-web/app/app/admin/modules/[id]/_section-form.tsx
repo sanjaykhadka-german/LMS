@@ -162,6 +162,7 @@ export function SectionForm({
                     type="button"
                     variant="outline"
                     size="sm"
+                    tooltip="Remove this bullet point"
                     onClick={() =>
                       setBullets((prev) => prev.filter((_, j) => j !== i))
                     }
@@ -176,6 +177,7 @@ export function SectionForm({
             type="button"
             variant="outline"
             size="sm"
+            tooltip="Add another bullet point"
             onClick={() => setBullets((prev) => [...prev, ""])}
           >
             + Add bullet

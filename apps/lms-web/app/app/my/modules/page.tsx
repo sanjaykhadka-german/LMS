@@ -223,7 +223,14 @@ function NextUpCard({
             )}
           </div>
         </div>
-        <Button asChild>
+        <Button
+          asChild
+          tooltip={
+            row.attempts > 0
+              ? "Continue where you left off"
+              : "Begin this training module"
+          }
+        >
           <Link href={`/app/my/modules/${row.module.id}`}>
             {row.attempts > 0 ? "Resume" : "Start"}
           </Link>
