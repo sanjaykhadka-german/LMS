@@ -92,9 +92,9 @@ WITH last_event AS (
 UPDATE app.users au
    SET password_hash = u.password_hash,
        updated_at    = NOW()
-  FROM public.users u
-  JOIN last_event e ON e.target_id = u.id::text
+  FROM public.users u, last_event e
  WHERE au.id = u.tracey_user_id::uuid
+   AND e.target_id = u.id::text
    AND u.password_hash IS NOT NULL
    AND au.password_hash IS NOT NULL
    AND u.password_hash <> au.password_hash
@@ -109,9 +109,9 @@ WITH last_event AS (
 )
 UPDATE public.users u
    SET password_hash = au.password_hash
-  FROM app.users au
-  JOIN last_event e ON e.target_id = u.id::text
+  FROM app.users au, last_event e
  WHERE au.id = u.tracey_user_id::uuid
+   AND e.target_id = u.id::text
    AND u.password_hash IS NOT NULL
    AND au.password_hash IS NOT NULL
    AND u.password_hash <> au.password_hash
