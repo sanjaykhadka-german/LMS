@@ -10,8 +10,8 @@ export function Hero() {
           {siteConfig.tagline}
         </h1>
         <p className="mx-auto mt-6 max-w-2xl text-balance text-lg text-[color:var(--muted-foreground)]">
-          Tracey turns your SOPs, SQF documents, and machine training into quizzes,
-          qualifications, and audit trails. Built for operations teams who want their
+          Tracey turns your policies, procedures, and training materials into quizzes,
+          qualifications, and audit trails. Built for teams who want their
           people trained — not their LMS managed.
         </p>
         <div className="mt-10 flex items-center justify-center gap-3">

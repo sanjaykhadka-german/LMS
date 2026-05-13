@@ -154,12 +154,12 @@ function PriceLabel({
       <div className="flex items-baseline gap-1">
         <span className="text-3xl font-semibold">{formatPrice(slot.perSeatPerMonth)}</span>
         <span className="text-sm text-[color:var(--muted-foreground)]">
-          /seat /month
+          /month
         </span>
       </div>
       {billing === "annual" ? (
         <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-          Billed annually — ${annualTotal}/seat/year
+          Billed annually — ${annualTotal}/year
         </p>
       ) : (
         <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">

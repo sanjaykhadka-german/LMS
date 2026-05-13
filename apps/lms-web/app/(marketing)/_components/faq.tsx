@@ -13,7 +13,7 @@ const faqs = [
   },
   {
     q: "Can I bring my own training content?",
-    a: "Yes. Tracey ingests your SQF / NC / SOP documents and turns them into quizzes you can edit. You can also build modules from scratch.",
+    a: "Yes. Tracey ingests your policies, procedures, and training documents and turns them into quizzes you can edit. You can also build modules from scratch.",
   },
   {
     q: "Who owns the data?",

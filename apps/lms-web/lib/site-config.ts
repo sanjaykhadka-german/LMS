@@ -80,7 +80,7 @@ export const pricingTiers: readonly PricingTier[] = [
     features: [
       "Everything in Starter",
       "Unlimited seats",
-      "AI quiz generation from your SQF/NC documents",
+      "AI quiz generation from your policies, procedures, and training documents",
       "Custom branding",
       "Priority support",
     ],

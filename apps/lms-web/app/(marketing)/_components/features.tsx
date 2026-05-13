@@ -4,15 +4,15 @@ import { ClipboardCheck, Sparkles, ShieldCheck } from "lucide-react";
 const features = [
   {
     icon: ClipboardCheck,
-    title: "Built around your machines and positions",
+    title: "Built around your roles and responsibilities",
     description:
-      "Map modules to the equipment and roles that actually exist on your floor. Passing the right modules qualifies your people on the right machines — automatically.",
+      "Map modules to the roles and responsibilities that actually exist in your organisation. Passing the right modules qualifies your people for the work they do — automatically.",
   },
   {
     icon: Sparkles,
     title: "AI quizzes from documents you already have",
     description:
-      "Drop in your SQF / NC / SOP documents and Tracey generates the quiz. Edit, version, and re-issue without rebuilding the question bank from scratch.",
+      "Drop in your policies, procedures, and training documents and Tracey generates the quiz. Edit, version, and re-issue without rebuilding the question bank from scratch.",
   },
   {
     icon: ShieldCheck,
