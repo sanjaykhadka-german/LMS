@@ -1,16 +1,36 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { asc } from "drizzle-orm";
-import { forTenant, scLocations } from "@tracey/db";
+import { and, asc, eq, ilike, sql } from "drizzle-orm";
+import { forTenant, scLocations, scShifts } from "@tracey/db";
 import { currentMembership } from "~/lib/auth/current";
 import { Button } from "~/components/ui/button";
+import { Input } from "~/components/ui/input";
 import { LocationForm } from "./_form";
 
 export const metadata = { title: "Locations · ShiftCraft" };
 
-export default async function LocationsPage() {
+export default async function LocationsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>;
+}) {
   const membership = await currentMembership();
   if (!membership) redirect("/app");
+
+  const { q: rawQ } = await searchParams;
+  const q = (rawQ ?? "").trim();
+  const hasQuery = q.length > 0;
+
+  // Upcoming shift count per location: shifts that are published AND start
+  // from now onward. Computed in-DB as a correlated subquery so it scales
+  // with locations, not with shifts.
+  const now = new Date();
+  const upcomingCount = sql<number>`(
+    SELECT count(*)::int FROM ${scShifts}
+    WHERE ${scShifts.locationId} = ${scLocations.id}
+      AND ${scShifts.status} = 'published'
+      AND ${scShifts.startsAt} >= ${now}
+  )`;
 
   const locations = await forTenant(membership.tenant.id).run((tx) =>
     tx
@@ -19,8 +39,17 @@ export default async function LocationsPage() {
         name: scLocations.name,
         timezone: scLocations.timezone,
         address: scLocations.address,
+        upcomingShifts: upcomingCount,
       })
       .from(scLocations)
+      .where(
+        hasQuery
+          ? and(
+              eq(scLocations.traceyTenantId, membership.tenant.id),
+              ilike(scLocations.name, `%${q}%`),
+            )
+          : eq(scLocations.traceyTenantId, membership.tenant.id),
+      )
       .orderBy(asc(scLocations.name)),
   );
 
@@ -42,14 +71,34 @@ export default async function LocationsPage() {
       </section>
 
       <section className="rounded-lg border border-border bg-card shadow-sm">
-        <div className="border-b border-border px-5 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-3">
           <h2 className="text-base font-semibold">
-            All locations ({locations.length})
+            {hasQuery
+              ? `Matches for "${q}" (${locations.length})`
+              : `All locations (${locations.length})`}
           </h2>
+          <form className="flex items-center gap-2">
+            <Input
+              type="search"
+              name="q"
+              defaultValue={q}
+              placeholder="Search by name"
+              className="h-8 w-48"
+            />
+            <Button type="submit" variant="outline" size="sm">
+              Search
+            </Button>
+            {hasQuery && (
+              <Button asChild variant="ghost" size="sm">
+                <Link href="/app/locations">Clear</Link>
+              </Button>
+            )}
+          </form>
         </div>
+
         {locations.length === 0 ? (
           <p className="px-5 py-6 text-sm text-muted-foreground">
-            No locations yet — add one above.
+            {hasQuery ? "No locations match your search." : "No locations yet — add one above."}
           </p>
         ) : (
           <ul className="divide-y divide-border">
@@ -63,6 +112,9 @@ export default async function LocationsPage() {
                   <div className="truncate text-xs text-muted-foreground">
                     {loc.timezone}
                     {loc.address ? ` · ${loc.address}` : ""}
+                    {" · "}
+                    {loc.upcomingShifts} upcoming shift
+                    {loc.upcomingShifts === 1 ? "" : "s"}
                   </div>
                 </div>
                 <Button asChild variant="outline" size="sm">
