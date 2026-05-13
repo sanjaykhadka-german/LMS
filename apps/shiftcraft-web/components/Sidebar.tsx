@@ -22,7 +22,7 @@ const NAV = [
   { href: "/app", label: "Dashboard", icon: LayoutDashboard },
   { href: "/app/my-shifts", label: "My shifts", icon: CalendarCheck },
   { href: "/app/schedule", label: "Schedule", icon: CalendarDays },
-  { href: "/app/coverage", label: "Coverage gaps", icon: AlertCircle },
+  { href: "/app/coverage-gaps", label: "Coverage gaps", icon: AlertCircle },
   { href: "/app/locations", label: "Locations", icon: MapPin },
   { href: "/app/employees", label: "Employees", icon: Users },
   { href: "/app/time-off", label: "Time off", icon: CalendarOff },
