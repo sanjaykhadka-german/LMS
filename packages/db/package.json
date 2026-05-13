@@ -20,6 +20,7 @@
     "migrate-shiftcraft": "tsx src/migrate-shiftcraft.ts",
     "migrate-planning": "tsx src/migrate-planning.ts",
     "migrate-tenants": "tsx src/per-tenant-migrate.ts",
+    "planning-import": "tsx src/cli/planning-supabase-import.ts",
     "tenant-backup": "tsx src/cli/tenant-backup.ts",
     "tenant-provision": "tsx src/cli/tenant-provision.ts",
     "tenant-copy": "tsx src/cli/tenant-copy.ts",
