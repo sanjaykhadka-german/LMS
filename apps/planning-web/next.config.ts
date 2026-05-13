@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  transpilePackages: ["@tracey/ui", "@tracey/auth", "@tracey/db", "@tracey/types"],
   typescript: {
     // Type errors are checked locally — don't block production deploys
     ignoreBuildErrors: true,

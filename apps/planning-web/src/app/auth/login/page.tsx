@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 
@@ -30,21 +30,22 @@ function LoginInner() {
       setTimeout(async () => {
         if (autoSubmitRef.current) return;
         autoSubmitRef.current = true;
-        const supabase = createClient();
-        const { data, error } = await supabase.auth.signInWithPassword({ email: emailParam, password: tmpParam });
-        if (error) {
+        const result = await signIn("credentials", {
+          email: emailParam,
+          password: tmpParam,
+          redirect: false,
+        });
+        if (!result || result.error) {
           setError("Your login link has expired. Please contact your admin for new credentials.");
           setAutoSigning(false);
           return;
         }
-        if (data.user) {
-          const loginRes = await fetch("/api/record-login", { method: "POST" }).catch(() => null);
-          const loginData = await loginRes?.json().catch(() => ({}));
-          if (loginData?.force_password_change) {
-            router.push("/auth/change-password");
-            router.refresh();
-            return;
-          }
+        const loginRes = await fetch("/api/record-login", { method: "POST" }).catch(() => null);
+        const loginData = await loginRes?.json().catch(() => ({}));
+        if (loginData?.force_password_change) {
+          router.push("/auth/change-password");
+          router.refresh();
+          return;
         }
         router.push("/dashboard");
         router.refresh();
@@ -68,27 +69,25 @@ function LoginInner() {
     setLoading(true);
     setError(null);
 
-    const supabase = createClient();
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    const result = await signIn("credentials", { email, password, redirect: false });
 
-    if (error) {
-      setError(error.message);
+    if (!result || result.error) {
+      setError("Wrong email or password.");
       setLoading(false);
-    } else {
-      if (data.user) {
-        const loginRes = await fetch("/api/record-login", { method: "POST" }).catch(() => null);
-        if (loginRes?.ok) {
-          const loginData = await loginRes.json().catch(() => ({}));
-          if (loginData.force_password_change) {
-            router.push("/auth/change-password");
-            router.refresh();
-            return;
-          }
-        }
-      }
-      router.push("/dashboard");
-      router.refresh();
+      return;
     }
+
+    const loginRes = await fetch("/api/record-login", { method: "POST" }).catch(() => null);
+    if (loginRes?.ok) {
+      const loginData = await loginRes.json().catch(() => ({}));
+      if (loginData.force_password_change) {
+        router.push("/auth/change-password");
+        router.refresh();
+        return;
+      }
+    }
+    router.push("/dashboard");
+    router.refresh();
   }
 
   // Full-screen auto-sign-in state
