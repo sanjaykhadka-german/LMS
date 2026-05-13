@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CalendarDays, LayoutDashboard, LogOut, MapPin } from "lucide-react";
+import { CalendarDays, LayoutDashboard, LogOut, MapPin, Users } from "lucide-react";
 import { cn } from "~/lib/utils";
 import { Logo } from "./Logo";
 import { signOutAction } from "~/app/app/_actions";
@@ -11,6 +11,7 @@ const NAV = [
   { href: "/app", label: "Dashboard", icon: LayoutDashboard },
   { href: "/app/schedule", label: "Schedule", icon: CalendarDays },
   { href: "/app/locations", label: "Locations", icon: MapPin },
+  { href: "/app/employees", label: "Employees", icon: Users },
 ];
 
 export function Sidebar({ name, role }: { name: string; role: string }) {
