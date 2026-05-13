@@ -3,6 +3,7 @@ import { db, invitations, members, users } from "@tracey/db";
 import { requireTenant } from "~/lib/auth/current";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
+import { PageHeader } from "~/components/page-header";
 import { InviteForm } from "./_form";
 import { RevokeButton } from "./_revoke";
 import { revokeInvitationAction } from "./actions";
@@ -39,12 +40,10 @@ export default async function MembersPage() {
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-10 space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Team</h1>
-        <p className="text-sm text-[color:var(--muted-foreground)]">
-          Manage who can access {tenant.name}.
-        </p>
-      </div>
+      <PageHeader
+        title="Team"
+        description={`Manage who can access ${tenant.name}.`}
+      />
 
       {canManage && (
         <Card>

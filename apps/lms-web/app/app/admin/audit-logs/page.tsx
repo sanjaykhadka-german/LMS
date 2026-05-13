@@ -4,6 +4,7 @@ import { requireAdmin } from "~/lib/auth/admin";
 import { formatDateTime } from "~/lib/format/datetime";
 import { Badge } from "~/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
+import { PageHeader } from "~/components/page-header";
 import { PruneForm } from "./PruneForm";
 
 export const metadata = { title: "Audit logs" };
@@ -100,17 +101,17 @@ export default async function AuditLogsPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Audit logs</h1>
-          <p className="text-sm text-[color:var(--muted-foreground)]">
+      <PageHeader
+        title="Audit logs"
+        description={
+          <>
             Unified view of Tracey-side <code>app.audit_events</code> (subscription
             + invitation events) and Flask-side <code>public.audit_logs</code>{" "}
             (admin actions). Showing the most recent 300.
-          </p>
-        </div>
-        <PruneForm />
-      </div>
+          </>
+        }
+        actions={<PruneForm />}
+      />
 
       {sp.pruned !== undefined && (
         <div className="rounded-md border border-emerald-500 bg-emerald-50/50 px-4 py-2 text-sm dark:bg-emerald-900/10">

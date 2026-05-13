@@ -5,6 +5,7 @@ import { requireAdmin } from "~/lib/auth/admin";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
+import { PageHeader } from "~/components/page-header";
 import { DeleteRowForm } from "../_components/DeleteRowForm";
 import { CreatePositionForm } from "./_form";
 import { deletePositionAction } from "./actions";
@@ -52,18 +53,15 @@ export default async function PositionsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Positions</h1>
-          <p className="text-sm text-[color:var(--muted-foreground)]">
-            The roles that make up your org chart. Hierarchy is between
-            positions, not people — when staff change, the chart stays.
-          </p>
-        </div>
-        <Button asChild variant="outline" tooltip="View the organisation chart">
-          <Link href="/app/admin/positions/chart">View org chart →</Link>
-        </Button>
-      </div>
+      <PageHeader
+        title="Positions"
+        description="The roles that make up your org chart. Hierarchy is between positions, not people — when staff change, the chart stays."
+        actions={
+          <Button asChild variant="outline" tooltip="View the organisation chart">
+            <Link href="/app/admin/positions/chart">View org chart →</Link>
+          </Button>
+        }
+      />
 
       <Card>
         <CardHeader>

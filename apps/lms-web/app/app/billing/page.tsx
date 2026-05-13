@@ -15,6 +15,7 @@ import {
   CardTitle,
 } from "~/components/ui/card";
 import { HelpPopover } from "~/components/ui/help-popover";
+import { PageHeader } from "~/components/page-header";
 import { pricingTiers, formatPrice } from "~/lib/site-config";
 
 function daysUntil(date: Date | null): number | null {
@@ -91,27 +92,24 @@ export default async function BillingPage() {
       : null;
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-10">
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold tracking-tight">{copy.title}</h1>
-        {trialDaysLeft !== null && (
-          <p className="mt-1 inline-flex items-center gap-1.5 text-sm font-medium text-[color:var(--foreground)]">
-            {trialDaysLeft} {trialDaysLeft === 1 ? "day" : "days"} remaining
-            {trialEndsAtLabel ? ` — until ${trialEndsAtLabel}` : ""}
-            <HelpPopover label="About the trial">
-              After the trial ends you&apos;ll be asked to choose a plan and add
-              a card. We never auto-charge — you have to subscribe yourself.
-            </HelpPopover>
-          </p>
-        )}
-        <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">{copy.body}</p>
-        {platformAdmin && level !== "full" && (
-          <p className="mt-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900">
-            Platform admin override: you have full access. Tenant&apos;s effective level is{" "}
-            <strong>{accessLevelFor(tenant)}</strong>.
-          </p>
-        )}
-      </div>
+    <div className="mx-auto max-w-4xl space-y-6 px-4 py-10">
+      <PageHeader title={copy.title} description={copy.body} />
+      {trialDaysLeft !== null && (
+        <p className="inline-flex items-center gap-1.5 text-sm font-medium text-[color:var(--foreground)]">
+          {trialDaysLeft} {trialDaysLeft === 1 ? "day" : "days"} remaining
+          {trialEndsAtLabel ? ` — until ${trialEndsAtLabel}` : ""}
+          <HelpPopover label="About the trial">
+            After the trial ends you&apos;ll be asked to choose a plan and add
+            a card. We never auto-charge — you have to subscribe yourself.
+          </HelpPopover>
+        </p>
+      )}
+      {platformAdmin && level !== "full" && (
+        <p className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900">
+          Platform admin override: you have full access. Tenant&apos;s effective level is{" "}
+          <strong>{accessLevelFor(tenant)}</strong>.
+        </p>
+      )}
 
       {tenant.stripeCustomerId && (
         <Card className="mb-6">

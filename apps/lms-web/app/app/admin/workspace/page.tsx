@@ -7,6 +7,7 @@ import {
   CardHeader,
   CardTitle,
 } from "~/components/ui/card";
+import { PageHeader } from "~/components/page-header";
 import { TimezoneForm } from "./TimezoneForm";
 
 export const metadata = { title: "Workspace" };
@@ -39,12 +40,10 @@ export default async function WorkspaceSettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Workspace</h1>
-        <p className="text-sm text-[color:var(--muted-foreground)]">
-          Settings that apply to everyone in this workspace.
-        </p>
-      </div>
+      <PageHeader
+        title="Workspace"
+        description="Settings that apply to everyone in this workspace."
+      />
 
       <Card>
         <CardHeader>
