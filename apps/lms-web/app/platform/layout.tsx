@@ -12,7 +12,7 @@ export default async function PlatformLayout({
   return (
     <div className="flex min-h-screen flex-col">
       <header className="sticky top-0 z-40 w-full border-b border-[color:var(--border)] bg-[color:var(--background)]/80 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
+        <div className="mx-auto flex h-14 max-w-[1800px] items-center justify-between px-4">
           <div className="flex items-center gap-4">
             <Link
               href="/platform"

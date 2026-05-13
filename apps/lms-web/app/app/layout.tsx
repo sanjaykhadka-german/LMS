@@ -64,7 +64,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <TooltipProvider delayDuration={300}>
       <div className="flex min-h-screen flex-col">
         <header className="sticky top-0 z-40 w-full border-b border-[color:var(--border)] bg-[color:var(--background)]/80 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-screen-2xl items-center justify-between px-4">
+        <div className="mx-auto flex h-16 max-w-[1800px] items-center justify-between px-4">
           <div className="flex items-center gap-4">
             <Link href="/app" className="flex items-center" aria-label={siteConfig.name}>
               <span

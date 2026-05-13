@@ -40,7 +40,7 @@ export default async function MyModulesPage() {
   const nextUp = decorated.find((r) => r.status !== "completed");
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8 px-4 py-10">
+    <div className="mx-auto max-w-[1800px] space-y-8 px-4 py-10">
       <header>
         <div className="text-xs font-semibold uppercase tracking-wider text-[color:var(--muted-foreground)]">
           01 / Your training

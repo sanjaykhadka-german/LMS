@@ -51,7 +51,7 @@ export default async function PlatformTenantsPage() {
   const countsByTenant = new Map(lmsCounts.map((c) => [c.tenantId, c]));
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10 space-y-6">
+    <div className="mx-auto max-w-[1800px] px-4 py-10 space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Tenants</h1>
         <p className="text-sm text-[color:var(--muted-foreground)]">

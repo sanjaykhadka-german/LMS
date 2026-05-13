@@ -102,7 +102,7 @@ export default async function PlatformTenantDetailPage({ params }: PageProps) {
   const lmsCounts = allLmsCounts.find((c) => c.tenantId === id);
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-10 space-y-6">
+    <div className="mx-auto max-w-[1800px] px-4 py-10 space-y-6">
       <div>
         <div className="text-xs uppercase tracking-wide text-[color:var(--muted-foreground)]">
           {tenant.slug}
