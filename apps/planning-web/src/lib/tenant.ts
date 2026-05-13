@@ -1,66 +1,57 @@
 /**
  * Tenant resolution utilities.
- * Call getTenant() in any Server Component or Server Action to get
- * the current tenant's ID and metadata.
+ *
+ * Slice 0b switched the source of truth from Supabase's `public.tenants`
+ * (resolved by host subdomain) to the Tracey `app.tenants` table, accessed
+ * via @/lib/auth/current's cookie + members lookup. Function signatures
+ * stay back-compat so the existing call sites in feature modules keep
+ * working — every existing `getTenantId()` consumer still receives the
+ * tenant UUID, which is preserved across the bootstrap (Tracey app.tenants.id
+ * = the original Supabase public.tenants.id).
+ *
+ * `getCurrentProfile()` still hits Supabase because the `profiles` table
+ * isn't migrated until a later slice. Now that the Tracey user.id mirrors
+ * the Supabase auth.users.id (Slice 0b bootstrap), the existing
+ * `eq("id", user.id)` filter resolves correctly.
  */
 
-import { headers } from "next/headers";
 import { createClient } from "./supabase/server";
-import { createAdminClient } from "./supabase/admin";
-import type { Tenant } from "./types";
+import { currentTenant, currentUser, type Tenant } from "@/lib/auth/current";
 
-/**
- * Returns the tenant subdomain from the request header set by middleware.
- * Falls back to 'germanbutchery' in dev.
- */
-export async function getTenantSubdomain(): Promise<string> {
-  const h = await headers();
-  return h.get("x-tracey-tenant") ?? "germanbutchery";
-}
+export type { Tenant };
 
-/**
- * Resolves the full tenant record from the subdomain.
- * Uses admin client (service role) so RLS doesn't block the lookup.
- */
 export async function getTenant(): Promise<Tenant | null> {
-  const subdomain = await getTenantSubdomain();
-  const admin = createAdminClient();
-  const { data } = await admin
-    .from("tenants")
-    .select("*")
-    .eq("subdomain", subdomain)
-    .eq("is_active", true)
-    .single();
-  return data ?? null;
+  return currentTenant();
 }
 
-/**
- * Returns just the tenant_id UUID, or null if not found.
- * Use this to scope queries in server components.
- */
 export async function getTenantId(): Promise<string | null> {
-  const tenant = await getTenant();
+  const tenant = await currentTenant();
   return tenant?.id ?? null;
 }
 
 /**
- * Returns the current user's profile including tenant_id.
+ * Back-compat shim — returns the tenant's slug, which under the Tracey model
+ * corresponds to what used to be the Supabase tenant subdomain. No callers
+ * use this in the planning-web codebase today (verified by grep); kept only
+ * so future ports of legacy code don't break silently.
  */
+export async function getTenantSubdomain(): Promise<string> {
+  const tenant = await currentTenant();
+  return tenant?.slug ?? "germanbutchery";
+}
+
 export async function getCurrentProfile() {
+  const u = await currentUser();
+  if (!u) return null;
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
   const { data: profile } = await supabase
     .from("profiles")
     .select("*")
-    .eq("id", user.id)
+    .eq("id", u.id)
     .single();
   return profile;
 }
 
-/**
- * Convenience: returns both profile and tenant in one call.
- */
 export async function getContext() {
   const [profile, tenant] = await Promise.all([getCurrentProfile(), getTenant()]);
   return { profile, tenant };

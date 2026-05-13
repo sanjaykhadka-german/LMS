@@ -1,20 +1,27 @@
 // Auth.js Credentials authorize() for planning-web.
 //
 // Slice 0a transition strategy: Supabase Auth remains the source of truth for
-// the password. On every sign-in we call supabase.auth.signInWithPassword,
-// which (via the SSR cookie adapter) sets the Supabase session cookie on the
-// response. That cookie keeps the existing RLS-by-cookie data fetches working
-// for the rest of the app while feature modules are migrated in later slices.
+// the password. signInWithPassword sets the Supabase session cookie via the
+// SSR adapter so RLS-by-cookie data fetches in feature modules still work.
 //
-// In parallel, we ensure an `app.users` row exists for this email so future
-// slices have a stable Tracey user identity to FK against. The bcrypt hash is
-// stored opportunistically — we switch to bcrypt-as-source-of-truth in a
-// later slice once every user has gone through this flow at least once.
+// Slice 0b extends the bootstrap: in addition to provisioning app.users, we
+// also provision app.tenants (reusing the Supabase tenant UUID as the Tracey
+// tenant id) and app.members so currentTenant() / requireTenant() resolve
+// the user's workspace immediately. The Tracey user.id is also set to the
+// Supabase auth.users.id on first insert so feature modules that still query
+// `profiles.id = user.id` against Supabase continue to find the right row.
 
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { db, users } from "@tracey/db";
+import {
+  db,
+  users,
+  tenants,
+  members,
+  type Role,
+} from "@tracey/db";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { hashPassword } from "./passwords";
 
 const credentialsSchema = z.object({
@@ -30,65 +37,143 @@ export interface AuthorizedUser {
   passwordChangedAt: number;
 }
 
+// Planning-web profile roles vary across tenants (owner, admin, manager,
+// operator, qaqc, viewer, …). Tracey enforces ('owner','admin','member')
+// at the DB level — anything outside that triggers a CHECK constraint
+// violation, so collapse the long tail into 'member'.
+function mapToTraceyRole(supabaseRole: string | null | undefined): Role {
+  if (supabaseRole === "owner") return "owner";
+  if (supabaseRole === "admin") return "admin";
+  return "member";
+}
+
 export async function authorizeCredentials(raw: unknown): Promise<AuthorizedUser | null> {
   const parsed = credentialsSchema.safeParse(raw);
   if (!parsed.success) return null;
   const { email, password } = parsed.data;
 
-  // Supabase is the password oracle in Slice 0a. signInWithPassword sets the
-  // Supabase session cookie via the SSR cookie adapter, so legacy queries that
-  // still go through the Supabase client continue to see an authenticated
-  // session after this returns.
+  // 1. Supabase oracle: verifies password and sets the SSR cookie.
   const supabase = await createClient();
   const { data: sb, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error || !sb?.user) return null;
 
-  // Ensure an app.users row exists. Email is the unique key; the Tracey user.id
-  // is independent of Supabase's auth.users.id and is decided here at first
-  // sign-in. The eventual data-migration slice (Slice 9) will reconcile both
-  // identifiers per tenant.
-  const [existing] = await db
+  // 2. Provision (or find) app.users. The Tracey user.id is set to the
+  //    Supabase auth.users.id on first insert so feature modules that still
+  //    query Supabase via `eq("id", user.id)` keep resolving the right row.
+  const supabaseUserId = sb.user.id;
+  const [existingUser] = await db
     .select()
     .from(users)
     .where(eq(users.email, email))
     .limit(1);
 
-  if (existing) {
-    return {
-      id: existing.id,
-      name: existing.name ?? null,
-      email: existing.email,
-      image: existing.image ?? null,
-      passwordChangedAt: existing.passwordChangedAt.getTime(),
-    };
+  let appUser;
+  if (existingUser) {
+    appUser = existingUser;
+  } else {
+    const now = new Date();
+    const bcryptHash = await hashPassword(password);
+    const supabaseName =
+      (sb.user.user_metadata && typeof sb.user.user_metadata === "object"
+        ? ((sb.user.user_metadata as Record<string, unknown>).full_name as string | undefined) ??
+          ((sb.user.user_metadata as Record<string, unknown>).name as string | undefined)
+        : undefined) ?? null;
+    const [inserted] = await db
+      .insert(users)
+      .values({
+        id: supabaseUserId,
+        email,
+        name: supabaseName,
+        passwordHash: bcryptHash,
+        emailVerified: sb.user.email_confirmed_at
+          ? new Date(sb.user.email_confirmed_at)
+          : now,
+        passwordChangedAt: now,
+      })
+      .returning();
+    if (!inserted) return null;
+    appUser = inserted;
   }
 
-  const now = new Date();
-  const bcryptHash = await hashPassword(password);
-  const supabaseName =
-    (sb.user.user_metadata && typeof sb.user.user_metadata === "object"
-      ? ((sb.user.user_metadata as Record<string, unknown>).full_name as string | undefined) ??
-        ((sb.user.user_metadata as Record<string, unknown>).name as string | undefined)
-      : undefined) ?? null;
+  // 3. Ensure a tenant + membership exist for this user. Idempotent — if a
+  //    membership row already exists we skip the lookup entirely. Otherwise
+  //    read the Supabase profile to find the user's tenant_id + role and
+  //    upsert into app.tenants / app.members.
+  const [existingMembership] = await db
+    .select({ id: members.id })
+    .from(members)
+    .where(eq(members.userId, appUser.id))
+    .limit(1);
 
-  const [inserted] = await db
-    .insert(users)
-    .values({
-      email,
-      name: supabaseName,
-      passwordHash: bcryptHash,
-      emailVerified: sb.user.email_confirmed_at ? new Date(sb.user.email_confirmed_at) : now,
-      passwordChangedAt: now,
-    })
-    .returning();
-
-  if (!inserted) return null;
+  if (!existingMembership) {
+    await bootstrapTenantAndMembership(supabase, appUser.id, supabaseUserId);
+  }
 
   return {
-    id: inserted.id,
-    name: inserted.name ?? null,
-    email: inserted.email,
-    image: inserted.image ?? null,
-    passwordChangedAt: inserted.passwordChangedAt.getTime(),
+    id: appUser.id,
+    name: appUser.name ?? null,
+    email: appUser.email,
+    image: appUser.image ?? null,
+    passwordChangedAt: appUser.passwordChangedAt.getTime(),
   };
+}
+
+async function bootstrapTenantAndMembership(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  appUserId: string,
+  supabaseUserId: string,
+): Promise<void> {
+  // The Supabase profile row carries the tenant_id + role mapping that
+  // planning-web has always relied on. RLS allows authenticated reads of
+  // own-profile rows so the regular client works here.
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("tenant_id, role")
+    .eq("id", supabaseUserId)
+    .single();
+
+  const tenantId = profile?.tenant_id as string | undefined;
+  if (!tenantId) return; // No tenant — user can sign in but won't pass requireTenant() until an admin links them.
+
+  // Tenant lookup uses the service-role client (matches the existing
+  // @/lib/tenant.getTenant pattern) so we don't depend on Supabase RLS
+  // policies around the tenants table.
+  const [appTenant] = await db
+    .select({ id: tenants.id })
+    .from(tenants)
+    .where(eq(tenants.id, tenantId))
+    .limit(1);
+
+  if (!appTenant) {
+    const admin = createAdminClient();
+    const { data: sbTenant } = await admin
+      .from("tenants")
+      .select("name, subdomain")
+      .eq("id", tenantId)
+      .single();
+
+    if (sbTenant?.name) {
+      const slug =
+        (sbTenant.subdomain as string | undefined)?.trim() ||
+        `tenant-${tenantId.slice(0, 8)}`;
+      await db
+        .insert(tenants)
+        .values({
+          id: tenantId,
+          ownerUserId: appUserId,
+          slug,
+          name: sbTenant.name as string,
+        })
+        .onConflictDoNothing();
+    }
+  }
+
+  await db
+    .insert(members)
+    .values({
+      tenantId,
+      userId: appUserId,
+      role: mapToTraceyRole(profile?.role as string | null | undefined),
+    })
+    .onConflictDoNothing();
 }

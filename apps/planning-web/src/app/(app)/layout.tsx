@@ -1,6 +1,5 @@
-import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getTenant } from "@/lib/tenant";
+import { requireUser, requireTenant } from "@/lib/auth/current";
 import Sidebar from "@/components/sidebar";
 import OfflineBanner from "@/components/offline-banner";
 import { SyncProvider } from "@/lib/offline/sync-context";
@@ -9,14 +8,19 @@ import { loadMessages } from "@/lib/i18n-server";
 import type { UserRole } from "@/lib/types";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/auth/login");
+  // Tracey auth gates the route; redirects to /auth/login on its own.
+  const user = await requireUser();
+  const { tenant } = await requireTenant();
 
-  const [{ data: profile }, tenant] = await Promise.all([
-    supabase.from("profiles").select("role, full_name, tenant_id").eq("id", user.id).single(),
-    getTenant(),
-  ]);
+  // Supabase remains the source for planning-specific profile + department
+  // data until those tables migrate. user.id now mirrors the Supabase
+  // auth.users.id (Slice 0b bootstrap) so the profiles lookup still resolves.
+  const supabase = await createClient();
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role, full_name, tenant_id")
+    .eq("id", user.id)
+    .single();
 
   // Fetch language separately — column may not exist yet if migration 002 hasn't run
   let userLanguage = "en";
