@@ -163,6 +163,13 @@ export default async function SchedulePage({
           <Button asChild variant="outline" size="sm">
             <Link href={`/app/schedule${qs({ week: nextWeek })}`}>Next →</Link>
           </Button>
+          <Button asChild variant="outline" size="sm">
+            <a
+              href={`/api/schedule/export?from=${fmtIsoDate(weekStart)}&to=${fmtIsoDate(weekEnd)}${locationFilter ? `&location=${locationFilter}` : ""}`}
+            >
+              Export CSV
+            </a>
+          </Button>
           {isAdmin && draftCount > 0 && (
             <form action={bulkPublishWeekAction}>
               <input type="hidden" name="weekStart" value={weekStart.toISOString()} />
