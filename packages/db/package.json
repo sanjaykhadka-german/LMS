@@ -9,13 +9,16 @@
     ".": "./src/index.ts",
     "./schema": "./src/schema.ts",
     "./client": "./src/client.ts",
-    "./shiftcraft-schema": "./src/shiftcraft-schema.ts"
+    "./shiftcraft-schema": "./src/shiftcraft-schema.ts",
+    "./planning-schema": "./src/planning-schema.ts"
   },
   "scripts": {
     "generate": "drizzle-kit generate",
     "generate-shiftcraft": "drizzle-kit generate --config drizzle.config.shiftcraft.ts",
+    "generate-planning": "drizzle-kit generate --config drizzle.config.planning.ts",
     "migrate": "tsx src/migrate.ts",
     "migrate-shiftcraft": "tsx src/migrate-shiftcraft.ts",
+    "migrate-planning": "tsx src/migrate-planning.ts",
     "migrate-tenants": "tsx src/per-tenant-migrate.ts",
     "tenant-backup": "tsx src/cli/tenant-backup.ts",
     "tenant-provision": "tsx src/cli/tenant-provision.ts",
