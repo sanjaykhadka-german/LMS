@@ -4,8 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
-import { forTenant, scShifts } from "@tracey/db";
-import { currentMembership, currentUser } from "~/lib/auth/current";
+import { forTenant, scShiftAssignments, scShifts } from "@tracey/db";
+import { currentMembership, currentUser, requireUser } from "~/lib/auth/current";
 
 export type FormState =
   | { status: "idle" }
@@ -158,4 +158,109 @@ export async function deleteShiftAction(formData: FormData): Promise<void> {
   );
   revalidatePath("/app/schedule");
   redirect("/app/schedule");
+}
+
+// ─── Assignments ───
+
+async function requireAdminMembership() {
+  const m = await currentMembership();
+  if (!m) throw new Error("You must belong to a workspace.");
+  if (m.role !== "admin" && m.role !== "owner") {
+    throw new Error("Only admins can assign shifts.");
+  }
+  return m;
+}
+
+const assignSchema = z.object({
+  shiftId: z.string().uuid(),
+  userId: z.string().uuid("Pick an employee"),
+});
+
+export async function assignEmployeeAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const parsed = assignSchema.safeParse({
+    shiftId: formData.get("shiftId"),
+    userId: formData.get("userId"),
+  });
+  if (!parsed.success) {
+    return {
+      status: "error",
+      message: "Please pick an employee.",
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
+
+  const membership = await requireAdminMembership();
+  try {
+    await forTenant(membership.tenant.id).run((tx) =>
+      tx.insert(scShiftAssignments).values({
+        shiftId: parsed.data.shiftId,
+        userId: parsed.data.userId,
+      }),
+    );
+  } catch (err) {
+    // Unique index sc_shift_user_uq triggers on duplicate (shift, user).
+    if (err instanceof Error && err.message.includes("sc_shift_user_uq")) {
+      return {
+        status: "error",
+        message: "That employee is already assigned to this shift.",
+      };
+    }
+    throw err;
+  }
+
+  revalidatePath(`/app/schedule/${parsed.data.shiftId}/edit`);
+  revalidatePath("/app/schedule");
+  revalidatePath("/app/my-shifts");
+  return { status: "ok", message: "Offer sent." };
+}
+
+export async function unassignAction(formData: FormData): Promise<void> {
+  const id = String(formData.get("id") ?? "");
+  const shiftId = String(formData.get("shiftId") ?? "");
+  if (!id) return;
+  const membership = await requireAdminMembership();
+  await forTenant(membership.tenant.id).run((tx) =>
+    tx.delete(scShiftAssignments).where(eq(scShiftAssignments.id, id)),
+  );
+  if (shiftId) revalidatePath(`/app/schedule/${shiftId}/edit`);
+  revalidatePath("/app/schedule");
+  revalidatePath("/app/my-shifts");
+}
+
+async function respondToOffer(
+  assignmentId: string,
+  next: "accepted" | "declined",
+) {
+  const membership = await currentMembership();
+  if (!membership) throw new Error("You must belong to a workspace.");
+  const user = await requireUser();
+  await forTenant(membership.tenant.id).run((tx) =>
+    tx
+      .update(scShiftAssignments)
+      .set({ status: next, respondedAt: new Date() })
+      .where(
+        and(
+          eq(scShiftAssignments.id, assignmentId),
+          eq(scShiftAssignments.userId, user.id),
+          eq(scShiftAssignments.status, "offered"),
+        ),
+      ),
+  );
+  revalidatePath("/app/my-shifts");
+  revalidatePath("/app/schedule");
+}
+
+export async function acceptOfferAction(formData: FormData): Promise<void> {
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+  await respondToOffer(id, "accepted");
+}
+
+export async function declineOfferAction(formData: FormData): Promise<void> {
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+  await respondToOffer(id, "declined");
 }

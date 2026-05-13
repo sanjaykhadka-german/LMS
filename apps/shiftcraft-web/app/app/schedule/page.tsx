@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { and, asc, between, eq } from "drizzle-orm";
-import { forTenant, scLocations, scShifts } from "@tracey/db";
+import { and, asc, between, eq, sql } from "drizzle-orm";
+import { forTenant, scLocations, scShiftAssignments, scShifts } from "@tracey/db";
 import { currentMembership } from "~/lib/auth/current";
 import { Button } from "~/components/ui/button";
 
@@ -67,6 +67,16 @@ export default async function SchedulePage({
   const thisWeek = fmtIsoDate(startOfWeek(new Date()));
 
   const ctx = forTenant(membership.tenant.id);
+  const acceptedCount = sql<number>`(
+    SELECT count(*)::int FROM ${scShiftAssignments}
+    WHERE ${scShiftAssignments.shiftId} = ${scShifts.id}
+      AND ${scShiftAssignments.status} = 'accepted'
+  )`;
+  const offeredCount = sql<number>`(
+    SELECT count(*)::int FROM ${scShiftAssignments}
+    WHERE ${scShiftAssignments.shiftId} = ${scShifts.id}
+      AND ${scShiftAssignments.status} = 'offered'
+  )`;
   const [shifts, locations] = await Promise.all([
     ctx.run((tx) =>
       tx
@@ -78,6 +88,8 @@ export default async function SchedulePage({
           endsAt: scShifts.endsAt,
           status: scShifts.status,
           locationName: scLocations.name,
+          acceptedCount,
+          offeredCount,
         })
         .from(scShifts)
         .leftJoin(scLocations, eq(scLocations.id, scShifts.locationId))
@@ -164,6 +176,9 @@ export default async function SchedulePage({
                         </div>
                         <div className="truncate text-xs text-muted-foreground">
                           {s.locationName ?? "—"}
+                          {" · "}
+                          {s.acceptedCount} accepted
+                          {s.offeredCount > 0 ? ` · ${s.offeredCount} pending` : ""}
                         </div>
                       </div>
                       <span

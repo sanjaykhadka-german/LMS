@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  CalendarCheck,
   CalendarDays,
   CalendarOff,
   LayoutDashboard,
@@ -16,6 +17,7 @@ import { signOutAction } from "~/app/app/_actions";
 
 const NAV = [
   { href: "/app", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/app/my-shifts", label: "My shifts", icon: CalendarCheck },
   { href: "/app/schedule", label: "Schedule", icon: CalendarDays },
   { href: "/app/locations", label: "Locations", icon: MapPin },
   { href: "/app/employees", label: "Employees", icon: Users },
