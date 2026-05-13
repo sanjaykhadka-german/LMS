@@ -52,15 +52,28 @@ const STATUS_STYLES: Record<string, string> = {
 export default async function SchedulePage({
   searchParams,
 }: {
-  searchParams: Promise<{ week?: string }>;
+  searchParams: Promise<{ week?: string; location?: string }>;
 }) {
   const membership = await currentMembership();
   if (!membership) redirect("/app");
 
-  const { week } = await searchParams;
+  const { week, location: locationFilter } = await searchParams;
   const anchor = week ? new Date(`${week}T00:00:00`) : new Date();
   const weekStart = startOfWeek(isNaN(anchor.getTime()) ? new Date() : anchor);
   const weekEnd = addDays(weekStart, 7); // exclusive
+
+  const qs = (overrides: { week?: string; location?: string | null }) => {
+    const params = new URLSearchParams();
+    const w = overrides.week ?? week;
+    if (w) params.set("week", w);
+    const loc =
+      overrides.location === null
+        ? undefined
+        : (overrides.location ?? locationFilter);
+    if (loc) params.set("location", loc);
+    const s = params.toString();
+    return s ? `?${s}` : "";
+  };
 
   const prevWeek = fmtIsoDate(addDays(weekStart, -7));
   const nextWeek = fmtIsoDate(addDays(weekStart, 7));
@@ -97,6 +110,7 @@ export default async function SchedulePage({
           and(
             eq(scShifts.traceyTenantId, membership.tenant.id),
             between(scShifts.startsAt, weekStart, weekEnd),
+            locationFilter ? eq(scShifts.locationId, locationFilter) : undefined,
           ),
         )
         .orderBy(asc(scShifts.startsAt)),
@@ -121,6 +135,9 @@ export default async function SchedulePage({
   }
 
   const canCreate = locations.length > 0;
+  const activeLocation = locationFilter
+    ? locations.find((l) => l.id === locationFilter)
+    : null;
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-6 py-10">
@@ -130,17 +147,18 @@ export default async function SchedulePage({
           <p className="mt-1 text-sm text-muted-foreground">
             {fmtRange(weekStart, addDays(weekStart, 6))} ·{" "}
             {shifts.length} shift{shifts.length === 1 ? "" : "s"}
+            {activeLocation ? ` · ${activeLocation.name}` : ""}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <Button asChild variant="outline" size="sm">
-            <Link href={`/app/schedule?week=${prevWeek}`}>← Prev</Link>
+            <Link href={`/app/schedule${qs({ week: prevWeek })}`}>← Prev</Link>
           </Button>
           <Button asChild variant="outline" size="sm">
-            <Link href={`/app/schedule?week=${thisWeek}`}>Today</Link>
+            <Link href={`/app/schedule${qs({ week: thisWeek })}`}>Today</Link>
           </Button>
           <Button asChild variant="outline" size="sm">
-            <Link href={`/app/schedule?week=${nextWeek}`}>Next →</Link>
+            <Link href={`/app/schedule${qs({ week: nextWeek })}`}>Next →</Link>
           </Button>
           {canCreate ? (
             <Button asChild size="sm">
@@ -153,6 +171,33 @@ export default async function SchedulePage({
           )}
         </div>
       </div>
+
+      {locations.length > 1 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs uppercase tracking-wider text-muted-foreground">
+            Location:
+          </span>
+          <Button
+            asChild
+            size="sm"
+            variant={locationFilter ? "outline" : "default"}
+          >
+            <Link href={`/app/schedule${qs({ location: null })}`}>All</Link>
+          </Button>
+          {locations.map((loc) => (
+            <Button
+              asChild
+              key={loc.id}
+              size="sm"
+              variant={locationFilter === loc.id ? "default" : "outline"}
+            >
+              <Link href={`/app/schedule${qs({ location: loc.id })}`}>
+                {loc.name}
+              </Link>
+            </Button>
+          ))}
+        </div>
+      )}
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {days.map((d) => (
