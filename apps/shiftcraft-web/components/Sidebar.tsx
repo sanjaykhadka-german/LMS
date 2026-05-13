@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   LogOut,
   MapPin,
+  Repeat,
   Users,
 } from "lucide-react";
 import { AppSwitcher } from "@tracey/ui";
@@ -28,8 +29,14 @@ const NAV = [
   { href: "/app/time-off", label: "Time off", icon: CalendarOff },
 ];
 
+const ADMIN_NAV = [
+  { href: "/app/swaps", label: "Swap requests", icon: Repeat },
+];
+
 export function Sidebar({ name, role }: { name: string; role: string }) {
   const pathname = usePathname();
+  const isAdmin = role === "admin" || role === "owner";
+  const items = isAdmin ? [...NAV, ...ADMIN_NAV] : NAV;
   return (
     <aside className="sticky top-0 flex h-screen w-64 flex-col border-r border-border bg-card">
       <div className="flex items-center justify-between border-b border-border px-5 py-6">
@@ -41,7 +48,7 @@ export function Sidebar({ name, role }: { name: string; role: string }) {
         />
       </div>
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
-        {NAV.map((item) => {
+        {items.map((item) => {
           const active =
             pathname === item.href || pathname.startsWith(item.href + "/");
           const Icon = item.icon;

@@ -167,6 +167,48 @@ export const scTimeOffRequests = pgTable(
 // the FK pointing at its tenant-schema siblings. Keeping them as bare
 // `uuid("...")` columns lets the per-tenant SQL own FK creation.
 
+// ─── Shift swap / cover requests ───
+//
+// Employee A asks employee B to take a shift A is already assigned to (cover)
+// or to trade shifts (swap). Status flows: pending → accepted | declined |
+// cancelled. On accept the linked assignment row(s) mutate transactionally
+// (the existing scAssignmentStatus enum already reserves 'swapped' for this).
+//
+// FKs to app.users and to the local sc_shift_assignments are added in the
+// per-tenant baseline migration — same convention as scShiftAssignments.
+
+export const scShiftSwapRequests = pgTable(
+  "sc_shift_swap_requests",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    traceyTenantId: text("tracey_tenant_id").notNull(),
+    initiatorUserId: uuid("initiator_user_id").notNull(),
+    initiatorAssignmentId: uuid("initiator_assignment_id").notNull(),
+    targetUserId: uuid("target_user_id").notNull(),
+    // null = cover (one-way handoff); non-null = swap (two-way trade)
+    targetAssignmentId: uuid("target_assignment_id"),
+    note: text("note"),
+    status: text("status").notNull().default("pending"),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("sc_swap_pending_unique")
+      .on(t.initiatorAssignmentId)
+      .where(sql`status = 'pending'`),
+    index("sc_swap_tenant_idx").on(t.traceyTenantId, t.status, t.createdAt),
+    index("sc_swap_target_idx").on(t.targetUserId, t.status),
+    check(
+      "sc_swap_status_chk",
+      sql`${t.status} in ('pending','accepted','declined','cancelled')`,
+    ),
+    check(
+      "sc_swap_distinct_users_chk",
+      sql`${t.initiatorUserId} <> ${t.targetUserId}`,
+    ),
+  ],
+);
+
 // ─── Inferred types ───
 
 export type ScLocation = typeof scLocations.$inferSelect;
@@ -177,6 +219,8 @@ export type ScShiftAssignment = typeof scShiftAssignments.$inferSelect;
 export type NewScShiftAssignment = typeof scShiftAssignments.$inferInsert;
 export type ScTimeOffRequest = typeof scTimeOffRequests.$inferSelect;
 export type NewScTimeOffRequest = typeof scTimeOffRequests.$inferInsert;
+export type ScShiftSwapRequest = typeof scShiftSwapRequests.$inferSelect;
+export type NewScShiftSwapRequest = typeof scShiftSwapRequests.$inferInsert;
 export type ScShiftStatus = "draft" | "published" | "cancelled";
 export type ScAssignmentStatus =
   | "offered"
@@ -185,3 +229,4 @@ export type ScAssignmentStatus =
   | "swapped"
   | "no_show";
 export type ScTimeOffStatus = "pending" | "approved" | "denied" | "cancelled";
+export type ScSwapStatus = "pending" | "accepted" | "declined" | "cancelled";
