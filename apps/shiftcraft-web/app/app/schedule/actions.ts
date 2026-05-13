@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { forTenant, scShiftAssignments, scShifts } from "@tracey/db";
 import { currentMembership, currentUser, requireUser } from "~/lib/auth/current";
@@ -118,6 +118,39 @@ export async function updateShiftAction(
   revalidatePath("/app/schedule");
   revalidatePath(`/app/schedule/${id}/edit`);
   return { status: "ok", message: "Saved." };
+}
+
+export async function bulkPublishWeekAction(formData: FormData): Promise<void> {
+  const weekStart = String(formData.get("weekStart") ?? "");
+  const weekEnd = String(formData.get("weekEnd") ?? "");
+  const locationId = String(formData.get("location") ?? "");
+  if (!weekStart || !weekEnd) return;
+
+  // Admin-only: surface the same error message as single-shift publish.
+  const membership = await currentMembership();
+  if (!membership) throw new Error("You must belong to a workspace.");
+  if (membership.role !== "admin" && membership.role !== "owner") {
+    throw new Error("Only admins can publish shifts.");
+  }
+
+  const conditions = [
+    eq(scShifts.traceyTenantId, membership.tenant.id),
+    eq(scShifts.status, "draft"),
+    // Drizzle's between() expects Date|number, so we parse ISO strings here.
+    sql`${scShifts.startsAt} >= ${new Date(weekStart)}`,
+    sql`${scShifts.startsAt} < ${new Date(weekEnd)}`,
+  ];
+  if (locationId) conditions.push(eq(scShifts.locationId, locationId));
+
+  await forTenant(membership.tenant.id).run((tx) =>
+    tx
+      .update(scShifts)
+      .set({ status: "published", updatedAt: new Date() })
+      .where(and(...conditions)),
+  );
+
+  revalidatePath("/app/schedule");
+  revalidatePath("/app/coverage-gaps");
 }
 
 async function setShiftStatus(

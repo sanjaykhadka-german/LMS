@@ -4,6 +4,7 @@ import { and, asc, between, eq, sql } from "drizzle-orm";
 import { forTenant, scLocations, scShiftAssignments, scShifts } from "@tracey/db";
 import { currentMembership } from "~/lib/auth/current";
 import { Button } from "~/components/ui/button";
+import { bulkPublishWeekAction } from "./actions";
 
 export const metadata = { title: "Schedule · ShiftCraft" };
 
@@ -135,6 +136,8 @@ export default async function SchedulePage({
   }
 
   const canCreate = locations.length > 0;
+  const isAdmin = membership.role === "admin" || membership.role === "owner";
+  const draftCount = shifts.filter((s) => s.status === "draft").length;
   const activeLocation = locationFilter
     ? locations.find((l) => l.id === locationFilter)
     : null;
@@ -160,6 +163,18 @@ export default async function SchedulePage({
           <Button asChild variant="outline" size="sm">
             <Link href={`/app/schedule${qs({ week: nextWeek })}`}>Next →</Link>
           </Button>
+          {isAdmin && draftCount > 0 && (
+            <form action={bulkPublishWeekAction}>
+              <input type="hidden" name="weekStart" value={weekStart.toISOString()} />
+              <input type="hidden" name="weekEnd" value={weekEnd.toISOString()} />
+              {locationFilter && (
+                <input type="hidden" name="location" value={locationFilter} />
+              )}
+              <Button type="submit" variant="outline" size="sm">
+                Publish {draftCount} draft{draftCount === 1 ? "" : "s"}
+              </Button>
+            </form>
+          )}
           {canCreate ? (
             <Button asChild size="sm">
               <Link href="/app/schedule/new">New shift</Link>
