@@ -10,13 +10,15 @@ import {
   lmsUsers,
 } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
-import { isEffectivelyActive } from "~/lib/lms/employee-status";
+import { employeeStatus } from "~/lib/lms/employee-status";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
+import { HelpPopover } from "~/components/ui/help-popover";
 import { NewEmployeeForm } from "./_new-form";
 import { RowActions } from "./_row-actions";
+import { StatusPicker } from "./_status-picker";
 
 export const metadata = { title: "Employees" };
 
@@ -94,8 +96,8 @@ export default async function EmployeesPage({
     (policiesByDept[p.departmentId] ??= []).push(p.moduleId);
   }
 
-  const activeCount = employees.filter(isEffectivelyActive).length;
-  const disabledCount = employees.length - activeCount;
+  const statusCounts = { active: 0, disabled: 0, terminated: 0 };
+  for (const e of employees) statusCounts[employeeStatus(e)]++;
 
   return (
     <div className="space-y-6">
@@ -103,7 +105,7 @@ export default async function EmployeesPage({
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Employees</h1>
           <p className="text-sm text-[color:var(--muted-foreground)]">
-            {employees.length} total · {activeCount} active · {disabledCount} disabled
+            {employees.length} total · {statusCounts.active} active · {statusCounts.disabled} disabled · {statusCounts.terminated} terminated
           </p>
         </div>
         <Button asChild variant="outline">
@@ -146,13 +148,39 @@ export default async function EmployeesPage({
                   <th className="px-3 py-2">Department</th>
                   <th className="px-3 py-2">Position</th>
                   <th className="px-3 py-2">Role</th>
-                  <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2">
+                    <span className="inline-flex items-center gap-1">
+                      Status
+                      <HelpPopover label="About employee status">
+                        <div className="space-y-2 text-xs">
+                          <p>
+                            <span className="font-semibold">Active</span> —
+                            currently employed and able to sign in.
+                          </p>
+                          <p>
+                            <span className="font-semibold">Disabled</span> —
+                            temporarily blocked from signing in. Records are
+                            kept and the employee can be re-activated at any
+                            time. Use for paused contracts, leave without pay,
+                            or temporary suspensions.
+                          </p>
+                          <p>
+                            <span className="font-semibold">Terminated</span> —
+                            employment has ended. Sets a termination date
+                            (defaulting to today) and blocks sign-in. Training
+                            history is preserved for audit. Use the Edit page
+                            to set a future termination date.
+                          </p>
+                        </div>
+                      </HelpPopover>
+                    </span>
+                  </th>
                   <th className="px-6 py-2 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[color:var(--border)]">
                 {employees.map((e) => {
-                  const active = isEffectivelyActive(e);
+                  const status = employeeStatus(e);
                   return (
                     <tr key={e.id}>
                       <td className="px-6 py-3 align-middle">
@@ -169,18 +197,14 @@ export default async function EmployeesPage({
                         <RoleBadge role={e.role} />
                       </td>
                       <td className="px-3 py-3 align-middle">
-                        {active ? (
-                          <Badge variant="success">Active</Badge>
-                        ) : (
-                          <Badge variant="secondary">Disabled</Badge>
-                        )}
+                        <StatusPicker
+                          id={e.id}
+                          status={status}
+                          terminationDate={e.terminationDate}
+                        />
                       </td>
                       <td className="px-6 py-3 align-middle text-right">
-                        <RowActions
-                          id={e.id}
-                          isActive={active}
-                          currentRole={e.role}
-                        />
+                        <RowActions id={e.id} currentRole={e.role} />
                       </td>
                     </tr>
                   );

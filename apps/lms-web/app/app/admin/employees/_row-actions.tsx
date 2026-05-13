@@ -6,33 +6,19 @@ import { Button } from "~/components/ui/button";
 import {
   changeEmployeeRoleAction,
   resetEmployeePasswordAction,
-  toggleEmployeeActiveAction,
 } from "./actions";
 
 interface Props {
   id: number;
-  isActive: boolean;
   currentRole: string;
 }
 
-export function RowActions({ id, isActive, currentRole }: Props) {
+export function RowActions({ id, currentRole }: Props) {
   return (
     <div className="flex items-center justify-end gap-1">
       <Button asChild variant="outline" size="sm" tooltip="Edit this employee's profile">
         <Link href={`/app/admin/employees/${id}/edit`}>Edit</Link>
       </Button>
-
-      <form action={toggleEmployeeActiveAction}>
-        <input type="hidden" name="id" value={id} />
-        <SubmitButton
-          label={isActive ? "Disable" : "Enable"}
-          tooltip={
-            isActive
-              ? "Disable this employee — they can no longer sign in"
-              : "Re-enable this employee so they can sign in again"
-          }
-        />
-      </form>
 
       <RolePicker id={id} currentRole={currentRole} />
 

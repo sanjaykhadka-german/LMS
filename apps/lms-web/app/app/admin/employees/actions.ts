@@ -223,17 +223,25 @@ export async function createEmployeeAction(_prev: FormState, formData: FormData)
   return { status: "ok", message: parts.join(" ") };
 }
 
-export async function toggleEmployeeActiveAction(formData: FormData): Promise<void> {
+const statusSchema = z.object({
+  id: z.coerce.number().int().positive(),
+  status: z.enum(["active", "disabled", "terminated"]),
+});
+
+export async function setEmployeeStatusAction(formData: FormData): Promise<void> {
   const ctx = await requireAdminAction();
   const tid = ctx.traceyTenantId;
-  const id = parseInt(String(formData.get("id") ?? ""), 10);
-  if (!Number.isFinite(id)) throw new Error("Bad id");
+  const parsed = statusSchema.safeParse({
+    id: formData.get("id"),
+    status: formData.get("status"),
+  });
+  if (!parsed.success) throw new Error("Bad status change");
 
   const [target] = await ctx.db.run((tx) =>
     tx
       .select()
       .from(lmsUsers)
-      .where(and(eq(lmsUsers.id, id), eq(lmsUsers.traceyTenantId, tid)))
+      .where(and(eq(lmsUsers.id, parsed.data.id), eq(lmsUsers.traceyTenantId, tid)))
       .limit(1),
   );
   if (!target) throw new Error("User not found");
@@ -242,27 +250,49 @@ export async function toggleEmployeeActiveAction(formData: FormData): Promise<vo
   if (target.id === ctx.lmsUser.id) {
     redirect("/app/admin/employees?error=self_toggle");
   }
-  // Tracey admins can't disable LMS admins; only owners can.
+  // Tracey admins can't change LMS admins' status; only owners can.
   if (target.role === "admin" && ctx.role !== "owner") {
     redirect("/app/admin/employees?error=forbidden");
   }
 
-  const next = !target.isActiveFlag;
+  const today = new Date().toISOString().slice(0, 10);
+  let updates: { isActiveFlag?: boolean; terminationDate?: string | null };
+  let auditAction: string;
+  switch (parsed.data.status) {
+    case "active":
+      // Clear a *past* termination date so the user comes back to active;
+      // a future termination date (scheduled exit) is preserved.
+      updates = { isActiveFlag: true };
+      if (target.terminationDate && target.terminationDate < today) {
+        updates.terminationDate = null;
+      }
+      auditAction = "employee.activated";
+      break;
+    case "disabled":
+      updates = { isActiveFlag: false };
+      auditAction = "employee.disabled";
+      break;
+    case "terminated":
+      updates = { isActiveFlag: false, terminationDate: today };
+      auditAction = "employee.terminated";
+      break;
+  }
+
   await ctx.db.run((tx) =>
     tx
       .update(lmsUsers)
-      .set({ isActiveFlag: next })
-      .where(and(eq(lmsUsers.id, id), eq(lmsUsers.traceyTenantId, tid))),
+      .set(updates)
+      .where(and(eq(lmsUsers.id, parsed.data.id), eq(lmsUsers.traceyTenantId, tid))),
   );
 
   await logAuditEvent({
     tenantId: tid,
     actorUserId: ctx.traceyUserId,
     actorEmail: ctx.lmsUser.email,
-    action: next ? "employee.activated" : "employee.deactivated",
+    action: auditAction,
     targetKind: "user",
-    targetId: String(id),
-    details: { email: target.email },
+    targetId: String(parsed.data.id),
+    details: { email: target.email, status: parsed.data.status },
   });
   revalidatePath("/app/admin/employees");
 }
