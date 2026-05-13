@@ -15,7 +15,10 @@
     "STRIPE_PRICE_PRO_MONTHLY",
     "STRIPE_PRICE_PRO_ANNUAL",
     "FLASK_BASE_URL",
-    "LMS_SSO_SECRET"
+    "LMS_SSO_SECRET",
+    "NEXT_PUBLIC_HUB_URL",
+    "NEXT_PUBLIC_LMS_URL",
+    "NEXT_PUBLIC_SHIFTCRAFT_URL"
   ],
   "tasks": {
     "build": {

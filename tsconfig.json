@@ -7,6 +7,8 @@
     { "path": "packages/auth" },
     { "path": "packages/ui" },
     { "path": "packages/types" },
-    { "path": "apps/lms-web" }
+    { "path": "apps/lms-web" },
+    { "path": "apps/shiftcraft-web" },
+    { "path": "apps/hub-web" }
   ]
 }

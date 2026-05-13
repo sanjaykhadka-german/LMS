@@ -3,3 +3,4 @@ export * from "./schema";
 export * from "./lms-schema";
 export * from "./per-tenant-schema";
 export * from "./per-tenant-verify";
+export * from "./shiftcraft-schema";
