@@ -11,7 +11,9 @@ import {
   MapPin,
   Users,
 } from "lucide-react";
+import { AppSwitcher } from "@tracey/ui";
 import { cn } from "~/lib/utils";
+import { APPS, CURRENT_APP_ID } from "~/lib/site-config";
 import { Logo } from "./Logo";
 import { signOutAction } from "~/app/app/_actions";
 
@@ -28,8 +30,13 @@ export function Sidebar({ name, role }: { name: string; role: string }) {
   const pathname = usePathname();
   return (
     <aside className="sticky top-0 flex h-screen w-64 flex-col border-r border-border bg-card">
-      <div className="border-b border-border px-5 py-6">
+      <div className="flex items-center justify-between border-b border-border px-5 py-6">
         <Logo size="sm" />
+        <AppSwitcher
+          currentAppId={CURRENT_APP_ID}
+          apps={[APPS.lms, APPS.shiftcraft]}
+          hubUrl={APPS.hub.url}
+        />
       </div>
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
         {NAV.map((item) => {
