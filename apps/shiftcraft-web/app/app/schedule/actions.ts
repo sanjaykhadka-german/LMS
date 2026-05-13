@@ -160,6 +160,48 @@ export async function deleteShiftAction(formData: FormData): Promise<void> {
   redirect("/app/schedule");
 }
 
+export async function duplicateShiftAction(formData: FormData): Promise<void> {
+  const id = String(formData.get("id") ?? "");
+  const weeks = Number(formData.get("weeks") ?? 1);
+  if (!id) return;
+  const tenant = await requireTenant();
+  const user = await currentUser();
+  const offsetMs = weeks * 7 * 24 * 60 * 60 * 1000;
+
+  const [source] = await forTenant(tenant.id).run((tx) =>
+    tx
+      .select({
+        locationId: scShifts.locationId,
+        role: scShifts.role,
+        startsAt: scShifts.startsAt,
+        endsAt: scShifts.endsAt,
+        notes: scShifts.notes,
+      })
+      .from(scShifts)
+      .where(and(eq(scShifts.id, id), eq(scShifts.traceyTenantId, tenant.id)))
+      .limit(1),
+  );
+  if (!source) return;
+
+  const [created] = await forTenant(tenant.id).run((tx) =>
+    tx
+      .insert(scShifts)
+      .values({
+        traceyTenantId: tenant.id,
+        locationId: source.locationId,
+        role: source.role,
+        startsAt: new Date(source.startsAt.getTime() + offsetMs),
+        endsAt: new Date(source.endsAt.getTime() + offsetMs),
+        notes: source.notes,
+        createdByUserId: user?.id ?? null,
+      })
+      .returning({ id: scShifts.id }),
+  );
+
+  revalidatePath("/app/schedule");
+  if (created) redirect(`/app/schedule/${created.id}/edit`);
+}
+
 // ─── Assignments ───
 
 async function requireAdminMembership() {

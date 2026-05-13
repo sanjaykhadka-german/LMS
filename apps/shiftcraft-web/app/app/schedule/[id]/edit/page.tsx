@@ -16,6 +16,7 @@ import { ShiftForm } from "../../_form";
 import {
   cancelShiftAction,
   deleteShiftAction,
+  duplicateShiftAction,
   publishShiftAction,
   unassignAction,
 } from "../../actions";
@@ -214,6 +215,13 @@ export default async function EditShiftPage({
             </Button>
           </form>
         )}
+        <form action={duplicateShiftAction}>
+          <input type="hidden" name="id" value={shiftRow.id} />
+          <input type="hidden" name="weeks" value="1" />
+          <Button type="submit" variant="outline" size="sm">
+            Duplicate +1 week
+          </Button>
+        </form>
         <form action={deleteShiftAction} className="ml-auto">
           <input type="hidden" name="id" value={shiftRow.id} />
           <Button
