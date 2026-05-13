@@ -4,12 +4,20 @@ import { revalidatePath } from "next/cache";
 import { and, eq, gt } from "drizzle-orm";
 import { z } from "zod";
 import {
+  db,
   forTenant,
+  scLocations,
   scShiftAssignments,
   scShifts,
   scShiftSwapRequests,
+  users,
 } from "@tracey/db";
 import { currentMembership, requireUser } from "~/lib/auth/current";
+import {
+  notifySwapAccepted,
+  notifySwapDeclined,
+  notifySwapRequested,
+} from "~/lib/email";
 
 export type FormState =
   | { status: "idle" }
@@ -31,6 +39,13 @@ const coverSchema = z.object({
 const swapSchema = coverSchema.extend({
   targetAssignmentId: z.string().uuid("Pick a shift to receive"),
 });
+
+interface ShiftDetail {
+  startsAt: Date;
+  endsAt: Date;
+  role: string;
+  locationName: string | null;
+}
 
 export async function initiateCoverAction(
   _prev: FormState,
@@ -55,14 +70,12 @@ export async function initiateCoverAction(
     return { status: "error", message: "You can't ask yourself to cover." };
   }
 
-  // Verify the initiator owns the assignment, it's currently accepted, and
-  // the underlying shift hasn't started yet.
-  const ok = await assertOwnedFutureAccepted(
+  const initiatorShift = await loadOwnedFutureAccepted(
     membership.tenant.id,
     parsed.data.assignmentId,
     user.id,
   );
-  if (!ok)
+  if (!initiatorShift)
     return {
       status: "error",
       message: "That shift can no longer be handed off.",
@@ -87,6 +100,22 @@ export async function initiateCoverAction(
       };
     }
     throw err;
+  }
+
+  // Email after the DB transaction has committed. Recipient lookups go via
+  // the bare `db` client because app.users isn't on the tenant search_path.
+  const [target, initiator] = await Promise.all([
+    lookupUser(parsed.data.targetUserId),
+    lookupUser(user.id),
+  ]);
+  if (target) {
+    await notifySwapRequested({
+      to: target,
+      from: initiator ?? { name: null, email: user.email },
+      giveaway: initiatorShift,
+      receive: null,
+      note: parsed.data.note?.length ? parsed.data.note : null,
+    });
   }
 
   revalidatePath("/app/my-shifts");
@@ -120,20 +149,20 @@ export async function initiateSwapAction(
     return { status: "error", message: "Pick a different shift to receive." };
   }
 
-  const mineOk = await assertOwnedFutureAccepted(
+  const initiatorShift = await loadOwnedFutureAccepted(
     membership.tenant.id,
     parsed.data.assignmentId,
     user.id,
   );
-  if (!mineOk)
+  if (!initiatorShift)
     return { status: "error", message: "Your shift can no longer be swapped." };
 
-  const theirsOk = await assertOwnedFutureAccepted(
+  const targetShift = await loadOwnedFutureAccepted(
     membership.tenant.id,
     parsed.data.targetAssignmentId,
     parsed.data.targetUserId,
   );
-  if (!theirsOk)
+  if (!targetShift)
     return {
       status: "error",
       message: "Their shift is no longer eligible for a swap.",
@@ -160,6 +189,20 @@ export async function initiateSwapAction(
     throw err;
   }
 
+  const [target, initiator] = await Promise.all([
+    lookupUser(parsed.data.targetUserId),
+    lookupUser(user.id),
+  ]);
+  if (target) {
+    await notifySwapRequested({
+      to: target,
+      from: initiator ?? { name: null, email: user.email },
+      giveaway: initiatorShift,
+      receive: targetShift,
+      note: parsed.data.note?.length ? parsed.data.note : null,
+    });
+  }
+
   revalidatePath("/app/my-shifts");
   return { status: "ok", message: "Swap proposal sent." };
 }
@@ -171,78 +214,49 @@ export async function acceptSwapAction(formData: FormData): Promise<void> {
   const user = await requireUser();
   const now = new Date();
 
-  await forTenant(membership.tenant.id).run(async (tx) => {
-    // Load the swap row inside the same transaction; SELECT FOR UPDATE
-    // would be ideal but the unique partial index already serialises
-    // accept/cancel races at insert time, and the WHERE status='pending'
-    // guards below make the mutating UPDATEs no-op on the loser.
-    const [swap] = await tx
-      .select()
-      .from(scShiftSwapRequests)
-      .where(
-        and(
-          eq(scShiftSwapRequests.id, id),
-          eq(scShiftSwapRequests.targetUserId, user.id),
-          eq(scShiftSwapRequests.status, "pending"),
-        ),
-      )
-      .limit(1);
-    if (!swap) throw new Error("This swap can no longer be accepted.");
+  type CommittedSwap = {
+    initiatorUserId: string;
+    isSwap: boolean;
+    initiatorShiftId: string;
+    targetShiftId: string | null;
+  };
 
-    // 1. Flip initiator's existing assignment to 'swapped'.
-    const flipInitiator = await tx
-      .update(scShiftAssignments)
-      .set({ status: "swapped", respondedAt: now })
-      .where(
-        and(
-          eq(scShiftAssignments.id, swap.initiatorAssignmentId),
-          eq(scShiftAssignments.userId, swap.initiatorUserId),
-          eq(scShiftAssignments.status, "accepted"),
-        ),
-      )
-      .returning({ shiftId: scShiftAssignments.shiftId });
-    const [initiatorFlipped] = flipInitiator;
-    if (!initiatorFlipped)
-      throw new Error("Initiator's shift status changed; swap aborted.");
-    const initiatorShiftId = initiatorFlipped.shiftId;
+  const result = await forTenant(membership.tenant.id).run<CommittedSwap | null>(
+    async (tx) => {
+      const [swap] = await tx
+        .select()
+        .from(scShiftSwapRequests)
+        .where(
+          and(
+            eq(scShiftSwapRequests.id, id),
+            eq(scShiftSwapRequests.targetUserId, user.id),
+            eq(scShiftSwapRequests.status, "pending"),
+          ),
+        )
+        .limit(1);
+      if (!swap) throw new Error("This swap can no longer be accepted.");
 
-    // 2. Insert (or upgrade) target's new assignment on initiator's shift.
-    await tx
-      .insert(scShiftAssignments)
-      .values({
-        shiftId: initiatorShiftId,
-        userId: user.id,
-        status: "accepted",
-        respondedAt: now,
-      })
-      .onConflictDoUpdate({
-        target: [scShiftAssignments.shiftId, scShiftAssignments.userId],
-        set: { status: "accepted", respondedAt: now },
-      });
-
-    // 3. If it's a two-way swap, mirror the same dance for target's shift.
-    if (swap.targetAssignmentId) {
-      const flipTarget = await tx
+      const flipInitiator = await tx
         .update(scShiftAssignments)
         .set({ status: "swapped", respondedAt: now })
         .where(
           and(
-            eq(scShiftAssignments.id, swap.targetAssignmentId),
-            eq(scShiftAssignments.userId, user.id),
+            eq(scShiftAssignments.id, swap.initiatorAssignmentId),
+            eq(scShiftAssignments.userId, swap.initiatorUserId),
             eq(scShiftAssignments.status, "accepted"),
           ),
         )
         .returning({ shiftId: scShiftAssignments.shiftId });
-      const [targetFlipped] = flipTarget;
-      if (!targetFlipped)
-        throw new Error("Your shift status changed; swap aborted.");
-      const targetShiftId = targetFlipped.shiftId;
+      const [initiatorFlipped] = flipInitiator;
+      if (!initiatorFlipped)
+        throw new Error("Initiator's shift status changed; swap aborted.");
+      const initiatorShiftId = initiatorFlipped.shiftId;
 
       await tx
         .insert(scShiftAssignments)
         .values({
-          shiftId: targetShiftId,
-          userId: swap.initiatorUserId,
+          shiftId: initiatorShiftId,
+          userId: user.id,
           status: "accepted",
           respondedAt: now,
         })
@@ -250,19 +264,76 @@ export async function acceptSwapAction(formData: FormData): Promise<void> {
           target: [scShiftAssignments.shiftId, scShiftAssignments.userId],
           set: { status: "accepted", respondedAt: now },
         });
-    }
 
-    // 4. Close the swap request.
-    await tx
-      .update(scShiftSwapRequests)
-      .set({ status: "accepted", decidedAt: now })
-      .where(
-        and(
-          eq(scShiftSwapRequests.id, id),
-          eq(scShiftSwapRequests.status, "pending"),
-        ),
-      );
-  });
+      let targetShiftId: string | null = null;
+      if (swap.targetAssignmentId) {
+        const flipTarget = await tx
+          .update(scShiftAssignments)
+          .set({ status: "swapped", respondedAt: now })
+          .where(
+            and(
+              eq(scShiftAssignments.id, swap.targetAssignmentId),
+              eq(scShiftAssignments.userId, user.id),
+              eq(scShiftAssignments.status, "accepted"),
+            ),
+          )
+          .returning({ shiftId: scShiftAssignments.shiftId });
+        const [targetFlipped] = flipTarget;
+        if (!targetFlipped)
+          throw new Error("Your shift status changed; swap aborted.");
+        targetShiftId = targetFlipped.shiftId;
+
+        await tx
+          .insert(scShiftAssignments)
+          .values({
+            shiftId: targetShiftId,
+            userId: swap.initiatorUserId,
+            status: "accepted",
+            respondedAt: now,
+          })
+          .onConflictDoUpdate({
+            target: [scShiftAssignments.shiftId, scShiftAssignments.userId],
+            set: { status: "accepted", respondedAt: now },
+          });
+      }
+
+      await tx
+        .update(scShiftSwapRequests)
+        .set({ status: "accepted", decidedAt: now })
+        .where(
+          and(
+            eq(scShiftSwapRequests.id, id),
+            eq(scShiftSwapRequests.status, "pending"),
+          ),
+        );
+
+      return {
+        initiatorUserId: swap.initiatorUserId,
+        isSwap: !!swap.targetAssignmentId,
+        initiatorShiftId,
+        targetShiftId,
+      };
+    },
+  );
+
+  if (result) {
+    const [initiator, acceptor, gaveAway, pickedUp] = await Promise.all([
+      lookupUser(result.initiatorUserId),
+      lookupUser(user.id),
+      loadShiftById(membership.tenant.id, result.initiatorShiftId),
+      result.targetShiftId
+        ? loadShiftById(membership.tenant.id, result.targetShiftId)
+        : Promise.resolve(null),
+    ]);
+    if (initiator && gaveAway) {
+      await notifySwapAccepted({
+        to: initiator,
+        acceptor: acceptor ?? { name: null, email: user.email },
+        gaveAway,
+        pickedUp: result.isSwap ? pickedUp : null,
+      });
+    }
+  }
 
   revalidatePath("/app/my-shifts");
   revalidatePath("/app/schedule");
@@ -274,7 +345,8 @@ export async function declineSwapAction(formData: FormData): Promise<void> {
   if (!id) return;
   const membership = await requireMembership();
   const user = await requireUser();
-  await forTenant(membership.tenant.id).run((tx) =>
+
+  const [updated] = await forTenant(membership.tenant.id).run((tx) =>
     tx
       .update(scShiftSwapRequests)
       .set({ status: "declined", decidedAt: new Date() })
@@ -284,8 +356,28 @@ export async function declineSwapAction(formData: FormData): Promise<void> {
           eq(scShiftSwapRequests.targetUserId, user.id),
           eq(scShiftSwapRequests.status, "pending"),
         ),
-      ),
+      )
+      .returning({
+        initiatorUserId: scShiftSwapRequests.initiatorUserId,
+        initiatorAssignmentId: scShiftSwapRequests.initiatorAssignmentId,
+      }),
   );
+
+  if (updated) {
+    const [initiator, decliner, giveaway] = await Promise.all([
+      lookupUser(updated.initiatorUserId),
+      lookupUser(user.id),
+      loadShiftByAssignment(membership.tenant.id, updated.initiatorAssignmentId),
+    ]);
+    if (initiator && giveaway) {
+      await notifySwapDeclined({
+        to: initiator,
+        decliner: decliner ?? { name: null, email: user.email },
+        giveaway,
+      });
+    }
+  }
+
   revalidatePath("/app/my-shifts");
   revalidatePath("/app/swaps");
 }
@@ -311,16 +403,22 @@ export async function cancelSwapAction(formData: FormData): Promise<void> {
   revalidatePath("/app/swaps");
 }
 
-async function assertOwnedFutureAccepted(
+async function loadOwnedFutureAccepted(
   tenantId: string,
   assignmentId: string,
   expectedUserId: string,
-): Promise<boolean> {
+): Promise<ShiftDetail | null> {
   const rows = await forTenant(tenantId).run((tx) =>
     tx
-      .select({ id: scShiftAssignments.id })
+      .select({
+        startsAt: scShifts.startsAt,
+        endsAt: scShifts.endsAt,
+        role: scShifts.role,
+        locationName: scLocations.name,
+      })
       .from(scShiftAssignments)
       .innerJoin(scShifts, eq(scShifts.id, scShiftAssignments.shiftId))
+      .leftJoin(scLocations, eq(scLocations.id, scShifts.locationId))
       .where(
         and(
           eq(scShiftAssignments.id, assignmentId),
@@ -331,5 +429,57 @@ async function assertOwnedFutureAccepted(
       )
       .limit(1),
   );
-  return rows.length > 0;
+  return rows[0] ?? null;
+}
+
+async function loadShiftById(
+  tenantId: string,
+  shiftId: string,
+): Promise<ShiftDetail | null> {
+  const rows = await forTenant(tenantId).run((tx) =>
+    tx
+      .select({
+        startsAt: scShifts.startsAt,
+        endsAt: scShifts.endsAt,
+        role: scShifts.role,
+        locationName: scLocations.name,
+      })
+      .from(scShifts)
+      .leftJoin(scLocations, eq(scLocations.id, scShifts.locationId))
+      .where(eq(scShifts.id, shiftId))
+      .limit(1),
+  );
+  return rows[0] ?? null;
+}
+
+async function loadShiftByAssignment(
+  tenantId: string,
+  assignmentId: string,
+): Promise<ShiftDetail | null> {
+  const rows = await forTenant(tenantId).run((tx) =>
+    tx
+      .select({
+        startsAt: scShifts.startsAt,
+        endsAt: scShifts.endsAt,
+        role: scShifts.role,
+        locationName: scLocations.name,
+      })
+      .from(scShiftAssignments)
+      .innerJoin(scShifts, eq(scShifts.id, scShiftAssignments.shiftId))
+      .leftJoin(scLocations, eq(scLocations.id, scShifts.locationId))
+      .where(eq(scShiftAssignments.id, assignmentId))
+      .limit(1),
+  );
+  return rows[0] ?? null;
+}
+
+async function lookupUser(
+  userId: string,
+): Promise<{ email: string; name: string | null } | null> {
+  const [row] = await db
+    .select({ email: users.email, name: users.name })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  return row ?? null;
 }

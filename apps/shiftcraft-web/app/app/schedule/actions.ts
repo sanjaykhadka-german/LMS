@@ -4,8 +4,16 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
-import { forTenant, scShiftAssignments, scShifts } from "@tracey/db";
+import {
+  db,
+  forTenant,
+  scLocations,
+  scShiftAssignments,
+  scShifts,
+  users,
+} from "@tracey/db";
 import { currentMembership, currentUser, requireUser } from "~/lib/auth/current";
+import { notifyShiftOffered } from "~/lib/email";
 
 export type FormState =
   | { status: "idle" }
@@ -284,6 +292,33 @@ export async function assignEmployeeAction(
       };
     }
     throw err;
+  }
+
+  // Email after commit. Both lookups are best-effort — if either fails or
+  // the user has no email, the offer still exists in the DB and the
+  // employee will see it next time they open /app/my-shifts.
+  const [recipientRow] = await db
+    .select({ email: users.email, name: users.name })
+    .from(users)
+    .where(eq(users.id, parsed.data.userId))
+    .limit(1);
+  if (recipientRow) {
+    const [shiftRow] = await forTenant(membership.tenant.id).run((tx) =>
+      tx
+        .select({
+          startsAt: scShifts.startsAt,
+          endsAt: scShifts.endsAt,
+          role: scShifts.role,
+          locationName: scLocations.name,
+        })
+        .from(scShifts)
+        .leftJoin(scLocations, eq(scLocations.id, scShifts.locationId))
+        .where(eq(scShifts.id, parsed.data.shiftId))
+        .limit(1),
+    );
+    if (shiftRow) {
+      await notifyShiftOffered({ to: recipientRow, shift: shiftRow });
+    }
   }
 
   revalidatePath(`/app/schedule/${parsed.data.shiftId}/edit`);
