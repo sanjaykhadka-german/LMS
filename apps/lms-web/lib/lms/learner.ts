@@ -17,6 +17,7 @@ import {
   lmsQuestions,
   lmsUploadedFiles,
   lmsUsers,
+  lmsWhsRecords,
   members,
   type LmsAssignment,
   type LmsModule,
@@ -694,18 +695,31 @@ export async function getUploadForAdmin(
       )
       .limit(1);
     if (!photoHit[0]) {
-      // Fall back to checking module-referenced files for any module the
-      // tenant has staff assigned to. Cheap to do via assignments → users.
-      const moduleIds = (
-        await tx
-          .selectDistinct({ moduleId: lmsAssignments.moduleId })
-          .from(lmsAssignments)
-          .innerJoin(lmsUsers, eq(lmsUsers.id, lmsAssignments.userId))
-          .where(eq(lmsUsers.traceyTenantId, traceyTenantId))
-      ).map((r) => r.moduleId);
-      if (moduleIds.length === 0) return null;
-      const referenced = await isFileReferencedByModulesTx(tx, filename, moduleIds);
-      if (!referenced) return null;
+      // whs_records.document_filename — WHS docs aren't module-referenced.
+      const whsHit = await tx
+        .select({ id: lmsWhsRecords.id })
+        .from(lmsWhsRecords)
+        .where(
+          and(
+            eq(lmsWhsRecords.documentFilename, filename),
+            eq(lmsWhsRecords.traceyTenantId, traceyTenantId),
+          ),
+        )
+        .limit(1);
+      if (!whsHit[0]) {
+        // Fall back to checking module-referenced files for any module the
+        // tenant has staff assigned to. Cheap to do via assignments → users.
+        const moduleIds = (
+          await tx
+            .selectDistinct({ moduleId: lmsAssignments.moduleId })
+            .from(lmsAssignments)
+            .innerJoin(lmsUsers, eq(lmsUsers.id, lmsAssignments.userId))
+            .where(eq(lmsUsers.traceyTenantId, traceyTenantId))
+        ).map((r) => r.moduleId);
+        if (moduleIds.length === 0) return null;
+        const referenced = await isFileReferencedByModulesTx(tx, filename, moduleIds);
+        if (!referenced) return null;
+      }
     }
     const file = await tx
       .select()
