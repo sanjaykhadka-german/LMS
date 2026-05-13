@@ -22,7 +22,7 @@ import {
 } from "@tracey/db";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { hashPassword } from "./passwords";
+import { hashPassword, verifyPassword } from "./passwords";
 
 const credentialsSchema = z.object({
   email: z.string().trim().toLowerCase().email(),
@@ -52,14 +52,66 @@ export async function authorizeCredentials(raw: unknown): Promise<AuthorizedUser
   if (!parsed.success) return null;
   const { email, password } = parsed.data;
 
-  // 1. Supabase oracle: verifies password and sets the SSR cookie.
+  // 1. Fast path: bcrypt against app.users.
+  //    Once a user has signed in at least once (via this or any other Tracey
+  //    app — lms-web, hub-web), app.users carries a bcrypt hash. Check it
+  //    first so planning-web works in environments where Supabase env vars
+  //    aren't set (and so the eventual Slice 15 cutover is mostly a no-op
+  //    of removing the Supabase fallback below).
+  const [appUserByEmail] = await db
+    .select()
+    .from(users)
+    .where(eq(users.email, email))
+    .limit(1);
+
+  if (appUserByEmail?.passwordHash) {
+    const bcryptOk = await verifyPassword(password, appUserByEmail.passwordHash);
+    if (bcryptOk) {
+      // Best-effort: also sign into Supabase to refresh the SSR cookie so
+      // legacy queries (still hitting Supabase in Phase 4 feature modules)
+      // remain authenticated. Failures are non-fatal.
+      const supabase = await createClient();
+      const { data: sb } = await supabase.auth
+        .signInWithPassword({ email, password })
+        .catch(() => ({ data: { user: null } }));
+
+      // Bootstrap tenant/members on demand if missing (idempotent).
+      const [existingMembership] = await db
+        .select({ id: members.id })
+        .from(members)
+        .where(eq(members.userId, appUserByEmail.id))
+        .limit(1);
+      if (!existingMembership && sb?.user) {
+        await bootstrapTenantAndMembership(
+          supabase,
+          appUserByEmail.id,
+          sb.user.id,
+        ).catch(() => {});
+      }
+
+      return {
+        id: appUserByEmail.id,
+        name: appUserByEmail.name ?? null,
+        email: appUserByEmail.email,
+        image: appUserByEmail.image ?? null,
+        passwordChangedAt: appUserByEmail.passwordChangedAt.getTime(),
+      };
+    }
+  }
+
+  // 2. Supabase fallback: verifies password and sets the SSR cookie.
+  //    Used for planning-web users who haven't yet signed in to a Tracey
+  //    app so don't have a bcrypt hash in app.users. Returns null if
+  //    Supabase isn't configured (the env-guard stub returns the same
+  //    "Supabase not configured" error shape that signInWithPassword does
+  //    for invalid credentials).
   const supabase = await createClient();
   const { data: sb, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error || !sb?.user) return null;
 
-  // 2. Provision (or find) app.users. The Tracey user.id is set to the
-  //    Supabase auth.users.id on first insert so feature modules that still
-  //    query Supabase via `eq("id", user.id)` keep resolving the right row.
+  // 2b. Provision (or find) app.users. The Tracey user.id is set to the
+  //     Supabase auth.users.id on first insert so feature modules that still
+  //     query Supabase via `eq("id", user.id)` keep resolving the right row.
   const supabaseUserId = sb.user.id;
   const [existingUser] = await db
     .select()
@@ -95,10 +147,10 @@ export async function authorizeCredentials(raw: unknown): Promise<AuthorizedUser
     appUser = inserted;
   }
 
-  // 3. Ensure a tenant + membership exist for this user. Idempotent — if a
-  //    membership row already exists we skip the lookup entirely. Otherwise
-  //    read the Supabase profile to find the user's tenant_id + role and
-  //    upsert into app.tenants / app.members.
+  // 2c. Ensure a tenant + membership exist for this user. Idempotent — if a
+  //     membership row already exists we skip the lookup entirely. Otherwise
+  //     read the Supabase profile to find the user's tenant_id + role and
+  //     upsert into app.tenants / app.members.
   const [existingMembership] = await db
     .select({ id: members.id })
     .from(members)
