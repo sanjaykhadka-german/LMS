@@ -1,0 +1,54 @@
+{
+  "name": "Tracey — Production Planning",
+  "short_name": "Tracey",
+  "description": "Tracey got you covered — butchery production planning & traceability",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#b91c1c",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Production",
+      "short_name": "Production",
+      "description": "Production department queue",
+      "url": "/dept/production",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Filling",
+      "short_name": "Filling",
+      "description": "Filling department queue",
+      "url": "/dept/filling",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Packing",
+      "short_name": "Packing",
+      "description": "Packing department queue",
+      "url": "/dept/packing",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Demand Plans",
+      "short_name": "Plans",
+      "description": "Weekly demand planning",
+      "url": "/plans",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

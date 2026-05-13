@@ -108,6 +108,41 @@ services:
       - key: PER_TENANT_SCHEMA_ENABLED
         value: "true"
 
+  # ─── Tracey Planning (added Phase 1 — 2026-05-13) ───
+  # Service definition only. autoDeploy is OFF because Tino's Vercel
+  # deployment keeps owning production at tracey.app until the Phase 6
+  # data migration is complete. This block lets the service be spun up
+  # on demand from the Render dashboard for staging tests, and the
+  # eventual Phase 6 cutover just flips autoDeploy to true.
+  #
+  # Planning still talks to its own Supabase project — DATABASE_URL is
+  # intentionally absent from this block. Replaced by NEXT_PUBLIC_SUPABASE_*
+  # env vars (synced from Tino's Vercel config when staging is provisioned).
+  - type: web
+    name: planning-web
+    runtime: node
+    plan: free
+    autoDeploy: false
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter planning-web build
+    startCommand: pnpm --filter planning-web start
+    envVars:
+      - key: TZ
+        value: Australia/Sydney
+      - key: NODE_VERSION
+        value: "22.13.0"
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: NEXT_PUBLIC_APP_URL
+        sync: false
+
   - type: cron
     name: lms-stripe-reconcile
     runtime: node

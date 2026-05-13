@@ -1,0 +1,23 @@
+-- ============================================================================
+-- 107  RPC — get_po_suggestions(plan_id, today)
+-- ----------------------------------------------------------------------------
+-- Phase 9.5 (Tino May 2026): drives the new /purchase-orders/suggestions page.
+-- One row per RM/packaging/consumable item that should be ordered, flagged
+-- with WHY (min breach / plan need / lead time gap) and pre-populated with
+-- the cheapest supplier's price + lead time + MOQ.
+--
+-- Trigger rules:
+--   • min_breach   = items.current_stock <= items.min_stock AND min_stock > 0
+--   • plan_need    = plan_required > current_stock
+--   • lead_time    = supplier lead_time_days > 0
+--                    AND today + lead_time >= earliest_needed_date
+--                    AND current_stock < plan_required
+--
+-- recommended_qty = max(plan_to_order, max_top_up)
+--   plan_to_order = max(0, plan_required − current_stock)
+--   max_top_up    = max(0, max_stock − current_stock)   IF min breached, else 0
+--
+-- Cheapest supplier: from v_item_cost_health.cheapest_supplier_id (mig 086).
+--
+-- Body is applied via Supabase MCP at deploy time. Audit copy only.
+-- ============================================================================

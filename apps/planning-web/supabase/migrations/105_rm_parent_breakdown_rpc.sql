@@ -1,0 +1,14 @@
+-- ============================================================================
+-- 105  RPC — get_rm_parent_breakdown(plan_id, component_id)
+-- ----------------------------------------------------------------------------
+-- Phase 9.4 v5 (Tino May 2026): the RM Schedule modal previously listed
+-- parent codes as plain text. Tino wants a real grid with each parent
+-- item's required quantity + a totals row, plus click-to-open on each
+-- row so the planner can jump to the parent item's BOM/setup in a new
+-- tab without losing the schedule context.
+--
+-- Returns one row per (parent_item, required_qty) for a single RM in a
+-- demand plan. Uses the same explosion math as get_plan_dept_materials_by_day
+-- (and explode_mrp). Sorted by required_qty desc.
+-- ============================================================================
+-- (Body applied via Supabase MCP at deploy time; this file is the audit copy.)

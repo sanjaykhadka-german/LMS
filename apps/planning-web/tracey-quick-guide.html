@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Tracey — Quick Start Guide</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --brand:       #b91c1c;
+    --brand-dark:  #991b1b;
+    --brand-light: #fef2f2;
+    --sidebar:     #1c1917;
+    --bg:          #f8f7f5;
+    --card:        #ffffff;
+    --border:      #e7e5e4;
+    --text:        #1c1917;
+    --muted:       #78716c;
+    --radius:      0.75rem;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+  }
+
+  /* ── Header ── */
+  .site-header {
+    background: var(--sidebar);
+    color: #e7e5e4;
+    padding: 1.5rem 2rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  .site-header .logo {
+    width: 40px; height: 40px;
+    background: var(--brand);
+    border-radius: 0.5rem;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 1.125rem; color: #fff; flex-shrink: 0;
+  }
+  .site-header h1 { font-size: 1.25rem; font-weight: 700; color: #f5f5f4; }
+  .site-header p  { font-size: 0.8125rem; color: #a8a29e; margin-top: 0.125rem; }
+
+  /* ── Nav tabs ── */
+  .nav-bar {
+    background: #fff;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 0 1.5rem;
+  }
+  .nav-tab {
+    padding: 0.875rem 1.25rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--muted);
+    cursor: pointer;
+    border: none;
+    background: none;
+    border-bottom: 3px solid transparent;
+    white-space: nowrap;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .nav-tab:hover  { color: var(--text); }
+  .nav-tab.active { color: var(--brand); border-bottom-color: var(--brand); }
+
+  /* ── Layout ── */
+  .page { display: none; max-width: 860px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+  .page.active { display: block; }
+
+  /* ── Section hero ── */
+  .section-hero {
+    background: var(--brand);
+    color: #fff;
+    border-radius: var(--radius);
+    padding: 1.5rem 1.75rem;
+    margin-bottom: 1.75rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  .section-hero .icon {
+    width: 48px; height: 48px; background: rgba(255,255,255,0.15);
+    border-radius: 0.625rem;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .section-hero h2 { font-size: 1.25rem; font-weight: 700; }
+  .section-hero p  { font-size: 0.875rem; opacity: 0.85; margin-top: 0.25rem; }
+
+  /* ── Steps ── */
+  .steps { display: flex; flex-direction: column; gap: 1rem; }
+  .step {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.25rem 1.5rem;
+    display: flex;
+    gap: 1rem;
+  }
+  .step-num {
+    width: 28px; height: 28px;
+    background: var(--brand-light);
+    color: var(--brand);
+    border-radius: 50%;
+    font-weight: 700; font-size: 0.8125rem;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; margin-top: 0.125rem;
+  }
+  .step-body h3  { font-size: 0.9375rem; font-weight: 600; margin-bottom: 0.375rem; }
+  .step-body p   { font-size: 0.875rem; color: #44403c; }
+  .step-body ul  { font-size: 0.875rem; color: #44403c; padding-left: 1.25rem; margin-top: 0.375rem; }
+  .step-body li  { margin-bottom: 0.25rem; }
+
+  /* ── Tip box ── */
+  .tip {
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-radius: 0.5rem;
+    padding: 0.75rem 1rem;
+    font-size: 0.8125rem;
+    color: #78350f;
+    margin-top: 0.625rem;
+    display: flex; gap: 0.5rem; align-items: flex-start;
+  }
+  .tip svg { flex-shrink: 0; margin-top: 1px; }
+
+  /* ── Keyboard badge ── */
+  kbd {
+    display: inline-block;
+    background: #f5f5f4;
+    border: 1px solid #d6d3d1;
+    border-radius: 4px;
+    padding: 0.1em 0.4em;
+    font-family: monospace;
+    font-size: 0.8125rem;
+    color: #292524;
+  }
+
+  /* ── Feature grid ── */
+  .feature-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 0.875rem;
+    margin-bottom: 1.75rem;
+  }
+  .feature-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem 1.25rem;
+  }
+  .feature-card .fc-icon {
+    width: 32px; height: 32px;
+    background: var(--brand-light);
+    color: var(--brand);
+    border-radius: 0.5rem;
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 0.625rem;
+  }
+  .feature-card h4  { font-size: 0.875rem; font-weight: 600; margin-bottom: 0.25rem; }
+  .feature-card p   { font-size: 0.8125rem; color: var(--muted); }
+
+  /* ── Section divider ── */
+  .section-label {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--muted);
+    margin: 1.75rem 0 0.75rem;
+  }
+
+  /* ── Badge ── */
+  .badge {
+    display: inline-flex; align-items: center;
+    padding: 0.1875rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.6875rem; font-weight: 600;
+    white-space: nowrap;
+  }
+  .badge-red    { background: #fee2e2; color: #991b1b; }
+  .badge-green  { background: #dcfce7; color: #166534; }
+  .badge-blue   { background: #dbeafe; color: #1e40af; }
+  .badge-gray   { background: #f4f4f5; color: #52525b; }
+
+  /* ── Footer ── */
+  .guide-footer {
+    text-align: center;
+    font-size: 0.8125rem;
+    color: var(--muted);
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+  }
+
+  @media (max-width: 600px) {
+    .site-header { padding: 1rem 1rem; }
+    .page { padding: 1.25rem 1rem 3rem; }
+    .feature-grid { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<header class="site-header">
+  <div class="logo">T</div>
+  <div>
+    <h1>Tracey — Quick Start Guide</h1>
+    <p>German Butchery Production Planning · High-level overview</p>
+  </div>
+</header>
+
+<!-- ── Nav ── -->
+<nav class="nav-bar" id="navBar">
+  <button class="nav-tab active" onclick="showPage('login',this)">1 · Login &amp; Navigation</button>
+  <button class="nav-tab" onclick="showPage('items',this)">2 · Item Master</button>
+  <button class="nav-tab" onclick="showPage('bom',this)">3 · BOMs &amp; Recipes</button>
+  <button class="nav-tab" onclick="showPage('suppliers',this)">4 · Suppliers &amp; Ordering</button>
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════ PAGE 1 ══ -->
+<div class="page active" id="page-login">
+
+  <div class="section-hero">
+    <div class="icon">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M15 3h6v18h-6"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/>
+      </svg>
+    </div>
+    <div>
+      <h2>Login &amp; Navigation</h2>
+      <p>Getting into Tracey and finding your way around the app.</p>
+    </div>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <h3>Open the app</h3>
+        <p>Go to <strong>tracey-planning-app.vercel.app</strong> in any modern browser. Bookmark it for quick access.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <h3>Sign in</h3>
+        <p>Enter your email address and password. If it's your first time, use the link in your invitation email to set your password.</p>
+        <div class="tip">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          Forgot your password? Use <strong>Forgot password</strong> on the login screen to reset via email.
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <h3>The sidebar</h3>
+        <p>Everything lives in the left sidebar. The main sections are:</p>
+        <ul>
+          <li><strong>Dashboard</strong> — at-a-glance overview</li>
+          <li><strong>Item Master</strong> — all products and ingredients</li>
+          <li><strong>BOMs</strong> — recipes and formulations</li>
+          <li><strong>Suppliers</strong> — supplier list and spec docs</li>
+          <li><strong>Settings</strong> — departments, categories, allergens, users</li>
+        </ul>
+        <div class="tip">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          Click the <strong>collapse button</strong> (panel icon, top of sidebar) to fold the sidebar into a narrow icon rail — useful on smaller screens.
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <h3>User roles</h3>
+        <p>Tracey has two roles. Your role controls what you can change:</p>
+        <ul>
+          <li><span class="badge badge-red">Admin</span> &nbsp;Full access — create, edit, delete everything including settings and users.</li>
+          <li><span class="badge badge-gray">Staff</span> &nbsp;View and edit day-to-day content. Cannot change settings or manage users.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="guide-footer">Next: <a href="#" onclick="showPage('items',document.querySelectorAll('.nav-tab')[1]);return false;">Item Master →</a></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ PAGE 2 ══ -->
+<div class="page" id="page-items">
+
+  <div class="section-hero">
+    <div class="icon">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
+      </svg>
+    </div>
+    <div>
+      <h2>Item Master</h2>
+      <p>The central register of every product, ingredient, packaging and WIP in the business.</p>
+    </div>
+  </div>
+
+  <div class="section-label">Item types</div>
+  <div class="feature-grid">
+    <div class="feature-card">
+      <div class="fc-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>
+      </div>
+      <h4>Raw Material <span class="badge badge-blue">RM</span></h4>
+      <p>Purchased ingredients — meat, spices, casings, additives.</p>
+    </div>
+    <div class="feature-card">
+      <div class="fc-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      </div>
+      <h4>WIP / Mix <span class="badge badge-gray">WIP</span></h4>
+      <p>Semi-finished blends that are used as components in other recipes.</p>
+    </div>
+    <div class="feature-card">
+      <div class="fc-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+      </div>
+      <h4>Finished Good <span class="badge badge-green">FG</span></h4>
+      <p>End products sold to customers.</p>
+    </div>
+    <div class="feature-card">
+      <div class="fc-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      </div>
+      <h4>Packaging <span class="badge badge-gray">PKG</span></h4>
+      <p>Bags, trays, labels and other packaging materials.</p>
+    </div>
+  </div>
+
+  <div class="section-label">Key tasks</div>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <h3>Finding items</h3>
+        <p>Use the filter bar at the top of the Item Master to search by <strong>Item Number</strong>, <strong>Name</strong>, <strong>Description</strong>, <strong>Type</strong>, <strong>Category</strong>, <strong>Department</strong>, or <strong>Supplier</strong>. Filters combine — type a name and select a category to narrow results. Clear a filter to reset.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <h3>Adding a new item</h3>
+        <p>Click <strong>+ New Item</strong> (top right). Fill in the required fields: <strong>Code</strong>, <strong>Name</strong>, <strong>Type</strong> and <strong>Unit</strong>. All other fields are optional and can be filled in later.</p>
+        <div class="tip">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          Item codes must be unique. Use a consistent format like <strong>RM-001</strong> for raw materials or <strong>FG-042</strong> for finished goods.
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <h3>Editing items inline (Bulk Edit Grid)</h3>
+        <p>To update many items at once, click the <strong>grid/edit icon</strong> next to the item count. The table switches to edit mode — click any cell to change it directly. Dropdowns in the grid have a search box: start typing to filter options. Press <kbd>Esc</kbd> to cancel, <kbd>Enter</kbd> to confirm, or click Save Changes when done.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <h3>Export &amp; Import</h3>
+        <p>Click <strong>Export / Import</strong> (top right) to:</p>
+        <ul>
+          <li><strong>Export</strong> — download the current filtered view as a CSV spreadsheet.</li>
+          <li><strong>Download Template</strong> — get a blank CSV with all the right columns.</li>
+          <li><strong>Import</strong> — upload a filled-in CSV to create or update items in bulk.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="guide-footer">Next: <a href="#" onclick="showPage('bom',document.querySelectorAll('.nav-tab')[2]);return false;">BOMs &amp; Recipes →</a></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ PAGE 3 ══ -->
+<div class="page" id="page-bom">
+
+  <div class="section-hero">
+    <div class="icon">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+        <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+      </svg>
+    </div>
+    <div>
+      <h2>BOMs &amp; Recipes</h2>
+      <p>Bill of Materials — the ingredient formulations that drive production planning.</p>
+    </div>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <h3>What is a BOM?</h3>
+        <p>A BOM (Bill of Materials) links a finished product or WIP to its list of ingredients with exact quantities per batch. Each product can have multiple BOM versions — useful for seasonal recipes or reformulations.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <h3>Creating a new BOM</h3>
+        <p>Go to <strong>BOMs → + New BOM</strong>. Fill in the header:</p>
+        <ul>
+          <li><strong>Item</strong> — the product this recipe is for (type to search)</li>
+          <li><strong>Reference Batch Size</strong> — e.g. 900 kg. All ingredient quantities are relative to this.</li>
+          <li><strong>Yield Factor</strong> — accounts for cooking or processing loss. 85% means you need to put in more than you get out.</li>
+          <li><strong>Active Version</strong> — tick this to mark it as the current recipe used in production.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <h3>Adding ingredients</h3>
+        <p>Click <strong>+ Add Ingredient</strong>. In the Component column, type any part of the ingredient code or name — a search dropdown appears. Select the ingredient and the cursor jumps to the <strong>Qty / Batch</strong> field automatically.</p>
+        <div class="tip">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span>Press <kbd>Tab</kbd> to move through Qty → Unit → % → Grind Size → Comment. On the last column of the last row, <kbd>Tab</kbd> automatically adds the next ingredient row.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <h3>Quick-create a missing ingredient</h3>
+        <p>If an ingredient doesn't exist yet, type its name in the Component field and select <strong>+ New item…</strong> from the dropdown. A quick-create panel lets you add the code, name and type on the spot without leaving the BOM form.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">5</div>
+      <div class="step-body">
+        <h3>CSV import &amp; export</h3>
+        <p>Use the buttons at the top of the ingredients section:</p>
+        <ul>
+          <li><strong>Template</strong> — download a blank CSV with the correct columns to fill in offline.</li>
+          <li><strong>Import CSV</strong> — upload a filled CSV to add ingredients in bulk. Matches by item code first, then by name.</li>
+          <li><strong>Export CSV</strong> — save the current ingredient list as a spreadsheet for review or copying to another BOM.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">6</div>
+      <div class="step-body">
+        <h3>Approving a BOM</h3>
+        <p>Once a recipe is finalised, click <strong>✓ Approve BOM</strong>. Approved BOMs are clearly marked in the list. Click again to unapprove if a recipe needs revision.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="guide-footer">Next: <a href="#" onclick="showPage('suppliers',document.querySelectorAll('.nav-tab')[3]);return false;">Suppliers &amp; Ordering →</a></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ PAGE 4 ══ -->
+<div class="page" id="page-suppliers">
+
+  <div class="section-hero">
+    <div class="icon">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+        <circle cx="9" cy="7" r="4"/>
+        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+      </svg>
+    </div>
+    <div>
+      <h2>Suppliers &amp; Ordering</h2>
+      <p>Manage your supplier register, contacts, spec documents and order splits.</p>
+    </div>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <h3>Supplier register</h3>
+        <p>Go to <strong>Suppliers</strong> in the sidebar to see all active suppliers. Each supplier card shows their code, name, contact details and status. Click a supplier to open their full profile.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <h3>Adding a supplier</h3>
+        <p>Click <strong>+ New Supplier</strong> and fill in the details — code, name, contact name, phone, email and payment terms. Set <strong>Active</strong> so they appear in dropdowns across the app.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <h3>Spec documents</h3>
+        <p>Each supplier has a <strong>Spec Docs</strong> section on their profile page. Upload product specification sheets, safety data sheets or compliance certificates. Documents are tagged as <strong>Current</strong> or <strong>Archived</strong> so you always know which version is active.</p>
+        <div class="tip">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          Spec docs are also visible from the individual item page for any item linked to that supplier.
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <h3>Linking items to suppliers</h3>
+        <p>On each item's detail page you can link one or more suppliers. This lets you filter the Item Master by supplier and drives the order split feature.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">5</div>
+      <div class="step-body">
+        <h3>Order splits</h3>
+        <p>Upload a master order/inventory spreadsheet and Tracey splits it into one sheet per supplier — filtered to only the items that supplier provides. Each split sheet includes an <strong>Ordered</strong> checkbox and a link back to the full register, making it easy to tick off orders as they're placed.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="guide-footer">
+    <p>You're all set! For further help contact your system administrator.</p>
+    <p style="margin-top:0.5rem;">© German Butchery · Tracey Planning App</p>
+  </div>
+</div>
+
+<script>
+  function showPage(id, btn) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+    document.getElementById('page-' + id).classList.add('active');
+    if (btn) btn.classList.add('active');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+</script>
+
+</body>
+</html>

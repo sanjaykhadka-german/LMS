@@ -1,0 +1,1599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Tracey — Product Setup Mockup</title>
+<style>
+  :root {
+    --bg: #f7f5f2;
+    --card: #ffffff;
+    --border: #e7e3dd;
+    --border-strong: #cfc9bf;
+    --ink: #1a1814;
+    --ink-soft: #5b554b;
+    --ink-faded: #8a8378;
+    --primary: #b8332a;
+    --primary-soft: #fce9e6;
+    --green: #2f8f5a;
+    --green-soft: #e0f2e6;
+    --amber: #c98b14;
+    --amber-soft: #fbeed1;
+    --red: #b8332a;
+    --red-soft: #fce9e6;
+    --grey-soft: #ece8e2;
+    --shadow: 0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.04);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .mono { font-family: "SF Mono", Menlo, Consolas, monospace; }
+  header.appbar {
+    display: flex; align-items: center; gap: 18px;
+    padding: 14px 28px;
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 50;
+    flex-wrap: wrap;
+  }
+  .brand {
+    font-weight: 700; font-size: 18px; letter-spacing: -0.3px;
+    color: var(--primary);
+  }
+  .brand::before { content: "✱ "; }
+  .seg {
+    display: inline-flex; align-items: center;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 3px;
+    gap: 2px;
+  }
+  .seg button {
+    border: 0; background: transparent; padding: 6px 12px;
+    border-radius: 6px; cursor: pointer;
+    font-size: 13px; color: var(--ink-soft);
+    font-family: inherit;
+  }
+  .seg button.active {
+    background: var(--card); color: var(--ink);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+  }
+  .spacer { flex: 1; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px; border-radius: 999px;
+    background: var(--grey-soft); color: var(--ink-soft);
+    font-size: 12px; font-weight: 500;
+  }
+  .pill.admin { background: var(--primary-soft); color: var(--primary); }
+  .pill .dot {
+    width: 6px; height: 6px; border-radius: 999px; background: currentColor;
+  }
+  nav.screens {
+    display: flex; gap: 4px;
+    padding: 0 28px;
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+  }
+  nav.screens button {
+    background: transparent; border: 0;
+    padding: 12px 16px;
+    font-size: 13px; color: var(--ink-soft);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    white-space: nowrap;
+    font-family: inherit;
+  }
+  nav.screens button.active {
+    color: var(--ink); border-bottom-color: var(--primary);
+    font-weight: 600;
+  }
+  nav.screens .step-num {
+    display: inline-block;
+    width: 18px; height: 18px;
+    border-radius: 999px; background: var(--grey-soft);
+    color: var(--ink-soft); font-size: 11px; font-weight: 600;
+    text-align: center; line-height: 18px;
+    margin-right: 8px;
+  }
+  nav.screens button.active .step-num {
+    background: var(--primary); color: white;
+  }
+  main {
+    padding: 28px;
+    max-width: 1200px; margin: 0 auto;
+  }
+  .screen { display: none; }
+  .screen.active { display: block; animation: fade 0.2s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+  h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -0.2px; }
+  h1 { font-size: 24px; margin-bottom: 8px; }
+  h2 { font-size: 18px; }
+  h3 { font-size: 15px; }
+  h4 { font-size: 13px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+  .subtle { color: var(--ink-soft); }
+  .faded { color: var(--ink-faded); }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    box-shadow: var(--shadow);
+  }
+  .card + .card { margin-top: 16px; }
+
+  .pick-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+  }
+  .pick-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px;
+    cursor: pointer;
+    transition: border-color 0.15s, transform 0.15s;
+  }
+  .pick-card:hover {
+    border-color: var(--primary);
+    transform: translateY(-2px);
+  }
+  .pick-card.recommended {
+    border-color: var(--primary);
+    background: linear-gradient(180deg, var(--primary-soft) 0%, var(--card) 50%);
+  }
+  .pick-card .icon {
+    font-size: 28px; margin-bottom: 12px; display: block;
+  }
+  .pick-card h3 { margin-bottom: 6px; }
+  .pick-card p { color: var(--ink-soft); font-size: 13px; margin: 0; }
+  .pick-card .tag {
+    display: inline-block;
+    margin-top: 12px;
+    padding: 2px 8px;
+    background: var(--grey-soft);
+    color: var(--ink-soft);
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .pick-card.recommended .tag { background: var(--primary); color: white; }
+
+  .wizard-steps {
+    display: flex; gap: 0;
+    margin-bottom: 24px;
+  }
+  .wizard-step {
+    flex: 1;
+    padding: 12px 16px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-right: 0;
+    font-size: 13px;
+    color: var(--ink-faded);
+    position: relative;
+  }
+  .wizard-step:first-child { border-radius: 8px 0 0 8px; }
+  .wizard-step:last-child { border-radius: 0 8px 8px 0; border-right: 1px solid var(--border); }
+  .wizard-step.active {
+    background: var(--ink);
+    color: white;
+    border-color: var(--ink);
+  }
+  .wizard-step.done { color: var(--green); }
+  .wizard-step.done::before { content: "✓ "; }
+
+  .field { margin: 16px 0; }
+  .field label {
+    display: block;
+    font-size: 13px; font-weight: 500;
+    margin-bottom: 6px;
+    color: var(--ink);
+  }
+
+  .chain-builder {
+    padding: 20px;
+    background: var(--bg);
+    border-radius: 10px;
+    margin-top: 12px;
+    border: 1px dashed var(--border-strong);
+  }
+  .chain {
+    display: flex; align-items: center; gap: 8px;
+    flex-wrap: wrap;
+  }
+  .chain-node {
+    background: var(--card);
+    border: 1px solid var(--border-strong);
+    padding: 14px 16px;
+    border-radius: 10px;
+    min-width: 130px;
+    text-align: center;
+    cursor: pointer;
+    position: relative;
+    box-shadow: var(--shadow);
+  }
+  .chain-node:hover { border-color: var(--primary); }
+  .chain-node.selected { border-color: var(--primary); background: var(--primary-soft); }
+  .chain-node .step-name { font-weight: 600; font-size: 13px; }
+  .chain-node .step-meta { font-size: 11px; color: var(--ink-faded); margin-top: 2px; }
+  .chain-node .step-num-tag {
+    position: absolute;
+    top: -8px; left: 50%; transform: translateX(-50%);
+    background: var(--primary); color: white;
+    padding: 1px 8px; border-radius: 999px;
+    font-size: 10px; font-weight: 600;
+  }
+  .chain-node.product .step-num-tag { background: var(--green); }
+  .chain-arrow { color: var(--ink-faded); font-size: 18px; }
+  .chain-add {
+    border: 2px dashed var(--border-strong);
+    background: transparent;
+    padding: 14px 16px;
+    border-radius: 10px;
+    color: var(--ink-faded);
+    cursor: pointer;
+    font-size: 12px;
+    font-family: inherit;
+  }
+  .chain-add:hover { border-color: var(--primary); color: var(--primary); }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 10px 18px;
+    border-radius: 8px;
+    border: 1px solid var(--border-strong);
+    background: var(--card);
+    cursor: pointer;
+    font-size: 14px; font-weight: 500;
+    color: var(--ink);
+    font-family: inherit;
+  }
+  .btn:hover { background: var(--bg); }
+  .btn-primary {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: white;
+  }
+  .btn-primary:hover { background: #a02d24; }
+  .btn-row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 24px; }
+
+  .traffic { display: flex; gap: 6px; flex-wrap: wrap; }
+  .traffic-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 10px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: 12px; font-weight: 500;
+    color: var(--ink-soft);
+    cursor: pointer;
+  }
+  .traffic-pill:hover { border-color: var(--ink-soft); }
+  .traffic-pill .dot { width: 8px; height: 8px; border-radius: 999px; }
+  .traffic-pill.ready .dot { background: var(--green); }
+  .traffic-pill.ready { color: var(--green); border-color: var(--green-soft); background: var(--green-soft); }
+  .traffic-pill.partial .dot { background: var(--amber); }
+  .traffic-pill.partial { color: var(--amber); border-color: var(--amber-soft); background: var(--amber-soft); }
+  .traffic-pill.missing .dot { background: var(--red); }
+  .traffic-pill.missing { color: var(--red); border-color: var(--red-soft); background: var(--red-soft); }
+
+  .form-grid {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 20px;
+  }
+  .form-grid .right { position: sticky; top: 110px; align-self: start; }
+  .field-row {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 16px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+    align-items: center;
+  }
+  .field-row:last-child { border-bottom: 0; }
+  .field-row .lbl {
+    font-size: 13px; font-weight: 500;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .field-row .editable-label {
+    display: inline-flex; align-items: center; gap: 4px;
+    cursor: text;
+    padding: 2px 4px;
+    border-radius: 4px;
+    margin-left: -4px;
+  }
+  body.admin-mode .field-row .editable-label:hover {
+    background: var(--amber-soft);
+    outline: 1px dashed var(--amber);
+  }
+  body.admin-mode .field-row .editable-label::after {
+    content: "✎";
+    color: var(--amber);
+    font-size: 11px;
+    opacity: 0;
+    margin-left: 2px;
+  }
+  body.admin-mode .field-row .editable-label:hover::after { opacity: 1; }
+  body:not(.admin-mode) .editable-label { cursor: default; }
+  .field-row .lbl .reqs { display: inline-flex; gap: 3px; margin-left: 4px; }
+  .field-row .lbl .req-dot { width: 6px; height: 6px; border-radius: 999px; cursor: help; }
+  .field-row .lbl .req-dot.costing { background: #6b7cff; }
+  .field-row .lbl .req-dot.planning { background: #ff9f43; }
+  .field-row .lbl .req-dot.qa { background: #c47bd1; }
+  .field-row .lbl .req-dot.purchasing { background: #2e8fd6; }
+  .field-row .lbl .req-dot.dispatch { background: #6b7cff; }
+  .field-row .val input, .field-row .val select {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: inherit;
+    background: var(--card);
+  }
+  .field-row .val.empty input { border-color: var(--amber); background: var(--amber-soft); }
+
+  .canvas-wrap {
+    background: var(--card);
+    border-radius: 12px;
+    padding: 28px;
+    box-shadow: var(--shadow);
+    border: 1px solid var(--border);
+  }
+  .canvas-cascade {
+    display: flex; align-items: stretch; gap: 0;
+    overflow-x: auto;
+    padding: 16px 0;
+  }
+  .stage-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    min-width: 220px;
+    position: relative;
+    cursor: pointer;
+  }
+  .stage-card:hover { border-color: var(--primary); }
+  .stage-card .stage-num {
+    position: absolute; top: -10px; left: 16px;
+    background: var(--primary); color: white;
+    padding: 1px 8px; border-radius: 999px;
+    font-size: 11px; font-weight: 600;
+  }
+  .stage-card.product .stage-num { background: var(--green); }
+  .stage-card .stage-name { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+  .stage-card .stage-dept { font-size: 11px; color: var(--ink-faded); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .stage-card .stage-list { list-style: none; padding: 0; margin: 0; font-size: 12px; }
+  .stage-card .stage-list li {
+    padding: 4px 0;
+    color: var(--ink-soft);
+    display: flex; justify-content: space-between;
+    border-bottom: 1px dashed var(--border);
+  }
+  .stage-card .stage-list li:last-child { border-bottom: 0; }
+  .stage-card .stage-list li .qty { font-family: "SF Mono", Menlo, monospace; font-size: 11px; color: var(--ink-faded); }
+  .stage-arrow { align-self: center; color: var(--ink-faded); font-size: 24px; padding: 0 12px; }
+
+  .test-banner {
+    background: linear-gradient(135deg, var(--primary-soft), var(--amber-soft));
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 20px;
+    border: 1px solid var(--border);
+  }
+  .test-banner h2 { margin-bottom: 8px; }
+  .test-banner .test-controls {
+    margin-top: 16px;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  }
+  .test-banner .test-controls input {
+    width: 130px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    font-size: 18px; font-weight: 700;
+    text-align: right;
+    font-family: inherit;
+    background: white;
+  }
+  .test-banner .test-controls .uom-tabs {
+    display: inline-flex;
+    background: rgba(255,255,255,0.6);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 3px;
+    gap: 2px;
+    flex-wrap: wrap;
+  }
+  .test-banner .test-controls .uom-tabs button {
+    border: 0; background: transparent;
+    padding: 7px 12px;
+    border-radius: 6px; cursor: pointer;
+    font-size: 13px; color: var(--ink-soft);
+    font-family: inherit; font-weight: 500;
+  }
+  .test-banner .test-controls .uom-tabs button.active {
+    background: var(--ink); color: white;
+  }
+  .test-banner .test-controls .of-line {
+    color: var(--ink-soft); font-size: 14px;
+  }
+  .test-banner .equivalents {
+    margin-top: 14px;
+    padding: 10px 14px;
+    background: rgba(255,255,255,0.55);
+    border-radius: 8px;
+    font-size: 13px;
+    color: var(--ink);
+    display: flex; flex-wrap: wrap; gap: 16px;
+  }
+  .test-banner .equivalents .eq-item { display: inline-flex; align-items: baseline; gap: 4px; }
+  .test-banner .equivalents .eq-item .eq-label { color: var(--ink-faded); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .test-banner .equivalents .eq-item .eq-val { font-weight: 700; font-family: "SF Mono", Menlo, monospace; }
+
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .summary-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+  }
+  .summary-card h4 { margin-bottom: 8px; }
+  .summary-card .big { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
+  .summary-card .sub { font-size: 12px; color: var(--ink-faded); margin-top: 2px; }
+
+  table.test-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.test-table th {
+    text-align: left; padding: 8px 10px;
+    border-bottom: 1px solid var(--border-strong);
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--ink-soft); font-weight: 600;
+  }
+  table.test-table td {
+    padding: 9px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  table.test-table td.num { font-family: "SF Mono", Menlo, monospace; text-align: right; }
+  table.test-table tr:last-child td { border-bottom: 0; }
+  table.test-table tr.total td {
+    border-top: 2px solid var(--ink-soft);
+    font-weight: 700;
+  }
+
+  .verify-bar {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-top: 20px;
+    display: flex; align-items: center; gap: 16px;
+  }
+  .verify-bar .text { flex: 1; }
+  .verify-bar .text strong { display: block; font-size: 14px; }
+  .verify-bar .text span { color: var(--ink-soft); font-size: 13px; }
+  .btn-yes { background: var(--green); border-color: var(--green); color: white; }
+  .btn-yes:hover { background: #267548; }
+  .btn-no { color: var(--red); border-color: var(--red-soft); }
+
+  .vocab-table { width: 100%; border-collapse: collapse; }
+  .vocab-table th, .vocab-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+  }
+  .vocab-table th {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--ink-soft);
+  }
+  .vocab-table .canonical {
+    font-family: "SF Mono", Menlo, monospace;
+    font-size: 12px;
+    color: var(--ink-faded);
+  }
+  .vocab-table input {
+    padding: 6px 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    font-size: 13px;
+    width: 220px;
+    font-family: inherit;
+  }
+  .vocab-table .examples { color: var(--ink-soft); font-size: 12px; }
+
+  .row { display: flex; gap: 16px; align-items: flex-start; }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    background: var(--grey-soft);
+    color: var(--ink-soft);
+    margin-left: 6px;
+  }
+  .badge.green { background: var(--green-soft); color: var(--green); }
+  .badge.amber { background: var(--amber-soft); color: var(--amber); }
+  hr { border: 0; border-top: 1px solid var(--border); margin: 16px 0; }
+
+  .legend {
+    display: inline-flex; align-items: center; gap: 12px;
+    margin-top: 8px;
+    padding: 8px 12px;
+    background: var(--bg);
+    border-radius: 8px;
+    font-size: 11px;
+    color: var(--ink-soft);
+  }
+  .legend .item { display: inline-flex; align-items: center; gap: 4px; }
+  .legend .req-dot { width: 8px; height: 8px; border-radius: 999px; }
+  .legend .req-dot.costing { background: #6b7cff; }
+  .legend .req-dot.planning { background: #ff9f43; }
+  .legend .req-dot.qa { background: #c47bd1; }
+  .legend .req-dot.purchasing { background: #2e8fd6; }
+  .legend .req-dot.dispatch { background: #6b7cff; }
+
+  .info-box {
+    background: var(--amber-soft);
+    border: 1px solid var(--amber);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 13px;
+    color: var(--ink);
+    margin: 12px 0;
+  }
+  .info-box strong { color: var(--amber); }
+
+  body.admin-mode .editable-label {
+    background: linear-gradient(transparent 80%, var(--amber-soft) 80%);
+  }
+</style>
+</head>
+<body>
+
+<header class="appbar">
+  <div class="brand">Tracey</div>
+
+  <div class="seg" role="tablist" aria-label="Industry">
+    <button class="active" data-industry="butcher" onclick="setIndustry('butcher')">Butcher</button>
+    <button data-industry="bakery" onclick="setIndustry('bakery')">Bakery</button>
+    <button data-industry="cosmetics" onclick="setIndustry('cosmetics')">Cosmetics</button>
+    <button data-industry="coffee" onclick="setIndustry('coffee')">Coffee roaster</button>
+    <button data-industry="cheese" onclick="setIndustry('cheese')">Cheesemaker</button>
+  </div>
+
+  <div class="spacer"></div>
+
+  <span class="pill" id="tenantPill"><span class="dot"></span>German Butchery</span>
+
+  <div class="seg" role="tablist" aria-label="Mode">
+    <button data-mode="operator" class="active" onclick="setMode('operator')">Operator view</button>
+    <button data-mode="admin" onclick="setMode('admin')">Admin view</button>
+  </div>
+</header>
+
+<nav class="screens">
+  <button data-screen="pick" class="active" onclick="setScreen('pick')"><span class="step-num">1</span>Pick type</button>
+  <button data-screen="wizard" onclick="setScreen('wizard')"><span class="step-num">2</span>Guided setup</button>
+  <button data-screen="expert" onclick="setScreen('expert')"><span class="step-num">3</span>Expert form</button>
+  <button data-screen="canvas" onclick="setScreen('canvas')"><span class="step-num">4</span>Product canvas</button>
+  <button data-screen="test" onclick="setScreen('test')"><span class="step-num">5</span>Sanity check</button>
+  <button data-screen="vocab" onclick="setScreen('vocab')"><span class="step-num">6</span>Vocabulary</button>
+</nav>
+
+<main>
+
+<section class="screen active" data-screen="pick">
+  <h1>Add a new product</h1>
+  <p class="subtle">Pick the shape that fits your product. You can always change it later.</p>
+  <div class="pick-cards">
+    <div class="pick-card" onclick="setScreen('wizard')">
+      <span class="icon">📦</span>
+      <h3>Resold item</h3>
+      <p>You buy this from a supplier and sell it as-is. No production happens here.</p>
+      <span class="tag">Single item</span>
+    </div>
+    <div class="pick-card" onclick="setScreen('wizard')">
+      <span class="icon">🥣</span>
+      <h3>1-step recipe</h3>
+      <p>Combine ingredients in one go and sell the result. No intermediate stages.</p>
+      <span class="tag">Recipe + product</span>
+    </div>
+    <div class="pick-card recommended" onclick="setScreen('wizard')">
+      <span class="icon">🔗</span>
+      <h3>Multi-step recipe</h3>
+      <p>You make something, then do more work to it before selling.</p>
+      <span class="tag">Recommended for this product</span>
+    </div>
+    <div class="pick-card" onclick="setScreen('wizard')">
+      <span class="icon">📋</span>
+      <h3>Clone something existing</h3>
+      <p>Start from a product you already have and only edit the differences. Fastest path.</p>
+      <span class="tag">Copy &amp; modify</span>
+    </div>
+  </div>
+  <hr style="margin: 32px 0;">
+  <p class="subtle" style="font-size: 13px;">
+    <strong style="color: var(--ink);">What about the technical jargon?</strong>
+    Tracey doesn't ask you about WIP / WIPF / WIPP / Finished Good item types —
+    those are decided automatically based on how you describe your process.
+    You'll never see those terms unless you go looking for them.
+  </p>
+</section>
+
+<section class="screen" data-screen="wizard">
+  <div class="wizard-steps">
+    <div class="wizard-step done">Pick type</div>
+    <div class="wizard-step done">Basics</div>
+    <div class="wizard-step active">Process flow</div>
+    <div class="wizard-step">Ingredients</div>
+    <div class="wizard-step">Packaging</div>
+    <div class="wizard-step">Sanity check</div>
+  </div>
+  <div class="card">
+    <h2>How do you make this product?</h2>
+    <p class="subtle">Walk me through your process. Add a stage for each step you do in-house.
+      Don't worry about getting it perfect — you can rename, add or remove stages anytime.</p>
+    <div class="chain-builder">
+      <div class="chain" id="wizChain"></div>
+      <p class="subtle" style="margin-top: 14px; font-size: 12px;">
+        💡 <span id="wizHint">Tip: think about the natural breakpoints in your process.</span>
+      </p>
+    </div>
+    <div class="info-box">
+      <strong>Behind the scenes:</strong> each stage you add becomes its own item in the system,
+      with the right wiring so cascading planning &amp; costing just works. You don't need to know
+      what an "item type" is — Tracey figures it out from your process.
+    </div>
+    <div class="btn-row">
+      <button class="btn">← Back</button>
+      <button class="btn btn-primary" onclick="setScreen('expert')">Next: Ingredients →</button>
+    </div>
+  </div>
+</section>
+
+<section class="screen" data-screen="expert">
+  <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 8px;">
+    <div>
+      <h1 id="expertProductName">Costco Tasty Juicy Hot Dogs Domestic</h1>
+      <p class="subtle" id="expertProductSub"></p>
+    </div>
+    <div class="seg">
+      <button class="active">Expert form</button>
+      <button onclick="setScreen('wizard')">Switch to guided</button>
+    </div>
+  </div>
+  <div class="legend">
+    <span class="item"><span class="req-dot costing"></span>Needed for costing</span>
+    <span class="item"><span class="req-dot planning"></span>Needed for planning</span>
+    <span class="item"><span class="req-dot qa"></span>Needed for QA / spec sheet</span>
+    <span class="item"><span class="req-dot purchasing"></span>Needed for purchasing</span>
+  </div>
+  <div class="form-grid" style="margin-top: 12px;">
+    <div class="card">
+      <h2>Basics</h2>
+      <div class="field-row">
+        <div class="lbl"><span class="editable-label" data-key="product_name">Product name</span><span class="reqs"><span class="req-dot costing"></span><span class="req-dot planning"></span><span class="req-dot qa"></span></span></div>
+        <div class="val"><input type="text" id="expProdName"></div>
+      </div>
+      <div class="field-row">
+        <div class="lbl"><span class="editable-label" data-key="how_sold">How is it sold?</span><span class="reqs"><span class="req-dot costing"></span><span class="req-dot dispatch"></span></span></div>
+        <div class="val"><select id="expHowSold"></select></div>
+      </div>
+      <div class="field-row">
+        <div class="lbl"><span class="editable-label" data-key="pack_hierarchy">Pack hierarchy</span><span class="reqs"><span class="req-dot dispatch"></span></span></div>
+        <div class="val"><input type="text" id="expPackHier"></div>
+      </div>
+
+      <h2 style="margin-top: 24px;">Process flow</h2>
+      <div class="field-row">
+        <div class="lbl"><span class="editable-label" data-key="stages">Stages</span><span class="reqs"><span class="req-dot planning"></span></span></div>
+        <div class="val"><div class="chain" style="gap: 6px;" id="expStages"></div></div>
+      </div>
+
+      <h2 style="margin-top: 24px;" id="expRecipeHeading">Recipe</h2>
+      <p class="subtle" style="font-size: 12px; margin-bottom: 8px;">
+        Type quantities in whatever units you actually weigh. Percentages auto-compute on save.
+      </p>
+      <table class="test-table">
+        <thead>
+          <tr>
+            <th><span class="editable-label" data-key="ingredient">Ingredient</span></th>
+            <th class="num">Quantity</th>
+            <th class="num">% of recipe</th>
+          </tr>
+        </thead>
+        <tbody id="expRecipeBody"></tbody>
+      </table>
+
+      <h2 style="margin-top: 24px;">QA / spec <span class="badge amber">Some fields missing</span></h2>
+      <div class="field-row">
+        <div class="lbl"><span class="editable-label" data-key="allergens">Allergens declared</span><span class="reqs"><span class="req-dot qa"></span></span></div>
+        <div class="val"><input type="text" id="expAllergens" value="—"></div>
+      </div>
+      <div class="field-row">
+        <div class="lbl"><span class="editable-label" data-key="rte">Ready to use?</span><span class="reqs"><span class="req-dot qa"></span></span></div>
+        <div class="val"><select><option>Yes</option><option>No</option></select></div>
+      </div>
+      <div class="field-row">
+        <div class="lbl"><span class="editable-label" data-key="nutrition">Nutrition / claims</span><span class="reqs"><span class="req-dot qa"></span></span></div>
+        <div class="val empty"><input type="text" placeholder="(not entered yet — needed for spec sheet)"></div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn" onclick="setScreen('wizard')">← Back to guided</button>
+        <button class="btn btn-primary" onclick="setScreen('test')">Run sanity check →</button>
+      </div>
+    </div>
+
+    <div class="right">
+      <div class="card">
+        <h2 style="margin-bottom: 12px;">Readiness</h2>
+        <p class="subtle" style="font-size: 12px; margin-bottom: 12px;">
+          Click any light to see what's missing.
+        </p>
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <div class="traffic-pill ready"><span class="dot"></span>Costing — ready</div>
+          <div class="traffic-pill ready"><span class="dot"></span>Planning — ready</div>
+          <div class="traffic-pill partial"><span class="dot"></span>QA / spec sheet — 1 missing</div>
+          <div class="traffic-pill ready"><span class="dot"></span>Purchasing — ready</div>
+          <div class="traffic-pill ready"><span class="dot"></span>Dispatch — ready</div>
+        </div>
+        <hr>
+        <h4 style="margin-bottom: 8px;">QA missing</h4>
+        <ul style="font-size: 12px; color: var(--ink-soft); padding-left: 18px; margin: 0;">
+          <li>Nutrition / claims</li>
+        </ul>
+      </div>
+
+      <div class="card" id="adminVocabHint" style="display: none;">
+        <h4 style="margin-bottom: 6px;">Admin tip</h4>
+        <p class="subtle" style="font-size: 12px;">
+          Hover over any field label and click to rename it for your tenant.
+          Changes save immediately and apply to every user.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="screen" data-screen="canvas">
+  <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 16px;">
+    <div>
+      <h1 id="canvasProdName"></h1>
+      <p class="subtle" id="canvasProdSub"></p>
+    </div>
+    <div style="display: flex; gap: 8px;">
+      <button class="btn">Edit</button>
+      <button class="btn btn-primary" onclick="setScreen('test')">▷ Test this product</button>
+    </div>
+  </div>
+  <div class="traffic" style="margin-bottom: 20px;">
+    <span class="traffic-pill ready"><span class="dot"></span>Costing</span>
+    <span class="traffic-pill ready"><span class="dot"></span>Planning</span>
+    <span class="traffic-pill partial"><span class="dot"></span>QA · 1 missing</span>
+    <span class="traffic-pill ready"><span class="dot"></span>Purchasing</span>
+    <span class="traffic-pill ready"><span class="dot"></span>Dispatch</span>
+  </div>
+  <div class="canvas-wrap">
+    <h3 style="margin-bottom: 4px;">Production flow</h3>
+    <p class="subtle" style="font-size: 12px; margin-bottom: 4px;">Click any stage to view or edit it.</p>
+    <div class="canvas-cascade" id="canvasCascade"></div>
+  </div>
+  <div class="row" style="margin-top: 16px;">
+    <div class="card" style="flex: 1;">
+      <h3>Cost breakdown</h3>
+      <p class="subtle" style="font-size: 12px;">Per piece sold</p>
+      <table class="test-table" id="canvasCostTable" style="margin-top: 8px;"></table>
+    </div>
+    <div class="card" style="flex: 1;">
+      <h3>Process snapshot</h3>
+      <table class="test-table" id="canvasProcessTable" style="margin-top: 8px;"></table>
+    </div>
+  </div>
+</section>
+
+<section class="screen" data-screen="test">
+  <div class="test-banner">
+    <h2>Let's check this works ✓</h2>
+    <p class="subtle">Pretend you just got an order for this product —
+      try entering it the way a real customer would (a quantity of bottles, kg, cartons or pallets).
+      Tracey runs it all the way through your process and shows what would happen.
+      <strong>If the same answer comes out from any UOM, the cascade is solid.</strong></p>
+
+    <div class="test-controls">
+      <input type="number" id="testQty" oninput="recalcSanityCheck()">
+      <div class="uom-tabs" id="uomTabs"></div>
+      <span class="of-line">of <strong id="testProdLabel"></strong> ordered</span>
+    </div>
+
+    <div class="equivalents" id="equivalents"></div>
+  </div>
+
+  <div class="summary-grid">
+    <div class="summary-card">
+      <h4>Total revenue</h4>
+      <div class="big" id="sumRevenue"></div>
+      <div class="sub" id="sumRevenueSub"></div>
+    </div>
+    <div class="summary-card">
+      <h4>Total cost</h4>
+      <div class="big" id="sumCost"></div>
+      <div class="sub">all ingredients + packaging</div>
+    </div>
+    <div class="summary-card">
+      <h4>Margin</h4>
+      <div class="big" style="color: var(--green)" id="sumMargin"></div>
+      <div class="sub" id="sumMarginDollar"></div>
+    </div>
+    <div class="summary-card">
+      <h4>Earliest start</h4>
+      <div class="big" id="sumEarliest">2 days before</div>
+      <div class="sub">based on lead times &amp; process</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>What gets made at each stage</h3>
+    <p class="subtle" style="font-size: 12px;">Cascade from the order, all the way back to ingredients.</p>
+    <table class="test-table" style="margin-top: 12px;">
+      <thead>
+        <tr><th>Stage</th><th>Department</th><th class="num">Quantity</th><th>Notes</th></tr>
+      </thead>
+      <tbody id="cascadeRows"></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>What you'd need to buy <span class="subtle" style="font-weight: normal; font-size: 13px;">(if you had zero stock)</span></h3>
+    <table class="test-table" style="margin-top: 12px;">
+      <thead>
+        <tr><th>Ingredient / supply</th><th class="num">Qty</th><th>Supplier</th><th>Lead time</th><th class="num">Cost</th></tr>
+      </thead>
+      <tbody id="buyRows"></tbody>
+    </table>
+  </div>
+
+  <div class="verify-bar">
+    <div class="text">
+      <strong>Do these numbers look right?</strong>
+      <span>Try a few different UOMs above — units, kg, inners, outers, pallets — and check the answers stay consistent. If anything's off, click "Something's off" and we'll jump to the offending field.</span>
+    </div>
+    <button class="btn btn-no">Something's off</button>
+    <button class="btn btn-yes">✓ Looks right — save product</button>
+  </div>
+</section>
+
+<section class="screen" data-screen="vocab">
+  <h1>Vocabulary settings</h1>
+  <p class="subtle">Rename any system label so it matches how your team actually talks.
+    Engine and reports keep working — they reference the canonical key behind the scenes.</p>
+
+  <div class="info-box">
+    <strong>You can also edit labels inline anywhere in the app.</strong>
+    Switch to <em>Admin view</em> in the top-right, then hover over any field label and click to rename it.
+    No need to come back to this page.
+  </div>
+
+  <div class="card">
+    <h3 style="margin-bottom: 12px;">Core concepts</h3>
+    <table class="vocab-table" id="vocabTable"></table>
+  </div>
+
+  <div class="info-box">
+    <strong>Industry-neutral by design.</strong>
+    A bakery might call <em>step</em> "Stage". A coffee roaster might call it "Process step".
+    A cosmetics manufacturer might call <em>ingredient</em> "Raw material" or "Phase component".
+    The engine doesn't care — it just sees the canonical keys.
+  </div>
+</section>
+
+</main>
+
+<script>
+  const industries = {
+    butcher: {
+      tenant: "German Butchery",
+      labels: { step: "Stage", ingredient: "Ingredient", product: "Product", supply: "Packaging", department: "Department", process_loss: "Process loss", giveaway: "Average overpack", tare: "Packaging weight (tare)" },
+      product: {
+        name: "Costco Tasty Juicy Hot Dogs Domestic",
+        code: "2032.050.20.7",
+        gPerPiece: 50,
+        salePerUnit: 0.45,
+        unitName: "unit",
+        innerName: "inner",
+        outerName: "carton",
+        palletName: "pallet",
+        packHierarchy: { unitsPerInner: 20, innersPerOuter: 7, outersPerPallet: 72 },
+        recipeHeading: "Recipe (Mix stage)",
+        howSold: "Per piece, fixed weight (50 g)",
+        packLine: "20 per inner · 7 inners per outer · 72 outers per pallet",
+        canvasSub: "<span class='mono'>2032.050.20.7</span> · 50 g/piece · sells in 20-pack inners, 7 per carton",
+        defaultQty: 33600,
+        referenceKg: 1680,
+        stages: [
+          { name: "Mix",            dept: "Production" },
+          { name: "Fill",           dept: "Filling"    },
+          { name: "Pack",           dept: "Packing"    },
+          { name: "Label & pallet", dept: "Labelling"  },
+        ],
+        recipe: [
+          { name: "Pork 75CL", qty: "30 kg", pct: 29.29 },
+          { name: "Cutting fat", qty: "20 kg", pct: 19.53 },
+          { name: "Iced water", qty: "20 kg", pct: 19.53 },
+          { name: "Chicken MDM", qty: "20 kg", pct: 19.53 },
+          { name: "Salt", qty: "1.4 kg", pct: 1.37 },
+          { name: "… 11 more ingredients", qty: "—", pct: null },
+        ],
+        canvasCost: [
+          ["Mix ingredients", "$0.142"],
+          ["Casing", "$0.018"],
+          ["Pack film", "$0.004"],
+          ["Box + label", "$0.061"],
+          ["Pallet share", "$0.003"],
+          ["Total cost / piece", "$0.228", "total"],
+          ["Sale price / piece", "$0.45", "subtle"],
+          ["Margin", "49.3%", "badge"],
+        ],
+        canvasProcess: [
+          ["Departments", "Production · Filling · Packing · Labelling"],
+          ["Machines", "Mixer · Rex Filler 1 · R126 · Labelstation I"],
+          ["Total stages", "4"],
+          ["Process loss (cumulative)", "12.28%"],
+          ["Active recipe version", "v1"],
+          ["Last edited", "2026-05-07 by Tino"],
+        ],
+        buyList: [
+          { name: "Pork 75CL", qty: "492.5 kg", supplier: "Premium Pork Co.", lead: "2 days", cost: 1822.25 },
+          { name: "Cutting fat", qty: "328.3 kg", supplier: "Premium Pork Co.", lead: "2 days", cost: 853.58 },
+          { name: "Chicken MDM", qty: "328.3 kg", supplier: "Poultry Direct", lead: "1 day", cost: 656.60 },
+          { name: "Salt", qty: "23.0 kg", supplier: "Bulk Foods Aus", lead: "1 day", cost: 23.00 },
+          { name: "Hot dog casings (Nojax)", qty: "0.56 carton", supplier: "Casing Supply", lead: "5 days", cost: 156.80 },
+          { name: "Tasty Juicy box", qty: "240 ea", supplier: "Box Co.", lead: "3 days", cost: 432.00 },
+          { name: "Plain label 100×100DT", qty: "1680 ea", supplier: "Label Co.", lead: "2 days", cost: 168.00 },
+          { name: "Pallet corners 1000mm", qty: "60 ea", supplier: "Pallet Co.", lead: "1 day", cost: 90.00 },
+        ],
+      },
+      hint: "Tip: a hot dog usually has a mix step, a fill step, a pack step, and a label step.",
+    },
+
+    bakery: {
+      tenant: "Artisan Bakery",
+      labels: { step: "Stage", ingredient: "Ingredient", product: "Product", supply: "Packaging", department: "Department", process_loss: "Bake loss", giveaway: "Weight variance", tare: "Bag weight" },
+      product: {
+        name: "Sourdough Country Loaf 750g",
+        code: "BREAD.SD750",
+        gPerPiece: 750,
+        salePerUnit: 8.50,
+        unitName: "loaf",
+        innerName: "tray",
+        outerName: "case",
+        palletName: "pallet",
+        packHierarchy: { unitsPerInner: 8, innersPerOuter: 4, outersPerPallet: 30 },
+        recipeHeading: "Recipe (Mix dough stage)",
+        howSold: "Per loaf, fixed weight (750 g)",
+        packLine: "8 per tray · 4 trays per case · 30 cases per pallet",
+        canvasSub: "<span class='mono'>BREAD.SD750</span> · 750 g/loaf · sells in trays of 8",
+        defaultQty: 96,
+        referenceKg: 72,
+        stages: [
+          { name: "Levain build", dept: "Bakery"   },
+          { name: "Mix dough",    dept: "Bakery"   },
+          { name: "Bake & cool",  dept: "Bakery"   },
+          { name: "Pack & label", dept: "Despatch" },
+        ],
+        recipe: [
+          { name: "Strong baker's flour", qty: "18 kg",  pct: 56.25 },
+          { name: "Water",                qty: "12.6 kg", pct: 39.38 },
+          { name: "Levain (sub-recipe)",  qty: "1.0 kg",  pct: 3.13  },
+          { name: "Sea salt",             qty: "0.4 kg",  pct: 1.25  },
+        ],
+        canvasCost: [
+          ["Flour & water", "$1.84"],
+          ["Salt & cultures", "$0.08"],
+          ["Bake energy", "$0.62"],
+          ["Bag", "$0.18"],
+          ["Label", "$0.10"],
+          ["Total cost / loaf", "$2.82", "total"],
+          ["Sale price / loaf", "$8.50", "subtle"],
+          ["Margin", "66.8%", "badge"],
+        ],
+        canvasProcess: [
+          ["Departments", "Bakery · Despatch"],
+          ["Equipment", "Spiral mixer · Deck oven · Cooling racks"],
+          ["Total stages", "4"],
+          ["Bake loss", "10.5%"],
+          ["Active recipe version", "v3"],
+          ["Last edited", "2026-04-22 by Sam"],
+        ],
+        buyList: [
+          { name: "Strong baker's flour", qty: "168 kg", supplier: "Mill Direct", lead: "2 days", cost: 252.00 },
+          { name: "Water", qty: "117.6 kg", supplier: "(town water)", lead: "—", cost: 0.00 },
+          { name: "Sea salt", qty: "3.7 kg", supplier: "Bulk Foods Aus", lead: "1 day", cost: 18.50 },
+          { name: "Paper bag (kraft)", qty: "96 ea", supplier: "Pack & Co.", lead: "3 days", cost: 28.00 },
+          { name: "Front label (food-safe)", qty: "96 ea", supplier: "Label Co.", lead: "2 days", cost: 35.00 },
+        ],
+      },
+      hint: "Tip: a sourdough usually has a starter step, a dough step, a bake step, and a pack step.",
+    },
+
+    cosmetics: {
+      tenant: "Verbena Lab",
+      labels: { step: "Phase", ingredient: "Raw material", product: "SKU", supply: "Component", department: "Cell", process_loss: "Process loss", giveaway: "Fill variance", tare: "Container weight" },
+      product: {
+        name: "Botanical Hand Lotion 250ml",
+        code: "LTN.BTN.250",
+        gPerPiece: 250,
+        salePerUnit: 12.50,
+        unitName: "bottle",
+        innerName: "shrink-pack",
+        outerName: "case",
+        palletName: "pallet",
+        packHierarchy: { unitsPerInner: 6, innersPerOuter: 4, outersPerPallet: 80 },
+        recipeHeading: "Formula (Mix bulk phase)",
+        howSold: "Per bottle, fixed fill (250 ml)",
+        packLine: "6 per shrink-pack · 4 packs per case · 80 cases per pallet",
+        canvasSub: "<span class='mono'>LTN.BTN.250</span> · 250 ml fill · sells in shrink-packs of 6",
+        defaultQty: 600,
+        referenceKg: 150,
+        stages: [
+          { name: "Phase A weigh-up", dept: "Compounding"   },
+          { name: "Mix bulk",          dept: "Compounding"   },
+          { name: "Fill bottles",      dept: "Filling line"  },
+          { name: "Label & case",      dept: "Despatch"      },
+        ],
+        recipe: [
+          { name: "Distilled water", qty: "60.0 kg", pct: 60.00 },
+          { name: "Sweet almond oil", qty: "12.0 kg", pct: 12.00 },
+          { name: "Glycerin", qty: "8.0 kg", pct: 8.00 },
+          { name: "Cetearyl alcohol", qty: "5.0 kg", pct: 5.00 },
+          { name: "Olivem 1000 (emulsifier)", qty: "5.0 kg", pct: 5.00 },
+          { name: "Shea butter", qty: "4.0 kg", pct: 4.00 },
+          { name: "Phenoxyethanol (preservative)", qty: "1.0 kg", pct: 1.00 },
+          { name: "Botanical fragrance blend", qty: "0.5 kg", pct: 0.50 },
+          { name: "Vitamin E", qty: "0.3 kg", pct: 0.30 },
+          { name: "… 4 more raw materials", qty: "—", pct: null },
+        ],
+        canvasCost: [
+          ["Water phase", "$0.18"],
+          ["Oil phase", "$1.92"],
+          ["Active &amp; preservative", "$0.62"],
+          ["Bottle 250ml", "$0.74"],
+          ["Pump &amp; cap", "$0.41"],
+          ["Label &amp; shrink", "$0.18"],
+          ["Total cost / bottle", "$4.05", "total"],
+          ["Sale price / bottle", "$12.50", "subtle"],
+          ["Margin", "67.6%", "badge"],
+        ],
+        canvasProcess: [
+          ["Cells", "Compounding · Filling line · Despatch"],
+          ["Equipment", "Vacuum mixer · Piston filler · Shrink tunnel"],
+          ["Total phases", "4"],
+          ["Process loss", "1.2%"],
+          ["Batch sheet version", "v2.3"],
+          ["Last edited", "2026-03-18 by Naomi"],
+        ],
+        buyList: [
+          { name: "Distilled water", qty: "82.5 kg", supplier: "(in-house)", lead: "—", cost: 4.13 },
+          { name: "Sweet almond oil", qty: "16.5 kg", supplier: "Botanica Oils", lead: "5 days", cost: 247.50 },
+          { name: "Glycerin (USP)", qty: "11.0 kg", supplier: "Pharma Grade Co.", lead: "3 days", cost: 88.00 },
+          { name: "Cetearyl alcohol", qty: "6.9 kg", supplier: "Surfactant Supply", lead: "5 days", cost: 89.70 },
+          { name: "Olivem 1000", qty: "6.9 kg", supplier: "Surfactant Supply", lead: "5 days", cost: 138.00 },
+          { name: "Shea butter (refined)", qty: "5.5 kg", supplier: "Botanica Oils", lead: "5 days", cost: 165.00 },
+          { name: "Phenoxyethanol", qty: "1.4 kg", supplier: "Pharma Grade Co.", lead: "3 days", cost: 56.00 },
+          { name: "Bottle 250ml HDPE", qty: "600 ea", supplier: "PackTech", lead: "10 days", cost: 444.00 },
+          { name: "Pump dispenser cap", qty: "600 ea", supplier: "PackTech", lead: "10 days", cost: 246.00 },
+          { name: "Front label (waterproof)", qty: "600 ea", supplier: "Label Co.", lead: "4 days", cost: 108.00 },
+        ],
+      },
+      hint: "Tip: cosmetics usually have a phase weigh-up, a bulk mix, a fill, and a label step.",
+    },
+
+    coffee: {
+      tenant: "Hemisphere Coffee Roasters",
+      labels: { step: "Process step", ingredient: "Bean / additive", product: "Roast SKU", supply: "Packaging", department: "Roastery", process_loss: "Roast loss", giveaway: "Fill variance", tare: "Bag weight" },
+      product: {
+        name: "Single-origin Ethiopia Yirgacheffe 250g",
+        code: "ROAST.ETH.250",
+        gPerPiece: 250,
+        salePerUnit: 14.00,
+        unitName: "bag",
+        innerName: "carton",
+        outerName: "case",
+        palletName: "pallet",
+        packHierarchy: { unitsPerInner: 12, innersPerOuter: 4, outersPerPallet: 60 },
+        recipeHeading: "Roast batch",
+        howSold: "Per bag, fixed weight (250 g)",
+        packLine: "12 per carton · 4 cartons per case · 60 cases per pallet",
+        canvasSub: "<span class='mono'>ROAST.ETH.250</span> · 250 g/bag · sells in cartons of 12",
+        defaultQty: 400,
+        referenceKg: 100,
+        stages: [
+          { name: "Green sort",  dept: "Roastery" },
+          { name: "Roast",       dept: "Roastery" },
+          { name: "Rest",        dept: "Roastery" },
+          { name: "Bag & label", dept: "Despatch" },
+        ],
+        recipe: [
+          { name: "Green Ethiopia Yirgacheffe (washed)", qty: "100 kg", pct: 100.00 },
+          { name: "(no other inputs — single-origin)", qty: "—", pct: null },
+        ],
+        canvasCost: [
+          ["Green coffee (cost-of-goods)", "$2.10"],
+          ["Roast energy & labour", "$0.45"],
+          ["Foil pouch (one-way valve)", "$0.32"],
+          ["Front label", "$0.11"],
+          ["Carton share", "$0.08"],
+          ["Total cost / bag", "$3.06", "total"],
+          ["Sale price / bag", "$14.00", "subtle"],
+          ["Margin", "78.1%", "badge"],
+        ],
+        canvasProcess: [
+          ["Cells", "Roastery · Despatch"],
+          ["Equipment", "Probat 25kg drum · Cooling tray · Auto-bagger"],
+          ["Total process steps", "4"],
+          ["Roast loss", "16.8% (water + chaff)"],
+          ["Roast profile", "Yirg-Light-v4"],
+          ["Last edited", "2026-04-30 by Mei"],
+        ],
+        buyList: [
+          { name: "Green Ethiopia Yirgacheffe", qty: "120.2 kg", supplier: "Origin Direct Importers", lead: "10 days", cost: 1442.40 },
+          { name: "Foil pouch with valve (250g)", qty: "400 ea", supplier: "PackTech", lead: "5 days", cost: 128.00 },
+          { name: "Front label", qty: "400 ea", supplier: "Label Co.", lead: "2 days", cost: 44.00 },
+          { name: "Carton (holds 12)", qty: "34 ea", supplier: "Box Co.", lead: "3 days", cost: 27.20 },
+        ],
+      },
+      hint: "Tip: roasting causes ~17% weight loss (water + chaff). The cascade handles that automatically.",
+    },
+
+    cheese: {
+      tenant: "Old Granary Creamery",
+      labels: { step: "Stage", ingredient: "Ingredient", product: "Wheel SKU", supply: "Packaging", department: "Make room", process_loss: "Whey loss", giveaway: "Cut variance", tare: "Wrap weight" },
+      product: {
+        name: "Aged Cheddar Wedge 250g",
+        code: "CHEESE.AGD.250",
+        gPerPiece: 250,
+        salePerUnit: 13.00,
+        unitName: "wedge",
+        innerName: "tray",
+        outerName: "carton",
+        palletName: "pallet",
+        packHierarchy: { unitsPerInner: 12, innersPerOuter: 4, outersPerPallet: 60 },
+        recipeHeading: "Make recipe (Make-curd stage)",
+        howSold: "Per wedge, fixed weight (250 g)",
+        packLine: "12 per tray · 4 trays per carton · 60 cartons per pallet",
+        canvasSub: "<span class='mono'>CHEESE.AGD.250</span> · 250 g/wedge · 12-month aged · sells in trays of 12",
+        defaultQty: 400,
+        referenceKg: 100,
+        stages: [
+          { name: "Pasteurise milk", dept: "Make room" },
+          { name: "Make curd",       dept: "Make room" },
+          { name: "Press & age",     dept: "Aging cellar" },
+          { name: "Cut & wrap",      dept: "Despatch" },
+        ],
+        recipe: [
+          { name: "Whole cow milk (3.8% fat)", qty: "1000 kg", pct: 99.59 },
+          { name: "Calcium chloride", qty: "1.0 kg", pct: 0.10 },
+          { name: "Mesophilic starter culture", qty: "0.5 kg", pct: 0.05 },
+          { name: "Vegetable rennet", qty: "0.1 kg", pct: 0.01 },
+          { name: "Salt (cure)", qty: "2.5 kg", pct: 0.25 },
+        ],
+        canvasCost: [
+          ["Raw milk (most of cost)", "$4.50"],
+          ["Cultures &amp; rennet", "$0.20"],
+          ["Salt", "$0.05"],
+          ["Aging cellar share (12 months)", "$1.50"],
+          ["Vacuum wrap", "$0.20"],
+          ["Front label", "$0.10"],
+          ["Carton share", "$0.15"],
+          ["Total cost / wedge", "$6.70", "total"],
+          ["Sale price / wedge", "$13.00", "subtle"],
+          ["Margin", "48.5%", "badge"],
+        ],
+        canvasProcess: [
+          ["Cells", "Make room · Aging cellar · Despatch"],
+          ["Equipment", "HTST pasteuriser · Curd vat · Cheese press · Wax bath"],
+          ["Total stages", "4"],
+          ["Whey loss", "~90% (1 kg cheese from 10 kg milk)"],
+          ["Aging time", "12 months"],
+          ["Active recipe version", "v2"],
+          ["Last edited", "2026-02-14 by Liam"],
+        ],
+        buyList: [
+          { name: "Whole cow milk", qty: "1004 kg", supplier: "Highland Dairy Co-op", lead: "1 day", cost: 1205.00 },
+          { name: "Calcium chloride (food grade)", qty: "1.0 kg", supplier: "Cheesemaker Supply", lead: "5 days", cost: 12.00 },
+          { name: "Mesophilic starter culture", qty: "0.5 kg", supplier: "Cheesemaker Supply", lead: "5 days", cost: 50.00 },
+          { name: "Vegetable rennet", qty: "0.1 kg", supplier: "Cheesemaker Supply", lead: "5 days", cost: 25.00 },
+          { name: "Salt (cure grade)", qty: "2.5 kg", supplier: "Bulk Foods Aus", lead: "1 day", cost: 5.00 },
+          { name: "Vacuum wrap (food-safe)", qty: "400 ea", supplier: "PackTech", lead: "5 days", cost: 80.00 },
+          { name: "Front label (oil-resistant)", qty: "400 ea", supplier: "Label Co.", lead: "2 days", cost: 40.00 },
+          { name: "Carton (holds 48)", qty: "9 ea", supplier: "Box Co.", lead: "3 days", cost: 27.20 },
+        ],
+      },
+      hint: "Tip: cheese loses ~90% of milk weight as whey. The cascade tracks both — the whey is real cost-of-goods, even if you sell it separately.",
+    },
+  };
+
+  let currentIndustry = "butcher";
+  let currentTenantLabels = { ...industries.butcher.labels };
+  let currentUOM = "units";
+
+  function setIndustry(ind) {
+    currentIndustry = ind;
+    currentTenantLabels = { ...industries[ind].labels };
+    currentUOM = "units";
+    document.querySelectorAll("[data-industry]").forEach(b =>
+      b.classList.toggle("active", b.dataset.industry === ind)
+    );
+    document.getElementById("tenantPill").innerHTML =
+      '<span class="dot"></span>' + industries[ind].tenant;
+
+    const p = industries[ind].product;
+    document.getElementById("expertProductName").textContent = p.name;
+    document.getElementById("expertProductSub").textContent =
+      "Multi-step recipe · " + p.stages.length + " stages · " + p.gPerPiece + " g/piece";
+    document.getElementById("canvasProdName").textContent = p.name;
+    document.getElementById("canvasProdSub").innerHTML = p.canvasSub;
+    document.getElementById("expProdName").value = p.name;
+    document.getElementById("expHowSold").innerHTML =
+      "<option>" + p.howSold + "</option><option>By weight only</option><option>Per pack of multiple</option>";
+    document.getElementById("expPackHier").value = p.packLine;
+    document.getElementById("expRecipeHeading").textContent = p.recipeHeading;
+    document.getElementById("testProdLabel").textContent = p.name;
+    document.getElementById("testQty").value = p.defaultQty;
+
+    document.getElementById("wizHint").textContent = industries[ind].hint;
+    renderWizardChain();
+    renderExpertStages();
+    renderExpertRecipe();
+    renderCanvas();
+    renderCanvasTables();
+    renderUomTabs();
+    renderVocabTable();
+    recalcSanityCheck();
+    syncAllLabels();
+  }
+
+  function setMode(mode) {
+    document.body.classList.toggle("admin-mode", mode === "admin");
+    document.querySelectorAll("[data-mode]").forEach(b =>
+      b.classList.toggle("active", b.dataset.mode === mode)
+    );
+    document.getElementById("adminVocabHint").style.display =
+      mode === "admin" ? "block" : "none";
+    document.getElementById("tenantPill").classList.toggle("admin", mode === "admin");
+  }
+
+  function setScreen(s) {
+    document.querySelectorAll("[data-screen]").forEach(b => {
+      if (b.tagName === "BUTTON") b.classList.toggle("active", b.dataset.screen === s);
+      if (b.tagName === "SECTION") b.classList.toggle("active", b.dataset.screen === s);
+    });
+    if (s === "test") recalcSanityCheck();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function setUOM(uom) {
+    const p = industries[currentIndustry].product;
+    const currentKg = uomToKg(parseFloat(document.getElementById("testQty").value) || 0, currentUOM, p);
+    currentUOM = uom;
+    const newVal = kgToUOM(currentKg, uom, p);
+    const decimals = (uom === "units" || uom === "inner" || uom === "outer") ? 0 : 2;
+    document.getElementById("testQty").value = +newVal.toFixed(decimals);
+    document.querySelectorAll("#uomTabs button").forEach(b =>
+      b.classList.toggle("active", b.dataset.uom === uom)
+    );
+    recalcSanityCheck();
+  }
+
+  function uomToKg(value, uom, p) {
+    const ph = p.packHierarchy;
+    const gPer = p.gPerPiece;
+    switch (uom) {
+      case "units":  return value * gPer / 1000;
+      case "kg":     return value;
+      case "inner":  return value * ph.unitsPerInner * gPer / 1000;
+      case "outer":  return value * ph.unitsPerInner * ph.innersPerOuter * gPer / 1000;
+      case "pallet": return value * ph.unitsPerInner * ph.innersPerOuter * ph.outersPerPallet * gPer / 1000;
+    }
+    return 0;
+  }
+
+  function kgToUOM(kg, uom, p) {
+    const ph = p.packHierarchy;
+    const gPer = p.gPerPiece;
+    switch (uom) {
+      case "units":  return kg * 1000 / gPer;
+      case "kg":     return kg;
+      case "inner":  return kg * 1000 / gPer / ph.unitsPerInner;
+      case "outer":  return kg * 1000 / gPer / ph.unitsPerInner / ph.innersPerOuter;
+      case "pallet": return kg * 1000 / gPer / ph.unitsPerInner / ph.innersPerOuter / ph.outersPerPallet;
+    }
+    return 0;
+  }
+
+  function fmt(n, decimals) {
+    if (decimals == null) decimals = 2;
+    return n.toLocaleString(undefined, {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    });
+  }
+
+  function renderUomTabs() {
+    const p = industries[currentIndustry].product;
+    const tabs = [
+      { key: "units",  label: p.unitName + "s" },
+      { key: "kg",     label: "kg" },
+      { key: "inner",  label: p.innerName + "s" },
+      { key: "outer",  label: p.outerName + "s" },
+      { key: "pallet", label: p.palletName + "s" },
+    ];
+    document.getElementById("uomTabs").innerHTML = tabs.map(t =>
+      '<button data-uom="' + t.key + '" onclick="setUOM(\'' + t.key + '\')" class="' +
+      (t.key === currentUOM ? 'active' : '') + '">' + t.label + '</button>'
+    ).join("");
+  }
+
+  function renderWizardChain() {
+    const stages = industries[currentIndustry].product.stages;
+    const el = document.getElementById("wizChain");
+    el.innerHTML = "";
+    stages.forEach((s, i) => {
+      const node = document.createElement("div");
+      node.className = "chain-node" + (i === stages.length - 1 ? " product" : "");
+      node.innerHTML =
+        '<div class="step-num-tag">' + (i === stages.length - 1 ? "✓" : (i+1)) + '</div>' +
+        '<div class="step-name">' + s.name + '</div>' +
+        '<div class="step-meta">' + s.dept + '</div>';
+      el.appendChild(node);
+      if (i < stages.length - 1) {
+        const arrow = document.createElement("span");
+        arrow.className = "chain-arrow";
+        arrow.textContent = "→";
+        el.appendChild(arrow);
+      }
+    });
+    const sep = document.createElement("span");
+    sep.className = "chain-arrow";
+    sep.textContent = "→";
+    el.appendChild(sep);
+    const add = document.createElement("button");
+    add.className = "chain-add";
+    add.textContent = "+ Add stage";
+    el.appendChild(add);
+  }
+
+  function renderExpertStages() {
+    const stages = industries[currentIndustry].product.stages;
+    const el = document.getElementById("expStages");
+    el.innerHTML = "";
+    stages.forEach((s, i) => {
+      const node = document.createElement("div");
+      node.className = "chain-node" + (i === stages.length - 1 ? " product" : "");
+      node.style.minWidth = "80px"; node.style.padding = "8px 10px";
+      node.innerHTML =
+        '<div class="step-num-tag">' + (i === stages.length - 1 ? "✓" : (i+1)) + '</div>' +
+        '<div class="step-name" style="font-size: 12px;">' + s.name + '</div>';
+      el.appendChild(node);
+      if (i < stages.length - 1) {
+        const arrow = document.createElement("span");
+        arrow.className = "chain-arrow";
+        arrow.textContent = "→";
+        el.appendChild(arrow);
+      }
+    });
+  }
+
+  function renderExpertRecipe() {
+    const p = industries[currentIndustry].product;
+    document.getElementById("expRecipeBody").innerHTML = p.recipe.map(r => {
+      if (r.pct === null) {
+        return '<tr><td colspan="3" class="subtle" style="text-align: center; font-size: 12px;">' + r.name + '</td></tr>';
+      }
+      return '<tr><td>' + r.name + '</td><td class="num">' + r.qty + '</td><td class="num">' + r.pct.toFixed(2) + '%</td></tr>';
+    }).join("");
+  }
+
+  function renderCanvas() {
+    const p = industries[currentIndustry].product;
+    const el = document.getElementById("canvasCascade");
+    el.innerHTML = "";
+    p.stages.forEach((s, i) => {
+      const card = document.createElement("div");
+      card.className = "stage-card" + (i === p.stages.length - 1 ? " product" : "");
+      let listHtml = "";
+      if (i === 0) {
+        const recipeShow = p.recipe.filter(r => r.pct !== null).slice(0, 4);
+        listHtml = recipeShow.map(ing =>
+          '<li><span>' + ing.name + '</span><span class="qty">' + ing.pct.toFixed(2) + '%</span></li>'
+        ).join("") + '<li class="faded" style="font-size: 11px;">… recipe</li>';
+      } else if (i === p.stages.length - 1) {
+        const packs = p.buyList.filter(b => /\d+\s*(ea|carton)/.test(b.qty)).slice(0, 3);
+        listHtml = packs.length
+          ? packs.map(b => '<li><span>' + b.name.split('(')[0].trim() + '</span><span class="qty">1 ea</span></li>').join("")
+          : '<li class="faded" style="font-size: 11px;">No extra inputs</li>';
+      } else {
+        listHtml = '<li class="faded" style="font-size: 11px;">No extra inputs at this stage</li>';
+      }
+      card.innerHTML =
+        '<div class="stage-num">' + (i === p.stages.length - 1 ? "✓ Product" : ("Stage " + (i+1))) + '</div>' +
+        '<div class="stage-name">' + s.name + '</div>' +
+        '<div class="stage-dept">' + s.dept + '</div>' +
+        '<ul class="stage-list">' + listHtml + '</ul>';
+      el.appendChild(card);
+      if (i < p.stages.length - 1) {
+        const arrow = document.createElement("div");
+        arrow.className = "stage-arrow";
+        arrow.textContent = "→";
+        el.appendChild(arrow);
+      }
+    });
+  }
+
+  function renderCanvasTables() {
+    const p = industries[currentIndustry].product;
+    document.getElementById("canvasCostTable").innerHTML =
+      p.canvasCost.map(r => {
+        if (r[2] === "total")  return '<tr class="total"><td>' + r[0] + '</td><td class="num">' + r[1] + '</td></tr>';
+        if (r[2] === "subtle") return '<tr><td class="subtle">' + r[0] + '</td><td class="num">' + r[1] + '</td></tr>';
+        if (r[2] === "badge")  return '<tr><td>' + r[0] + '</td><td class="num"><span class="badge green">' + r[1] + '</span></td></tr>';
+        return '<tr><td>' + r[0] + '</td><td class="num">' + r[1] + '</td></tr>';
+      }).join("");
+    document.getElementById("canvasProcessTable").innerHTML =
+      p.canvasProcess.map(r => '<tr><td>' + r[0] + '</td><td class="num">' + r[1] + '</td></tr>').join("");
+  }
+
+  function recalcSanityCheck() {
+    const p = industries[currentIndustry].product;
+    const value = parseFloat(document.getElementById("testQty").value) || 0;
+    const totalKg = uomToKg(value, currentUOM, p);
+
+    const equivData = [
+      { label: p.unitName + "s",   val: kgToUOM(totalKg, "units", p),  d: 0 },
+      { label: "kg",                val: totalKg,                        d: 1 },
+      { label: p.innerName + "s",  val: kgToUOM(totalKg, "inner", p),   d: 1 },
+      { label: p.outerName + "s",  val: kgToUOM(totalKg, "outer", p),   d: 2 },
+      { label: p.palletName + "s", val: kgToUOM(totalKg, "pallet", p),  d: 3 },
+    ];
+    document.getElementById("equivalents").innerHTML = equivData.map(e =>
+      '<span class="eq-item"><span class="eq-label">' + e.label + '</span>' +
+      '<span class="eq-val">' + fmt(e.val, e.d) + '</span></span>'
+    ).join("");
+
+    const rows = document.getElementById("cascadeRows");
+    rows.innerHTML = "";
+    p.stages.forEach((s, i) => {
+      const note = i === 0 ? 'Recipe expands across ingredients'
+                  : i === p.stages.length - 1 ? 'Final product · ready to ship'
+                  : '1:1 weight cascade';
+      const tr = document.createElement("tr");
+      tr.innerHTML =
+        '<td>' + s.name + '</td>' +
+        '<td>' + s.dept + '</td>' +
+        '<td class="num mono">' + fmt(totalKg, 2) + ' kg</td>' +
+        '<td class="subtle" style="font-size: 12px;">' + note + '</td>';
+      rows.appendChild(tr);
+    });
+
+    const buy = document.getElementById("buyRows");
+    buy.innerHTML = "";
+    let buyTotal = 0;
+    const scale = p.referenceKg > 0 ? totalKg / p.referenceKg : 0;
+
+    p.buyList.forEach(b => {
+      const scaledCost = b.cost * scale;
+      buyTotal += scaledCost;
+      const scaledQty = b.qty.replace(/([\d.]+)/, m => {
+        const n = parseFloat(m);
+        const scaled = n * scale;
+        return fmt(scaled, scaled < 10 ? 1 : 0);
+      });
+      const tr = document.createElement("tr");
+      tr.innerHTML =
+        '<td>' + b.name + '</td>' +
+        '<td class="num mono">' + scaledQty + '</td>' +
+        '<td>' + b.supplier + '</td>' +
+        '<td>' + b.lead + '</td>' +
+        '<td class="num mono">$' + fmt(scaledCost, 2) + '</td>';
+      buy.appendChild(tr);
+    });
+    const totalRow = document.createElement("tr");
+    totalRow.className = "total";
+    totalRow.innerHTML =
+      '<td colspan="4">Total raw cost</td>' +
+      '<td class="num mono">$' + fmt(buyTotal, 2) + '</td>';
+    buy.appendChild(totalRow);
+
+    const totalUnits = kgToUOM(totalKg, "units", p);
+    const revenue = totalUnits * p.salePerUnit;
+    const cost = buyTotal;
+    const margin = revenue > 0 ? ((revenue - cost) / revenue * 100) : 0;
+    document.getElementById("sumRevenue").textContent = "$" + fmt(revenue, 0);
+    document.getElementById("sumRevenueSub").textContent =
+      "at $" + p.salePerUnit.toFixed(2) + " / " + p.unitName;
+    document.getElementById("sumCost").textContent = "$" + fmt(cost, 0);
+    document.getElementById("sumMargin").textContent = margin.toFixed(1) + "%";
+    document.getElementById("sumMarginDollar").textContent =
+      "$" + fmt(revenue - cost, 0) + " contribution";
+  }
+
+  function renderVocabTable() {
+    const labels = currentTenantLabels;
+    const rows = [
+      { key: "step",         label: labels.step,         where: "Production flow nodes, 'Add stage' button, cascade diagrams" },
+      { key: "ingredient",   label: labels.ingredient,   where: "Recipe rows, shopping list, raw material schedule" },
+      { key: "product",      label: labels.product,      where: "Item types, sales screens, demand plans" },
+      { key: "supply",       label: labels.supply,       where: "Non-food items: boxes, labels, pallet corners, films, components" },
+      { key: "department",   label: labels.department,   where: "Where a stage runs (e.g. Filling, Bakery, Compounding)" },
+      { key: "process_loss", label: labels.process_loss, where: "Field on each stage: cooking loss, drying, roast loss, etc." },
+      { key: "giveaway",     label: labels.giveaway,     where: "When fill weight exceeds target weight" },
+      { key: "tare",         label: labels.tare,         where: "Empty pack/container weight, deducted from gross" },
+    ];
+    document.getElementById("vocabTable").innerHTML =
+      '<thead><tr><th>Canonical key</th><th>Display label</th><th>Where it appears</th></tr></thead>' +
+      '<tbody>' +
+      rows.map(r =>
+        '<tr><td class="canonical">' + r.key + '</td>' +
+        '<td><input type="text" value="' + r.label + '" data-key="' + r.key + '" oninput="syncLabel(this)"></td>' +
+        '<td class="examples">' + r.where + '</td></tr>'
+      ).join("") +
+      '</tbody>';
+  }
+
+  function syncLabel(input) {
+    currentTenantLabels[input.dataset.key] = input.value;
+    syncAllLabels();
+  }
+
+  function syncAllLabels() {
+    document.querySelectorAll(".editable-label").forEach(el => {
+      const key = el.dataset.key;
+      if (!key) return;
+      if (key === "ingredient") el.textContent = currentTenantLabels.ingredient || "Ingredient";
+      else if (key === "stages") el.textContent = (currentTenantLabels.step || "Stage") + "s";
+      else if (key === "step") el.textContent = currentTenantLabels.step || "Stage";
+    });
+  }
+
+  document.body.addEventListener("click", e => {
+    if (!document.body.classList.contains("admin-mode")) return;
+    const lbl = e.target.closest(".editable-label");
+    if (!lbl) return;
+    const key = lbl.dataset.key;
+    const current = lbl.textContent.trim();
+    const newVal = prompt('Rename "' + current + '" for everyone in your tenant. (Engine continues to use canonical key "' + key + '".)', current);
+    if (newVal && newVal.trim() && newVal !== current) {
+      lbl.textContent = newVal;
+      const vocabInput = document.querySelector('.vocab-table input[data-key="' + key + '"]');
+      if (vocabInput) vocabInput.value = newVal;
+      currentTenantLabels[key] = newVal;
+    }
+  });
+
+  setIndustry("butcher");
+</script>
+
+</body>
+</html>

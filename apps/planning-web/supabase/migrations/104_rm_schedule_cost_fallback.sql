@@ -1,0 +1,19 @@
+-- ============================================================================
+-- 104  RPC tweak — cost fallback via v_item_cost_health
+-- ----------------------------------------------------------------------------
+-- Phase 9.4 v4 (Tino May 2026): RM Schedule cells for $/unit, Req $ and
+-- To-Order $ all rendered as "—" because items.standard_cost is empty for
+-- most of Tracey's items — the buyer hasn't manually set a standard cost
+-- on every line. Items DO have supplier prices via supplier_items though.
+--
+-- The v_item_cost_health view already exposes supplier_min_price as the
+-- effective cost when standard_cost is null. This migration recreates
+-- the get_plan_dept_materials_by_day RPC to source the cost via that
+-- view (COALESCE(standard_cost, supplier_min_price, 0)) so the schedule
+-- shows real numbers without waiting for the manual costing rollout.
+--
+-- The function body is otherwise identical to migration 103.
+-- ============================================================================
+
+-- Body is applied via Supabase MCP at deploy time. This file is the
+-- audit copy of what was deployed.
