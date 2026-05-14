@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { storage } from "@/lib/storage";
 import Anthropic from "@anthropic-ai/sdk";
 
 export async function POST(req: NextRequest) {
@@ -7,19 +7,13 @@ export async function POST(req: NextRequest) {
     const { storagePath, supplierName } = await req.json();
     if (!storagePath) return NextResponse.json({ error: "Missing storagePath" }, { status: 400 });
 
-    const supabase = await createClient();
-
-    // Download PDF from supplier-certs bucket
-    const { data: fileData, error: dlErr } = await supabase.storage
-      .from("supplier-certs")
-      .download(storagePath);
-
-    if (dlErr || !fileData) {
+    let body: Uint8Array;
+    try {
+      ({ body } = await storage().download("supplier-certs", storagePath));
+    } catch {
       return NextResponse.json({ error: "Could not download file" }, { status: 500 });
     }
-
-    const buffer = await fileData.arrayBuffer();
-    const base64 = Buffer.from(buffer).toString("base64");
+    const base64 = Buffer.from(body).toString("base64");
 
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 

@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { traceyStorage } from "@/lib/storage/client";
 
 type SpecDoc = {
   id: string;
@@ -136,7 +137,7 @@ export default function ItemSpecDocsPanel({
     const ext = file.name.split(".").pop() ?? "bin";
     const storagePath = `${tenantId}/${itemId}/${Date.now()}.${ext}`;
 
-    const { error: upErr } = await supabase.storage
+    const { error: upErr } = await traceyStorage()
       .from("item-specs")
       .upload(storagePath, file, { contentType: file.type || "application/octet-stream", upsert: false });
 
@@ -183,7 +184,7 @@ export default function ItemSpecDocsPanel({
 
   async function deleteDoc(doc: SpecDoc) {
     if (!confirm("Delete this document permanently?")) return;
-    await supabase.storage.from("item-specs").remove([doc.document_url]);
+    await traceyStorage().from("item-specs").remove([doc.document_url]);
     await supabase.from("item_spec_documents").delete().eq("id", doc.id);
     router.refresh();
   }
@@ -202,7 +203,7 @@ export default function ItemSpecDocsPanel({
   }
 
   async function getSignedUrl(storagePath: string, seconds = 120) {
-    const { data } = await supabase.storage.from("item-specs").createSignedUrl(storagePath, seconds);
+    const { data } = await traceyStorage().from("item-specs").createSignedUrl(storagePath, seconds);
     return data?.signedUrl ?? null;
   }
 

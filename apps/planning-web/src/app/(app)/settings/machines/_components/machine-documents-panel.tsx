@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { traceyStorage } from "@/lib/storage/client";
 
 type MachineDoc = {
   id: string;
@@ -58,7 +59,7 @@ export default function MachineDocumentsPanel({
     if (file) {
       const ext = file.name.split(".").pop();
       const path = `${profile!.tenant_id}/machines/${machineId}/${Date.now()}_${form.title.replace(/\s+/g, "_")}.${ext}`;
-      const { error: uploadErr } = await supabase.storage.from("machine-docs").upload(path, file);
+      const { error: uploadErr } = await traceyStorage().from("machine-docs").upload(path, file);
       if (uploadErr) { setError(`Upload failed: ${uploadErr.message}`); setSaving(false); return; }
       documentUrl = path;
       documentName = file.name;
@@ -90,7 +91,7 @@ export default function MachineDocumentsPanel({
   async function deleteDoc(doc: MachineDoc) {
     if (!confirm(`Delete "${doc.title}"?`)) return;
     if (doc.document_url) {
-      await supabase.storage.from("machine-docs").remove([doc.document_url]);
+      await traceyStorage().from("machine-docs").remove([doc.document_url]);
     }
     await supabase.from("machine_documents").delete().eq("id", doc.id);
     router.refresh();
@@ -98,7 +99,7 @@ export default function MachineDocumentsPanel({
 
   async function getDownloadUrl(doc: MachineDoc) {
     if (!doc.document_url) return;
-    const { data } = await supabase.storage.from("machine-docs").createSignedUrl(doc.document_url, 3600);
+    const { data } = await traceyStorage().from("machine-docs").createSignedUrl(doc.document_url, 3600);
     if (data?.signedUrl) window.open(data.signedUrl, "_blank");
   }
 

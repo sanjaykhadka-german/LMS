@@ -32,3 +32,6 @@ coverage/
 
 # Phase 7b — per-tenant pg_dump backups (timestamped, never committed)
 backups/
+
+# Slice 7 — local-fs storage backend writes user uploads here in dev.
+.tracey-storage/

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { traceyStorage } from "@/lib/storage/client";
 
 const BUCKET = "tenant-branding";
 const MAX_SIZE_MB = 2;
@@ -25,11 +26,11 @@ export default function LogoUpload({ tenantId, initialLogoUrl, onChanged }: Logo
     let active = true;
     (async () => {
       if (!logoPath) { setPreviewUrl(null); return; }
-      const { data } = await supabase.storage.from(BUCKET).createSignedUrl(logoPath, 3600);
+      const { data } = await traceyStorage().from(BUCKET).createSignedUrl(logoPath, 3600);
       if (active) setPreviewUrl(data?.signedUrl ?? null);
     })();
     return () => { active = false; };
-  }, [logoPath, supabase]);
+  }, [logoPath]);
 
   async function persistLogoUrl(path: string | null): Promise<string | null> {
     const { data, error: dbErr } = await supabase
@@ -59,12 +60,12 @@ export default function LogoUpload({ tenantId, initialLogoUrl, onChanged }: Logo
     try {
       // Remove the previous logo (best effort) so we don't accumulate orphans.
       if (logoPath) {
-        await supabase.storage.from(BUCKET).remove([logoPath]);
+        await traceyStorage().from(BUCKET).remove([logoPath]);
       }
 
       const ext = file.name.split(".").pop()?.toLowerCase() ?? "png";
       const path = `${tenantId}/logo-${Date.now()}.${ext}`;
-      const { error: upErr } = await supabase.storage
+      const { error: upErr } = await traceyStorage()
         .from(BUCKET)
         .upload(path, file, { contentType: file.type, upsert: true });
       if (upErr) {
@@ -89,7 +90,7 @@ export default function LogoUpload({ tenantId, initialLogoUrl, onChanged }: Logo
     if (!logoPath) return;
     setBusy(true);
     setError(null);
-    await supabase.storage.from(BUCKET).remove([logoPath]);
+    await traceyStorage().from(BUCKET).remove([logoPath]);
     const dbErr = await persistLogoUrl(null);
     if (dbErr) {
       setError(`Couldn't update tenant: ${dbErr}`);

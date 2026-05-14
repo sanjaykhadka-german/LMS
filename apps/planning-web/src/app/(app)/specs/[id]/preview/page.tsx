@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { storage } from "@/lib/storage";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import PrintTrigger from "./_print-trigger";
@@ -285,10 +286,9 @@ export default async function SpecPreviewPage({ params }: { params: Promise<{ id
   const logoPath: string | null = (tenant as any)?.logo_url ?? null;
   let tenantLogo: string | null = null;
   if (logoPath && logoPath.trim() !== "") {
-    const { data: signed } = await supabase.storage
-      .from("tenant-branding")
-      .createSignedUrl(logoPath, 3600);
-    tenantLogo = signed?.signedUrl ?? null;
+    try {
+      tenantLogo = await storage().signedUrl("tenant-branding", logoPath, 3600);
+    } catch { tenantLogo = null; }
   }
   const tenantName  = (tenant as any)?.name ?? "—";
 

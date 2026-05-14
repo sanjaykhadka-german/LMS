@@ -14,6 +14,7 @@
  */
 
 import { createClient } from "@/lib/supabase/server";
+import { storage } from "@/lib/storage";
 import { renderProductSpecPdfBuffer, type SpecPdfData } from "@/lib/spec-pdf";
 
 export type DraftSpec = {
@@ -679,13 +680,10 @@ export async function sendProductSpec(input: SendSpecInput): Promise<SendSpecRes
   const logoPath = (tenantLogoRow as { logo_url?: string | null } | null)?.logo_url ?? null;
   if (logoPath && logoPath.trim() !== "") {
     try {
-      const { data: blob } = await supabase.storage.from("tenant-branding").download(logoPath);
-      if (blob) {
-        const arr = new Uint8Array(await blob.arrayBuffer());
-        const ext = logoPath.split(".").pop()?.toLowerCase() ?? "png";
-        const mime = ext === "svg" ? "image/svg+xml" : (ext === "jpg" || ext === "jpeg") ? "image/jpeg" : `image/${ext}`;
-        logoDataUri = `data:${mime};base64,${Buffer.from(arr).toString("base64")}`;
-      }
+      const { body, contentType } = await storage().download("tenant-branding", logoPath);
+      const ext = logoPath.split(".").pop()?.toLowerCase() ?? "png";
+      const mime = contentType ?? (ext === "svg" ? "image/svg+xml" : (ext === "jpg" || ext === "jpeg") ? "image/jpeg" : `image/${ext}`);
+      logoDataUri = `data:${mime};base64,${Buffer.from(body).toString("base64")}`;
     } catch { /* render without logo */ }
   }
 
@@ -1007,13 +1005,10 @@ export async function sendProductSpecsBulk(input: SendBulkInput): Promise<SendBu
   const logoPath = (tenant as { logo_url?: string | null }).logo_url ?? null;
   if (logoPath && logoPath.trim() !== "") {
     try {
-      const { data: blob } = await supabase.storage.from("tenant-branding").download(logoPath);
-      if (blob) {
-        const arr = new Uint8Array(await blob.arrayBuffer());
-        const ext = logoPath.split(".").pop()?.toLowerCase() ?? "png";
-        const mime = ext === "svg" ? "image/svg+xml" : (ext === "jpg" || ext === "jpeg") ? "image/jpeg" : `image/${ext}`;
-        logoDataUri = `data:${mime};base64,${Buffer.from(arr).toString("base64")}`;
-      }
+      const { body, contentType } = await storage().download("tenant-branding", logoPath);
+      const ext = logoPath.split(".").pop()?.toLowerCase() ?? "png";
+      const mime = contentType ?? (ext === "svg" ? "image/svg+xml" : (ext === "jpg" || ext === "jpeg") ? "image/jpeg" : `image/${ext}`);
+      logoDataUri = `data:${mime};base64,${Buffer.from(body).toString("base64")}`;
     } catch { /* render without logo */ }
   }
 

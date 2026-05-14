@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { storage } from "@/lib/storage";
 import Anthropic from "@anthropic-ai/sdk";
 
 export async function POST(req: NextRequest) {
@@ -15,11 +16,10 @@ export async function POST(req: NextRequest) {
       .eq("id", docId);
 
     // Download PDF from storage
-    const { data: fileData, error: dlErr } = await supabase.storage
-      .from("item-specs")
-      .download(storagePath);
-
-    if (dlErr || !fileData) {
+    let fileBody: Uint8Array;
+    try {
+      ({ body: fileBody } = await storage().download("item-specs", storagePath));
+    } catch {
       await supabase.from("item_spec_documents").update({ extraction_status: "failed" }).eq("id", docId);
       return NextResponse.json({ error: "Download failed" }, { status: 500 });
     }
@@ -27,9 +27,7 @@ export async function POST(req: NextRequest) {
     // Get item context
     const { data: item } = await supabase.from("items").select("name, code, item_type").eq("id", itemId).single();
 
-    // Convert to base64 for Claude
-    const buffer = await fileData.arrayBuffer();
-    const base64 = Buffer.from(buffer).toString("base64");
+    const base64 = Buffer.from(fileBody).toString("base64");
 
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 

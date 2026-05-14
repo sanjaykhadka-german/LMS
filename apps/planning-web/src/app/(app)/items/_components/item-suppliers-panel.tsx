@@ -3,6 +3,7 @@
 import React, { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { traceyStorage } from "@/lib/storage/client";
 import Link from "next/link";
 import { useUnitsOfMeasure } from "@/lib/hooks/use-reference-data";
 import CalcInput from "@/components/calc-input";
@@ -553,7 +554,7 @@ function SupplierSpecsSection({
     const ext = file.name.split(".").pop() ?? "bin";
     const storagePath = `${tenantId}/${itemId}/${Date.now()}.${ext}`;
 
-    const { error: upErr } = await supabase.storage
+    const { error: upErr } = await traceyStorage()
       .from("item-specs")
       .upload(storagePath, file, { contentType: file.type || "application/octet-stream", upsert: false });
 
@@ -601,13 +602,13 @@ function SupplierSpecsSection({
 
   async function deleteDoc(doc: SpecDoc) {
     if (!confirm("Delete this document permanently?")) return;
-    await supabase.storage.from("item-specs").remove([doc.document_url]);
+    await traceyStorage().from("item-specs").remove([doc.document_url]);
     await supabase.from("item_spec_documents").delete().eq("id", doc.id);
     updateDocs(docs.filter(d => d.id !== doc.id));
   }
 
   async function handleDownload(doc: SpecDoc) {
-    const { data } = await supabase.storage.from("item-specs").createSignedUrl(doc.document_url, 120);
+    const { data } = await traceyStorage().from("item-specs").createSignedUrl(doc.document_url, 120);
     if (data?.signedUrl) window.open(data.signedUrl, "_blank");
   }
 

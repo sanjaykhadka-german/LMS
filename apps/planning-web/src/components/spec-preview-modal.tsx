@@ -19,7 +19,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { traceyStorage } from "@/lib/storage/client";
 
 export type SpecPreviewDoc = {
   title: string;
@@ -31,7 +31,7 @@ export type SpecPreviewDoc = {
   /** Path inside the `item-spec-docs` storage bucket. Resolved to a signed
    *  URL on open when documentUrl is absent. */
   storagePath?: string | null;
-  /** Storage bucket name. Defaults to "item-spec-docs". */
+  /** Storage bucket name. Defaults to "item-specs". */
   bucket?: string;
 };
 
@@ -42,7 +42,6 @@ export default function SpecPreviewModal({
   doc: SpecPreviewDoc;
   onClose: () => void;
 }) {
-  const supabase = createClient();
   const [resolvedUrl, setResolvedUrl] = useState<string | null>(doc.documentUrl ?? null);
   const [error, setError] = useState<string | null>(null);
 
@@ -68,10 +67,10 @@ export default function SpecPreviewModal({
   useEffect(() => {
     if (resolvedUrl) return;
     if (!doc.storagePath) return;
-    const bucket = doc.bucket ?? "item-spec-docs";
+    const bucket = doc.bucket ?? "item-specs";
     let cancelled = false;
     (async () => {
-      const { data, error } = await supabase.storage
+      const { data, error } = await traceyStorage()
         .from(bucket)
         .createSignedUrl(doc.storagePath!, 3600);
       if (cancelled) return;
@@ -79,7 +78,7 @@ export default function SpecPreviewModal({
       else setResolvedUrl(data?.signedUrl ?? null);
     })();
     return () => { cancelled = true; };
-  }, [resolvedUrl, doc.storagePath, doc.bucket, supabase]);
+  }, [resolvedUrl, doc.storagePath, doc.bucket]);
 
   // Decide how to render the body. PDFs and images preview inline; anything
   // else falls back to a download link rather than embedding something the

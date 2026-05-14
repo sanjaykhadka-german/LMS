@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { storage } from "@/lib/storage";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ITEM_TYPE_LABELS, ITEM_TYPE_COLORS, PRODUCTION_METHOD_LABELS, type ItemType, type ProductionMethod } from "@/lib/types";
@@ -186,10 +187,11 @@ export default async function ItemDetailPage({
     IMAGE_SLOTS.map(async slot => {
       const img = (images ?? []).find(i => (i as any).image_type === slot.key);
       if (!img) return [slot.key, null] as const;
-      const { data: signed } = await supabase.storage
-        .from("item-images")
-        .createSignedUrl((img as any).storage_path, 3600);
-      return [slot.key, { url: signed?.signedUrl ?? "", file_name: (img as any).file_name ?? "" }] as const;
+      let signedUrl = "";
+      try {
+        signedUrl = await storage().signedUrl("item-images", (img as any).storage_path, 3600);
+      } catch { /* image may be missing; render with blank URL */ }
+      return [slot.key, { url: signedUrl, file_name: (img as any).file_name ?? "" }] as const;
     })
   );
   const slotImages: Record<string, { url: string; file_name: string } | null> =

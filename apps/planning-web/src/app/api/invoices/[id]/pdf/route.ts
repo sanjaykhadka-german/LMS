@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { storage } from "@/lib/storage";
 import { NextResponse } from "next/server";
 import { renderToBuffer, type DocumentProps } from "@react-pdf/renderer";
 import type { ReactElement } from "react";
@@ -6,7 +7,7 @@ import QRCode from "qrcode";
 import { getTemplate } from "@/lib/invoice-templates";
 import type { CustomTemplate, TemplateLine, TemplateProps } from "@/lib/invoice-templates/types";
 
-const LOGO_BUCKET = "tenant-branding";
+const LOGO_BUCKET = "tenant-branding" as const;
 
 export async function GET(
   _req: Request,
@@ -190,7 +191,7 @@ async function generateQrDataUrl(text: string): Promise<string | null> {
 }
 
 async function loadLogoDataUrl(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  _supabase: Awaited<ReturnType<typeof createClient>>,
   logoPath: string | null,
 ): Promise<string | null> {
   if (!logoPath) {
@@ -198,19 +199,21 @@ async function loadLogoDataUrl(
     return null;
   }
   console.log("[invoice pdf] downloading logo from", LOGO_BUCKET, "/", logoPath);
-  const { data, error } = await supabase.storage.from(LOGO_BUCKET).download(logoPath);
-  if (error || !data) {
-    console.error("[invoice pdf] logo download failed:", error?.message, error);
+  let body: Uint8Array;
+  let contentType: string | undefined;
+  try {
+    ({ body, contentType } = await storage().download(LOGO_BUCKET, logoPath));
+  } catch (err) {
+    console.error("[invoice pdf] logo download failed:", err);
     return null;
   }
-  const arrayBuffer = await data.arrayBuffer();
-  const byteLen = arrayBuffer.byteLength;
-  const base64 = Buffer.from(arrayBuffer).toString("base64");
+  const byteLen = body.byteLength;
+  const base64 = Buffer.from(body).toString("base64");
   const ext = (logoPath.split(".").pop() ?? "png").toLowerCase();
-  const mime = ext === "jpg" || ext === "jpeg" ? "image/jpeg"
+  const mime = contentType ?? (ext === "jpg" || ext === "jpeg" ? "image/jpeg"
     : ext === "webp" ? "image/webp"
     : ext === "svg" ? "image/svg+xml"
-    : "image/png";
+    : "image/png");
   console.log(`[invoice pdf] logo loaded: ${byteLen} bytes, mime=${mime}`);
   return `data:${mime};base64,${base64}`;
 }

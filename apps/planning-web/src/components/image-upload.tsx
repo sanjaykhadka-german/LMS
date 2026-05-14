@@ -3,9 +3,8 @@
 /**
  * ImageUpload — drag-and-drop / click-to-select image uploader.
  *
- * Uploads directly to Supabase Storage ("item-images" bucket) via
- * the browser Supabase client, then calls onUploaded() with the
- * storage path so the parent can persist the record.
+ * Uploads to the Tracey storage API ("item-images" bucket), then calls
+ * onUploaded() with the storage path so the parent can persist the record.
  *
  * Each image can be tagged with an `image_type` (product / inner / outer
  * / pallet / other) — those tags drive the 4-up packaging strip on the
@@ -14,6 +13,7 @@
 
 import { useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { traceyStorage } from "@/lib/storage/client";
 
 type ImageType = "product" | "inner" | "outer" | "pallet" | "other";
 
@@ -85,7 +85,7 @@ export function ImageUpload({
       const ext = file.name.split(".").pop() ?? "jpg";
       const storagePath = `${tenantId}/${itemId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
 
-      const { error: uploadErr } = await supabase.storage
+      const { error: uploadErr } = await traceyStorage()
         .from(BUCKET)
         .upload(storagePath, file, { contentType: file.type, upsert: false });
 
@@ -95,7 +95,7 @@ export function ImageUpload({
         return;
       }
 
-      const { data: signedData } = await supabase.storage
+      const { data: signedData } = await traceyStorage()
         .from(BUCKET)
         .createSignedUrl(storagePath, 3600);
 
@@ -166,7 +166,7 @@ export function ImageUpload({
   }
 
   async function removeImage(img: UploadedImage) {
-    await supabase.storage.from(BUCKET).remove([img.storage_path]);
+    await traceyStorage().from(BUCKET).remove([img.storage_path]);
     await supabase.from("item_images").delete().eq("id", img.id);
 
     const remaining = images.filter(i => i.id !== img.id);

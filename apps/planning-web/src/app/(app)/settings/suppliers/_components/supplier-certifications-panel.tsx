@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { traceyStorage } from "@/lib/storage/client";
 
 type Cert = {
   id: string;
@@ -87,7 +88,7 @@ export default function SupplierCertificationsPanel({
 
     const ext = file.name.split(".").pop();
     const path = `${tenantId}/${supplierId}/${Date.now()}.${ext}`;
-    const { error: upErr } = await supabase.storage
+    const { error: upErr } = await traceyStorage()
       .from("supplier-certs")
       .upload(path, file, { upsert: false });
 
@@ -154,7 +155,7 @@ export default function SupplierCertificationsPanel({
   }
 
   async function openSignedUrl(path: string) {
-    const { data } = await supabase.storage.from("supplier-certs").createSignedUrl(path, 300);
+    const { data } = await traceyStorage().from("supplier-certs").createSignedUrl(path, 300);
     if (data?.signedUrl) window.open(data.signedUrl, "_blank");
   }
 
