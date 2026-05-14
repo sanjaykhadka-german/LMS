@@ -11,6 +11,8 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 const state = {
   existingEmployees: [] as Array<{ id: string; email: string | null; traceyTenantId: string }>,
   inserted: [] as Array<Record<string, unknown>>,
+  updates: [] as Array<{ where: unknown; set: Record<string, unknown> }>,
+  deleted: 0,
   lastTenantIdForTenant: undefined as string | undefined,
   notifyCalls: [] as Array<{
     tenantId: string;
@@ -22,37 +24,103 @@ const state = {
 function resetState() {
   state.existingEmployees = [];
   state.inserted = [];
+  state.updates = [];
+  state.deleted = 0;
   state.lastTenantIdForTenant = undefined;
   state.notifyCalls = [];
 }
 
 vi.mock("@tracey/db", () => {
+  const TABLE_EMPLOYEES = Symbol("scEmployees");
+  const TABLE_DEPARTMENTS = Symbol("scDepartments");
   const scEmployees = {
+    __table: TABLE_EMPLOYEES,
     traceyTenantId: { __field: "traceyTenantId" },
     email: { __field: "email" },
     id: { __field: "id" },
+    departmentId: { __field: "departmentId" },
   };
+  const scDepartments = {
+    __table: TABLE_DEPARTMENTS,
+    traceyTenantId: { __field: "traceyTenantId" },
+    name: { __field: "name" },
+    id: { __field: "id" },
+  };
+  type AnyTable = typeof scEmployees | typeof scDepartments;
   return {
     scEmployees,
+    scDepartments,
+    auditEvents: { __table: "auditEvents" },
+    db: {
+      insert: () => ({
+        values: async () => [],
+      }),
+    },
     forTenant: (tenantId: string) => ({
       tenantId,
       async run(fn: (tx: unknown) => Promise<unknown>) {
         state.lastTenantIdForTenant = tenantId;
         const tx = {
           select: () => ({
-            from: () => ({
+            from: (table: AnyTable) => ({
               where: () => ({
-                limit: async () =>
-                  state.existingEmployees
-                    .filter((r) => r.traceyTenantId === tenantId)
-                    .slice(0, 1),
+                limit: async () => {
+                  // Email-dedup precheck on sc_employees uses the seeded
+                  // `existingEmployees`. sc_departments lookups always
+                  // return empty so resolveDepartmentId falls through to
+                  // the insert branch.
+                  if (table.__table === TABLE_EMPLOYEES) {
+                    return state.existingEmployees
+                      .filter((r) => r.traceyTenantId === tenantId)
+                      .slice(0, 1);
+                  }
+                  return [];
+                },
               }),
             }),
           }),
-          insert: () => ({
-            values: async (values: Record<string, unknown>) => {
-              state.inserted.push(values);
-              return [{ id: `inserted-${state.inserted.length}` }];
+          insert: (table: AnyTable) => ({
+            values: (values: Record<string, unknown>) => {
+              // .returning() path used by resolveDepartmentId; the bare
+              // await path used by employees insert.
+              const chain = {
+                async returning() {
+                  if (table.__table === TABLE_DEPARTMENTS) {
+                    return [{ id: `dept-${state.inserted.length + 1}` }];
+                  }
+                  state.inserted.push(values);
+                  return [{ id: `inserted-${state.inserted.length}` }];
+                },
+                then(
+                  onF: (v: Array<{ id: string }>) => unknown,
+                  onR?: (e: unknown) => unknown,
+                ) {
+                  if (table.__table === TABLE_DEPARTMENTS) {
+                    return Promise.resolve([
+                      { id: `dept-${state.inserted.length + 1}` },
+                    ]).then(onF, onR);
+                  }
+                  state.inserted.push(values);
+                  return Promise.resolve([
+                    { id: `inserted-${state.inserted.length}` },
+                  ]).then(onF, onR);
+                },
+              };
+              return chain;
+            },
+          }),
+          update: () => ({
+            set: (patch: Record<string, unknown>) => ({
+              where: async (w: unknown) => {
+                state.updates.push({ where: w, set: patch });
+                return [{ id: "updated" }];
+              },
+            }),
+          }),
+          delete: () => ({
+            where: async () => {
+              state.deleted += 1;
+              return [{ id: "deleted" }];
             },
           }),
         };
@@ -134,11 +202,14 @@ describe("createEmployeeAction", () => {
       fullName: "Jane Doe",
       email: "jane@example.com",
       mobile: "0400 000 000",
-      department: "Butchery",
       employmentType: "permanent",
       traceyTenantId: "tenant-A",
       createdByUserId: "user-1",
     });
+    // department is now a typed FK — the mock returns a fake dept id
+    // from the insert .returning() path, which the action threads in
+    // as `departmentId`.
+    expect(state.inserted[0]!.departmentId).toMatch(/^dept-/);
     expect(state.notifyCalls).toHaveLength(1);
     expect(state.notifyCalls[0]).toMatchObject({
       tenantId: "tenant-A",
@@ -246,5 +317,112 @@ describe("createEmployeeAction", () => {
       expect(result.fieldErrors?.email).toBeTruthy();
     }
     expect(state.inserted).toHaveLength(0);
+  });
+
+  it("persists hourly_rate when provided", async () => {
+    const { createEmployeeAction } = await load();
+    await expect(
+      createEmployeeAction(
+        { status: "idle" },
+        fd({
+          fullName: "Jane Doe",
+          email: "jane@example.com",
+          employmentType: "permanent",
+          hourlyRate: "24.50",
+        }),
+      ),
+    ).rejects.toThrow(/NEXT_REDIRECT/);
+    expect(state.inserted[0]!.hourlyRate).toBe("24.50");
+  });
+
+  it("rejects a non-numeric hourly_rate", async () => {
+    const { createEmployeeAction } = await load();
+    const r = await createEmployeeAction(
+      { status: "idle" },
+      fd({
+        fullName: "Jane Doe",
+        email: "jane@example.com",
+        employmentType: "permanent",
+        hourlyRate: "not a number",
+      }),
+    );
+    expect(r.status).toBe("error");
+    if (r.status === "error") {
+      expect(r.fieldErrors?.hourlyRate).toBeTruthy();
+    }
+    expect(state.inserted).toHaveLength(0);
+  });
+
+  it("treats a blank hourly_rate as null (no error)", async () => {
+    const { createEmployeeAction } = await load();
+    await expect(
+      createEmployeeAction(
+        { status: "idle" },
+        fd({
+          fullName: "Jane Doe",
+          email: "jane@example.com",
+          employmentType: "permanent",
+          hourlyRate: "",
+        }),
+      ),
+    ).rejects.toThrow(/NEXT_REDIRECT/);
+    expect(state.inserted[0]!.hourlyRate).toBeNull();
+  });
+});
+
+describe("updateEmployeeAction", () => {
+  it("updates rate + other fields on an existing row", async () => {
+    const { updateEmployeeAction } = await load();
+    const r = await updateEmployeeAction(
+      "emp-1",
+      { status: "idle" },
+      fd({
+        fullName: "Jane Doe",
+        email: "jane@example.com",
+        employmentType: "permanent",
+        hourlyRate: "30.00",
+        department: "Butchery",
+      }),
+    );
+    expect(r.status).toBe("ok");
+    expect(state.updates).toHaveLength(1);
+    expect(state.updates[0]!.set).toMatchObject({
+      fullName: "Jane Doe",
+      hourlyRate: "30.00",
+    });
+    // The action resolves the typed department FK, so the patch carries
+    // a departmentId (UUID) rather than a free-text `department`.
+    expect(state.updates[0]!.set.departmentId).toMatch(/^dept-/);
+  });
+
+  it("rejects an invalid email on edit", async () => {
+    const { updateEmployeeAction } = await load();
+    const r = await updateEmployeeAction(
+      "emp-1",
+      { status: "idle" },
+      fd({
+        fullName: "Jane Doe",
+        email: "garbage",
+        employmentType: "permanent",
+      }),
+    );
+    expect(r.status).toBe("error");
+    expect(state.updates).toHaveLength(0);
+  });
+});
+
+describe("deleteEmployeeAction", () => {
+  it("deletes the row scoped to the tenant", async () => {
+    const { deleteEmployeeAction } = await load();
+    await expect(deleteEmployeeAction(fd({ id: "emp-1" }))).rejects.toThrow(
+      /NEXT_REDIRECT/,
+    );
+    expect(state.deleted).toBe(1);
+  });
+
+  it("is a no-op on empty id", async () => {
+    const { deleteEmployeeAction } = await load();
+    await deleteEmployeeAction(fd({ id: "" }));
+    expect(state.deleted).toBe(0);
   });
 });

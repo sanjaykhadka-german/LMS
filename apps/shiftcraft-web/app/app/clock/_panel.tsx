@@ -40,9 +40,9 @@ function fmtClock(ms: number): string {
 
 function StatusPill({ status }: { status: PanelStatus }) {
   const styles: Record<PanelStatus, string> = {
-    clocked_out: "bg-muted text-muted-foreground",
-    working: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300",
-    on_break: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
+    clocked_out: "bg-slate-500 text-white",
+    working: "bg-emerald-600 text-white",
+    on_break: "bg-amber-500 text-white",
   };
   const label: Record<PanelStatus, string> = {
     clocked_out: "Clocked out",

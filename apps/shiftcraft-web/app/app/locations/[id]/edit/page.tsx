@@ -25,6 +25,7 @@ export default async function EditLocationPage({
         name: scLocations.name,
         timezone: scLocations.timezone,
         address: scLocations.address,
+        color: scLocations.color,
       })
       .from(scLocations)
       .where(
@@ -59,6 +60,7 @@ export default async function EditLocationPage({
             name: location.name,
             timezone: location.timezone,
             address: location.address,
+            color: location.color,
           }}
         />
       </section>

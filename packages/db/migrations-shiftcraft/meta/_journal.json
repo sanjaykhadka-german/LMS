@@ -29,6 +29,34 @@
       "when": 1778736973595,
       "tag": "0003_material_chimera",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1778752061659,
+      "tag": "0004_red_blob",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1778753355579,
+      "tag": "0005_woozy_puppet_master",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1778754899760,
+      "tag": "0006_faulty_yellowjacket",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1778755816758,
+      "tag": "0007_worried_black_cat",
+      "breakpoints": true
     }
   ]
 }

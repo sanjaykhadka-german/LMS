@@ -43,6 +43,7 @@ export default async function LocationsPage({
         name: scLocations.name,
         timezone: scLocations.timezone,
         address: scLocations.address,
+        color: scLocations.color,
         upcomingShifts: upcomingCount,
       })
       .from(scLocations)
@@ -111,14 +112,23 @@ export default async function LocationsPage({
                 key={loc.id}
                 className="flex items-center justify-between gap-3 px-5 py-3"
               >
-                <div className="min-w-0">
-                  <div className="text-sm font-medium">{loc.name}</div>
-                  <div className="truncate text-xs text-muted-foreground">
-                    {loc.timezone}
-                    {loc.address ? ` · ${loc.address}` : ""}
-                    {" · "}
-                    {loc.upcomingShifts} upcoming shift
-                    {loc.upcomingShifts === 1 ? "" : "s"}
+                <div className="flex min-w-0 items-center gap-3">
+                  <span
+                    aria-hidden
+                    className="h-7 w-1.5 flex-shrink-0 rounded-full"
+                    style={{
+                      backgroundColor: loc.color ?? "var(--muted)",
+                    }}
+                  />
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium">{loc.name}</div>
+                    <div className="truncate text-xs text-muted-foreground">
+                      {loc.timezone}
+                      {loc.address ? ` · ${loc.address}` : ""}
+                      {" · "}
+                      {loc.upcomingShifts} upcoming shift
+                      {loc.upcomingShifts === 1 ? "" : "s"}
+                    </div>
                   </div>
                 </div>
                 <Button asChild variant="outline" size="sm">

@@ -4,18 +4,25 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   AlertCircle,
+  BarChart3,
   CalendarCheck,
   CalendarDays,
   CalendarOff,
   ClipboardList,
   Clock,
+  History,
+  KanbanSquare,
   LayoutDashboard,
   LogOut,
   MapPin,
+  Megaphone,
   Repeat,
+  Settings,
+  Shield,
   Users,
 } from "lucide-react";
 import { cn } from "~/lib/utils";
+import { friendlyRoleLabel } from "~/lib/roles";
 import { Logo } from "./Logo";
 import { signOutAction } from "~/app/app/_actions";
 
@@ -26,13 +33,19 @@ const NAV = [
   { href: "/app/schedule", label: "Schedule", icon: CalendarDays },
   { href: "/app/coverage-gaps", label: "Coverage gaps", icon: AlertCircle },
   { href: "/app/timesheets", label: "Timesheets", icon: ClipboardList },
+  { href: "/app/tasks", label: "Tasks", icon: KanbanSquare },
   { href: "/app/locations", label: "Locations", icon: MapPin },
   { href: "/app/employees", label: "Employees", icon: Users },
+  { href: "/app/team", label: "Team", icon: Shield },
   { href: "/app/time-off", label: "Time off", icon: CalendarOff },
+  { href: "/app/announcements", label: "Announcements", icon: Megaphone },
+  { href: "/app/settings", label: "Settings", icon: Settings },
 ];
 
 const ADMIN_NAV = [
+  { href: "/app/reports", label: "Reports", icon: BarChart3 },
   { href: "/app/swaps", label: "Swap requests", icon: Repeat },
+  { href: "/app/audit", label: "Audit log", icon: History },
 ];
 
 export function Sidebar({ name, role }: { name: string; role: string }) {
@@ -72,7 +85,9 @@ export function Sidebar({ name, role }: { name: string; role: string }) {
             Signed in as
           </div>
           <div className="truncate text-sm font-medium">{name}</div>
-          <div className="text-[11px] capitalize text-muted-foreground">{role}</div>
+          <div className="text-[11px] text-muted-foreground">
+            {friendlyRoleLabel(role)}
+          </div>
         </div>
         <form action={signOutAction}>
           <button

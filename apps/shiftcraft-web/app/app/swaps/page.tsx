@@ -14,10 +14,10 @@ import { currentMembership } from "~/lib/auth/current";
 export const metadata = { title: "Swap requests · ShiftCraft" };
 
 const STATUS_BADGE: Record<string, string> = {
-  pending: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
-  accepted: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300",
-  declined: "bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-300",
-  cancelled: "bg-muted text-muted-foreground",
+  pending: "bg-amber-500 text-white",
+  accepted: "bg-emerald-600 text-white",
+  declined: "bg-rose-600 text-white",
+  cancelled: "bg-slate-500 text-white",
 };
 
 type StatusFilter = "all" | "pending" | "accepted" | "declined" | "cancelled";

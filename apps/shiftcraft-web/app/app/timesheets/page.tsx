@@ -1,9 +1,17 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { eq, inArray } from "drizzle-orm";
-import { db, members, users } from "@tracey/db";
+import { and, eq, sql } from "drizzle-orm";
+import {
+  db,
+  forTenant,
+  members,
+  scTimesheetApprovals,
+  users,
+  type ScTimesheetApprovalStatus,
+} from "@tracey/db";
 import { currentMembership, currentUser } from "~/lib/auth/current";
 import { Button } from "~/components/ui/button";
+import { isAtLeastManager } from "~/lib/roles";
 import {
   addDays,
   deriveSegments,
@@ -15,6 +23,11 @@ import {
   splitSegmentByDay,
   startOfWeek,
 } from "~/lib/clock";
+import {
+  approveTimesheetAction,
+  clearTimesheetApprovalAction,
+  disputeTimesheetAction,
+} from "./actions";
 
 export const metadata = { title: "Timesheets · ShiftCraft" };
 
@@ -28,6 +41,8 @@ interface RowTotals {
   perDay: number[];
   totalWorkMs: number;
   totalBreakMs: number;
+  approvalStatus: ScTimesheetApprovalStatus | null;
+  approvalNotes: string | null;
 }
 
 export default async function TimesheetsPage({
@@ -76,6 +91,32 @@ export default async function TimesheetsPage({
     ? await getEventsInRangeForTenant(tenantId, weekStart, weekEnd)
     : await getEventsInRangeForUser(tenantId, user.id, weekStart, weekEnd);
 
+  const weekStartIso = fmtIsoDate(weekStart);
+  const approvalRows = await forTenant(tenantId).run((tx) =>
+    tx
+      .select({
+        employeeUserId: scTimesheetApprovals.employeeUserId,
+        status: scTimesheetApprovals.status,
+        notes: scTimesheetApprovals.notes,
+      })
+      .from(scTimesheetApprovals)
+      .where(
+        and(
+          eq(scTimesheetApprovals.traceyTenantId, tenantId),
+          sql`${scTimesheetApprovals.weekStart} = ${weekStartIso}::date`,
+        ),
+      ),
+  );
+  const approvalByUser = new Map(
+    approvalRows.map((r) => [
+      r.employeeUserId,
+      {
+        status: r.status as ScTimesheetApprovalStatus,
+        notes: r.notes,
+      },
+    ]),
+  );
+
   // Group events by user, then compute per-day work ms.
   const byUser = new Map<string, typeof allEvents>();
   for (const e of allEvents) {
@@ -108,6 +149,7 @@ export default async function TimesheetsPage({
         }
       }
     }
+    const approval = approvalByUser.get(m.userId);
     return {
       userId: m.userId,
       name: m.name ?? m.email,
@@ -115,6 +157,8 @@ export default async function TimesheetsPage({
       perDay,
       totalWorkMs: totalWork,
       totalBreakMs: totalBreak,
+      approvalStatus: approval?.status ?? null,
+      approvalNotes: approval?.notes ?? null,
     };
   });
 
@@ -178,6 +222,7 @@ export default async function TimesheetsPage({
                   ))}
                   <th className="px-3 py-2 font-medium">Work</th>
                   <th className="px-3 py-2 font-medium">Break</th>
+                  <th className="px-3 py-2 font-medium">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -203,6 +248,16 @@ export default async function TimesheetsPage({
                     <td className="px-3 py-2 font-mono text-xs tabular-nums text-muted-foreground">
                       {fmtHours(r.totalBreakMs)}
                     </td>
+                    <td className="px-3 py-2 align-top">
+                      <ApprovalCell
+                        userId={r.userId}
+                        weekStartIso={weekStartIso}
+                        status={r.approvalStatus}
+                        notes={r.approvalNotes}
+                        canManage={isAtLeastManager(membership.role)}
+                        hasActivity={r.totalWorkMs > 0 || r.totalBreakMs > 0}
+                      />
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -214,8 +269,106 @@ export default async function TimesheetsPage({
       <p className="text-[11px] text-muted-foreground">
         Hours are derived from the append-only clock-event stream. Overnight
         shifts are split at midnight so each day's total is contained within
-        that calendar date. Approval workflow lands in a follow-up slice.
+        that calendar date. Managers can approve, dispute, or reset each
+        employee's week — the status column reflects the latest state and
+        is included in the CSV export.
       </p>
+    </div>
+  );
+}
+
+function ApprovalCell({
+  userId,
+  weekStartIso,
+  status,
+  notes,
+  canManage,
+  hasActivity,
+}: {
+  userId: string;
+  weekStartIso: string;
+  status: ScTimesheetApprovalStatus | null;
+  notes: string | null;
+  canManage: boolean;
+  hasActivity: boolean;
+}) {
+  const chipBase =
+    "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider";
+  const badge =
+    status === "approved" ? (
+      <span className={`${chipBase} bg-emerald-600 text-white`}>Approved</span>
+    ) : status === "disputed" ? (
+      <span className={`${chipBase} bg-amber-500 text-white`}>Disputed</span>
+    ) : hasActivity ? (
+      <span className={`${chipBase} bg-slate-500 text-white`}>Pending</span>
+    ) : (
+      <span className="text-[10px] text-muted-foreground/60">—</span>
+    );
+
+  if (!canManage) {
+    return (
+      <div className="space-y-1">
+        {badge}
+        {status === "disputed" && notes && (
+          <p className="max-w-[14rem] text-[10px] text-muted-foreground">
+            {notes}
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1">
+      {badge}
+      {status === "disputed" && notes && (
+        <p className="max-w-[14rem] text-[10px] text-muted-foreground">
+          {notes}
+        </p>
+      )}
+      <div className="flex flex-wrap gap-1">
+        {status !== "approved" && hasActivity && (
+          <form action={approveTimesheetAction}>
+            <input type="hidden" name="employeeUserId" value={userId} />
+            <input type="hidden" name="weekStart" value={weekStartIso} />
+            <button
+              type="submit"
+              className="rounded-md bg-emerald-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white transition-colors hover:bg-emerald-700"
+            >
+              Approve
+            </button>
+          </form>
+        )}
+        {status !== "disputed" && hasActivity && (
+          <form action={disputeTimesheetAction}>
+            <input type="hidden" name="employeeUserId" value={userId} />
+            <input type="hidden" name="weekStart" value={weekStartIso} />
+            <input
+              type="hidden"
+              name="notes"
+              value="Flagged by manager — please review punches."
+            />
+            <button
+              type="submit"
+              className="rounded-md bg-amber-500 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white transition-colors hover:bg-amber-600"
+            >
+              Dispute
+            </button>
+          </form>
+        )}
+        {status != null && (
+          <form action={clearTimesheetApprovalAction}>
+            <input type="hidden" name="employeeUserId" value={userId} />
+            <input type="hidden" name="weekStart" value={weekStartIso} />
+            <button
+              type="submit"
+              className="rounded-md border border-border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground transition-colors hover:bg-muted"
+            >
+              Reset
+            </button>
+          </form>
+        )}
+      </div>
     </div>
   );
 }

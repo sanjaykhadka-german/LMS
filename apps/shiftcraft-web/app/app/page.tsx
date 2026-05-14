@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { and, asc, between, count, eq } from "drizzle-orm";
+import { and, asc, between, count, desc, eq, isNull, or, gt } from "drizzle-orm";
 import {
   db,
   forTenant,
   members,
+  scAnnouncements,
   scLocations,
   scShiftAssignments,
   scShifts,
@@ -191,6 +192,32 @@ export default async function DashboardPage() {
   }
   onTheFloor.sort((a, b) => a.name.localeCompare(b.name));
 
+  // Pinned, non-expired announcements. Limit to 3 to keep the dashboard
+  // scannable — older or unpinned ones live on /app/announcements.
+  const now = new Date();
+  const pinnedAnnouncements = await forTenant(membership.tenant.id).run((tx) =>
+    tx
+      .select({
+        id: scAnnouncements.id,
+        title: scAnnouncements.title,
+        body: scAnnouncements.body,
+        createdAt: scAnnouncements.createdAt,
+      })
+      .from(scAnnouncements)
+      .where(
+        and(
+          eq(scAnnouncements.traceyTenantId, membership.tenant.id),
+          eq(scAnnouncements.pinned, true),
+          or(
+            isNull(scAnnouncements.expiresAt),
+            gt(scAnnouncements.expiresAt, now),
+          ),
+        ),
+      )
+      .orderBy(desc(scAnnouncements.createdAt))
+      .limit(3),
+  );
+
   return (
     <div className="mx-auto max-w-5xl space-y-8 px-6 py-12">
       <div>
@@ -201,6 +228,37 @@ export default async function DashboardPage() {
           You're signed in to {membership.tenant.name} as {membership.role}.
         </p>
       </div>
+
+      {pinnedAnnouncements.length > 0 && (
+        <section className="space-y-2">
+          {pinnedAnnouncements.map((a) => (
+            <div
+              key={a.id}
+              className="rounded-lg border border-amber-200 bg-amber-50/70 px-5 py-3 text-sm dark:border-amber-900/40 dark:bg-amber-900/10"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                    Pinned
+                  </span>
+                  <span className="font-semibold text-amber-900 dark:text-amber-200">
+                    {a.title}
+                  </span>
+                </div>
+                <Link
+                  href="/app/announcements"
+                  className="text-xs text-amber-700 hover:underline dark:text-amber-300"
+                >
+                  All →
+                </Link>
+              </div>
+              <p className="mt-1 whitespace-pre-wrap text-xs text-amber-900/90 dark:text-amber-200/90">
+                {a.body}
+              </p>
+            </div>
+          ))}
+        </section>
+      )}
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <Stat

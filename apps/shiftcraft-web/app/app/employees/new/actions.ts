@@ -4,9 +4,49 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
-import { forTenant, scEmployees } from "@tracey/db";
+import { forTenant, scDepartments, scEmployees } from "@tracey/db";
 import { currentMembership, currentUser } from "~/lib/auth/current";
+import { logAuditEvent } from "~/lib/audit";
 import { notifyTenantAdmins } from "~/lib/notifications";
+
+type TenantTx = Parameters<
+  Parameters<ReturnType<typeof forTenant>["run"]>[0]
+>[0];
+
+/**
+ * Resolve a department by name within a tenant, creating it if needed.
+ * Case-insensitive lookup via the partial unique index on
+ * (tracey_tenant_id, lower(name)). Returns null when `name` is blank.
+ *
+ * Runs inside the caller's forTenant() transaction context — the
+ * search_path is already set so unqualified sc_departments resolves
+ * correctly.
+ */
+async function resolveDepartmentId(
+  tx: TenantTx,
+  tenantId: string,
+  rawName: string | null,
+): Promise<string | null> {
+  if (!rawName) return null;
+  const name = rawName.trim();
+  if (name.length === 0) return null;
+  const existing = await tx
+    .select({ id: scDepartments.id })
+    .from(scDepartments)
+    .where(
+      and(
+        eq(scDepartments.traceyTenantId, tenantId),
+        sql`lower(${scDepartments.name}) = lower(${name})`,
+      ),
+    )
+    .limit(1);
+  if (existing[0]) return existing[0].id;
+  const inserted = await tx
+    .insert(scDepartments)
+    .values({ traceyTenantId: tenantId, name })
+    .returning({ id: scDepartments.id });
+  return inserted[0]?.id ?? null;
+}
 
 export type FormState =
   | { status: "idle" }
@@ -24,6 +64,15 @@ const employeeSchema = z.object({
   mobile: z.string().trim().max(40).optional().or(z.literal("")),
   department: z.string().trim().max(80).optional().or(z.literal("")),
   employmentType: z.enum(["permanent", "casual", "labour_hire"]),
+  hourlyRate: z
+    .union([
+      z.literal(""),
+      z
+        .string()
+        .trim()
+        .regex(/^\d{1,7}(\.\d{1,2})?$/, "Rate must look like 24.50"),
+    ])
+    .optional(),
   notes: z.string().trim().max(2000).optional().or(z.literal("")),
 });
 
@@ -56,6 +105,7 @@ export async function createEmployeeAction(
     mobile: formData.get("mobile") ?? "",
     department: formData.get("department") ?? "",
     employmentType: formData.get("employmentType") ?? "permanent",
+    hourlyRate: formData.get("hourlyRate") ?? "",
     notes: formData.get("notes") ?? "",
   });
   if (!parsed.success) {
@@ -107,19 +157,24 @@ export async function createEmployeeAction(
     }
   }
 
+  const hourlyRate = emptyToNull(parsed.data.hourlyRate);
+
   try {
-    await forTenant(tenantId).run((tx) =>
-      tx.insert(scEmployees).values({
+    await forTenant(tenantId).run(async (tx) => {
+      const departmentId = await resolveDepartmentId(tx, tenantId, department);
+      await tx.insert(scEmployees).values({
         traceyTenantId: tenantId,
         fullName: parsed.data.fullName,
         email,
         mobile,
-        department,
+        departmentId,
         availability,
         employmentType: parsed.data.employmentType,
+        hourlyRate,
+        notes,
         createdByUserId: me?.id ?? null,
-      }),
-    );
+      });
+    });
   } catch (err) {
     // Catches the rare race against the unique index (two creates same email
     // submitted simultaneously). Postgres throws SQLSTATE 23505.
@@ -153,4 +208,144 @@ export async function createEmployeeAction(
 
   revalidatePath("/app/employees");
   redirect("/app/employees?added=1");
+}
+
+export async function updateEmployeeAction(
+  id: string,
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const parsed = employeeSchema.safeParse({
+    fullName: formData.get("fullName"),
+    email: formData.get("email") ?? "",
+    mobile: formData.get("mobile") ?? "",
+    department: formData.get("department") ?? "",
+    employmentType: formData.get("employmentType") ?? "permanent",
+    hourlyRate: formData.get("hourlyRate") ?? "",
+    notes: formData.get("notes") ?? "",
+  });
+  if (!parsed.success) {
+    return {
+      status: "error",
+      message: "Please fix the highlighted fields.",
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
+
+  const membership = await currentMembership();
+  if (!membership) {
+    return {
+      status: "error",
+      message: "You must belong to a workspace to edit employees.",
+    };
+  }
+  const tenantId = membership.tenant.id;
+
+  const email = emptyToNull(parsed.data.email);
+  const mobile = emptyToNull(parsed.data.mobile);
+  const department = emptyToNull(parsed.data.department);
+  const notes = emptyToNull(parsed.data.notes);
+  const availability = collectAvailability(formData);
+  const hourlyRate = emptyToNull(parsed.data.hourlyRate);
+
+  // Email-uniqueness precheck excludes this row.
+  if (email) {
+    const existing = await forTenant(tenantId).run((tx) =>
+      tx
+        .select({ id: scEmployees.id })
+        .from(scEmployees)
+        .where(
+          and(
+            eq(scEmployees.traceyTenantId, tenantId),
+            sql`lower(${scEmployees.email}) = lower(${email})`,
+            sql`${scEmployees.id} <> ${id}`,
+          ),
+        )
+        .limit(1),
+    );
+    if (existing.length > 0) {
+      return {
+        status: "error",
+        message: "Please fix the highlighted fields.",
+        fieldErrors: { email: ["Another employee already uses this email."] },
+      };
+    }
+  }
+
+  try {
+    await forTenant(tenantId).run(async (tx) => {
+      const departmentId = await resolveDepartmentId(tx, tenantId, department);
+      await tx
+        .update(scEmployees)
+        .set({
+          fullName: parsed.data.fullName,
+          email,
+          mobile,
+          departmentId,
+          availability,
+          employmentType: parsed.data.employmentType,
+          hourlyRate,
+          notes,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(scEmployees.id, id),
+            eq(scEmployees.traceyTenantId, tenantId),
+          ),
+        );
+    });
+  } catch (err) {
+    const msg = (err as { code?: string; message?: string })?.message ?? "";
+    if (msg.includes("sc_employees_tenant_email_uq")) {
+      return {
+        status: "error",
+        message: "Please fix the highlighted fields.",
+        fieldErrors: { email: ["Another employee already uses this email."] },
+      };
+    }
+    throw err;
+  }
+
+  revalidatePath("/app/employees");
+  revalidatePath(`/app/employees/${id}/edit`);
+  return { status: "ok", message: "Saved." };
+}
+
+export async function deleteEmployeeAction(formData: FormData): Promise<void> {
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+  const membership = await currentMembership();
+  if (!membership) return;
+  // Pull the name so the audit log entry is meaningful after the row is gone.
+  const [doomed] = await forTenant(membership.tenant.id).run((tx) =>
+    tx
+      .select({ fullName: scEmployees.fullName, email: scEmployees.email })
+      .from(scEmployees)
+      .where(
+        and(
+          eq(scEmployees.id, id),
+          eq(scEmployees.traceyTenantId, membership.tenant.id),
+        ),
+      )
+      .limit(1),
+  );
+  await forTenant(membership.tenant.id).run((tx) =>
+    tx
+      .delete(scEmployees)
+      .where(
+        and(
+          eq(scEmployees.id, id),
+          eq(scEmployees.traceyTenantId, membership.tenant.id),
+        ),
+      ),
+  );
+  await logAuditEvent({
+    action: "shiftcraft.employee.deleted",
+    targetKind: "sc_employee",
+    targetId: id,
+    details: doomed ? { fullName: doomed.fullName, email: doomed.email } : null,
+  });
+  revalidatePath("/app/employees");
+  redirect("/app/employees");
 }

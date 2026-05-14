@@ -32,6 +32,7 @@ import {
   date,
   index,
   jsonb,
+  numeric,
   pgTable,
   text,
   timestamp,
@@ -54,11 +55,19 @@ export const scLocations = pgTable(
     name: text("name").notNull(),
     timezone: text("timezone").notNull().default("Australia/Sydney"),
     address: text("address"),
+    // Hex color for per-location accent. Validated to "#RRGGBB" (no
+    // shorthand) so the UI doesn't need a parser — checked in the DB so
+    // bad data can't sneak in via direct SQL either.
+    color: text("color"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("sc_locations_tenant_idx").on(t.traceyTenantId),
     check("sc_locations_timezone_chk", sql`length(${t.timezone}) > 0`),
+    check(
+      "sc_locations_color_chk",
+      sql`${t.color} is null or ${t.color} ~* '^#[0-9a-f]{6}$'`,
+    ),
   ],
 );
 
@@ -211,6 +220,35 @@ export const scShiftSwapRequests = pgTable(
   ],
 );
 
+// ─── Departments ───
+//
+// Tenant-scoped department / team taxonomy. Promoted from the text
+// `department` column that used to live on `sc_employees` so Reports can
+// group cleanly and the same name doesn't get spelled three different
+// ways across rows. The unique index on `(tenant, lower(name))` keeps
+// case-insensitive uniqueness — Drizzle insert / lookup paths normalise
+// to whatever case the form sends.
+
+export const scDepartments = pgTable(
+  "sc_departments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    traceyTenantId: text("tracey_tenant_id").notNull(),
+    name: text("name").notNull(),
+    description: text("description"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("sc_departments_tenant_name_uq").on(
+      t.traceyTenantId,
+      sql`lower(${t.name})`,
+    ),
+    index("sc_departments_tenant_idx").on(t.traceyTenantId),
+  ],
+);
+
 // ─── Employees (HR-side roster) ───
 //
 // ShiftCraft-owned record of someone who can be assigned to shifts. Distinct
@@ -239,9 +277,19 @@ export const scEmployees = pgTable(
     fullName: text("full_name").notNull(),
     email: text("email"),
     mobile: text("mobile"),
-    department: text("department"),
+    // Department lives in its own table now — see scDepartments above.
+    // The FK is declared via .references() so Drizzle generates the
+    // constraint in the public template; the per-tenant migration
+    // re-attaches it pointing at the per-tenant copy of sc_departments.
+    departmentId: uuid("department_id").references(() => scDepartments.id, {
+      onDelete: "set null",
+    }),
     availability: jsonb("availability"),
     employmentType: text("employment_type").notNull().default("permanent"),
+    // Hourly wage in tenant currency. Nullable so labour-hire / contract
+    // employees can be added without forcing a rate (the platform owner
+    // sets per-tenant currency; Reports treats nulls as "rate not set").
+    hourlyRate: numeric("hourly_rate", { precision: 10, scale: 2 }),
     isActive: boolean("is_active").notNull().default(true),
     notes: text("notes"),
     createdByUserId: uuid("created_by_user_id").references(() => users.id, {
@@ -323,6 +371,144 @@ export const scClockEvents = pgTable(
   ],
 );
 
+// ─── Tasks (Kanban) ───
+//
+// Tenant-scoped to-do items. Mirrors the Deputy-style board: each task has
+// a status that drives a column (open / in_progress / done), a priority,
+// an optional assignee + location, and an optional due date. The board UI
+// at /app/tasks reads the rows and groups by status — no separate
+// "columns" table needed.
+//
+// `completed_at` is set automatically when status transitions to 'done'
+// (in the action layer). Keeping it as a separate column makes
+// reports/dashboard widgets cheap ("completed this week").
+
+export const scTasks = pgTable(
+  "sc_tasks",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    traceyTenantId: text("tracey_tenant_id").notNull(),
+    title: text("title").notNull(),
+    description: text("description"),
+    status: text("status").notNull().default("open"),
+    priority: text("priority").notNull().default("normal"),
+    assigneeUserId: uuid("assignee_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    locationId: uuid("location_id"),
+    dueDate: date("due_date"),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("sc_tasks_tenant_status_idx").on(t.traceyTenantId, t.status),
+    index("sc_tasks_assignee_idx").on(t.assigneeUserId, t.status),
+    index("sc_tasks_due_idx").on(t.traceyTenantId, t.dueDate),
+    check(
+      "sc_tasks_status_chk",
+      sql`${t.status} in ('open','in_progress','done')`,
+    ),
+    check(
+      "sc_tasks_priority_chk",
+      sql`${t.priority} in ('low','normal','high','urgent')`,
+    ),
+  ],
+);
+
+// ─── Announcements ───
+//
+// Tenant-scoped pinned messages surfaced on the dashboard. Owners/admins
+// create them; everyone in the tenant reads. `pinned` controls whether
+// the dashboard banner picks it up; `expires_at` lets admins set a
+// "valid until" so stale messages drop off the dashboard without
+// requiring a manual unpin.
+
+export const scAnnouncements = pgTable(
+  "sc_announcements",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    traceyTenantId: text("tracey_tenant_id").notNull(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    pinned: boolean("pinned").notNull().default(true),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("sc_announcements_tenant_pinned_idx").on(
+      t.traceyTenantId,
+      t.pinned,
+      t.createdAt,
+    ),
+  ],
+);
+
+// ─── Timesheet approvals ───
+//
+// Per-(employee, week) approval ledger. No row = "pending review", which
+// is the default state for any week with clock activity. A row with
+// status='approved' means an admin signed off; status='disputed' means
+// an admin flagged a problem (notes field carries the why).
+//
+// The week is keyed on `week_start` (a Monday) — single source of truth
+// for which Monday-Sunday window the approval applies to. Unique on
+// (tenant, employee, week_start) so re-approving the same week updates
+// the existing row rather than stacking.
+
+export const scTimesheetApprovals = pgTable(
+  "sc_timesheet_approvals",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    traceyTenantId: text("tracey_tenant_id").notNull(),
+    employeeUserId: uuid("employee_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    weekStart: date("week_start").notNull(),
+    status: text("status").notNull().default("approved"),
+    notes: text("notes"),
+    approvedByUserId: uuid("approved_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    approvedAt: timestamp("approved_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("sc_timesheet_approvals_uq").on(
+      t.traceyTenantId,
+      t.employeeUserId,
+      t.weekStart,
+    ),
+    index("sc_timesheet_approvals_tenant_week_idx").on(
+      t.traceyTenantId,
+      t.weekStart,
+    ),
+    check(
+      "sc_timesheet_approvals_status_chk",
+      sql`${t.status} in ('approved','disputed')`,
+    ),
+  ],
+);
+
 // ─── Inferred types ───
 
 export type ScLocation = typeof scLocations.$inferSelect;
@@ -338,10 +524,21 @@ export type NewScShiftSwapRequest = typeof scShiftSwapRequests.$inferInsert;
 export type ScEmployee = typeof scEmployees.$inferSelect;
 export type NewScEmployee = typeof scEmployees.$inferInsert;
 export type ScEmploymentType = "permanent" | "casual" | "labour_hire";
+export type ScDepartment = typeof scDepartments.$inferSelect;
+export type NewScDepartment = typeof scDepartments.$inferInsert;
 export type ScClockEvent = typeof scClockEvents.$inferSelect;
 export type NewScClockEvent = typeof scClockEvents.$inferInsert;
 export type ScClockEventType = "in" | "out" | "break_start" | "break_end";
 export type ScClockEventSource = "manual" | "kiosk" | "geofence" | "admin_edit";
+export type ScTask = typeof scTasks.$inferSelect;
+export type NewScTask = typeof scTasks.$inferInsert;
+export type ScTaskStatus = "open" | "in_progress" | "done";
+export type ScTaskPriority = "low" | "normal" | "high" | "urgent";
+export type ScAnnouncement = typeof scAnnouncements.$inferSelect;
+export type NewScAnnouncement = typeof scAnnouncements.$inferInsert;
+export type ScTimesheetApproval = typeof scTimesheetApprovals.$inferSelect;
+export type NewScTimesheetApproval = typeof scTimesheetApprovals.$inferInsert;
+export type ScTimesheetApprovalStatus = "approved" | "disputed";
 export type ScShiftStatus = "draft" | "published" | "cancelled";
 export type ScAssignmentStatus =
   | "offered"

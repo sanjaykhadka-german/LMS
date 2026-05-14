@@ -8,6 +8,7 @@ import {
   scShifts,
 } from "@tracey/db";
 import { currentMembership } from "~/lib/auth/current";
+import { ALERT_TONE } from "~/lib/badges";
 import { Button } from "~/components/ui/button";
 
 export const metadata = { title: "Coverage gaps · ShiftCraft" };
@@ -100,19 +101,40 @@ export default async function CoveragePage() {
       </div>
 
       {rows.length === 0 ? (
-        <section className="rounded-lg border border-emerald-200 bg-emerald-50 px-5 py-6 text-sm text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-200">
-          Every published upcoming shift has at least one accepted assignment.
+        <section
+          className={`flex items-center gap-3 rounded-lg border-2 px-5 py-4 text-sm font-medium ${ALERT_TONE.success}`}
+        >
+          <span
+            aria-hidden
+            className="inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-emerald-600 text-sm font-bold text-white"
+          >
+            ✓
+          </span>
+          <span>
+            Every published upcoming shift has at least one accepted
+            assignment.
+          </span>
         </section>
       ) : (
         <div className="space-y-4">
           {Array.from(groups.entries()).map(([day, dayRows]) => (
             <section
               key={day}
-              className="overflow-hidden rounded-lg border border-border bg-card shadow-sm"
+              className="overflow-hidden rounded-lg border border-amber-200 bg-card shadow-sm dark:border-amber-900/40"
             >
-              <div className="flex items-center justify-between border-b border-border px-5 py-3">
-                <h2 className="text-sm font-semibold">{day}</h2>
-                <span className="text-xs text-muted-foreground">
+              <div className="flex items-center justify-between border-b border-amber-200 bg-amber-50 px-5 py-3 dark:border-amber-900/40 dark:bg-amber-900/20">
+                <div className="flex items-center gap-2">
+                  <span
+                    aria-hidden
+                    className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-amber-200 text-[10px] font-bold text-amber-900 dark:bg-amber-800/60 dark:text-amber-100"
+                  >
+                    !
+                  </span>
+                  <h2 className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+                    {day}
+                  </h2>
+                </div>
+                <span className="text-xs font-medium text-amber-800 dark:text-amber-300">
                   {dayRows.length} gap{dayRows.length === 1 ? "" : "s"}
                 </span>
               </div>

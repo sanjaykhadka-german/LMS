@@ -5,25 +5,30 @@ import {
   db,
   forTenant,
   members,
+  scDepartments,
   scEmployees,
   users,
   type ScEmploymentType,
 } from "@tracey/db";
 import { currentMembership } from "~/lib/auth/current";
+import { friendlyRoleLabel } from "~/lib/roles";
 import { Button } from "~/components/ui/button";
 
 export const metadata = { title: "Employees · ShiftCraft" };
 
+// Tailwind v4's themed palette renders bg-X-100/text-X-800 pairs as
+// low-contrast tints under this app's @theme inline tokens. Using solid
+// fills with white text guarantees legibility regardless of theme.
 const ROLE_BADGE: Record<string, string> = {
-  owner: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300",
-  admin: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
-  member: "bg-muted text-muted-foreground",
+  owner: "bg-indigo-600 text-white",
+  admin: "bg-blue-600 text-white",
+  member: "bg-slate-500 text-white",
 };
 
 const EMPLOYMENT_BADGE: Record<ScEmploymentType, string> = {
-  permanent: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300",
-  casual: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
-  labour_hire: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
+  permanent: "bg-emerald-600 text-white",
+  casual: "bg-amber-500 text-white",
+  labour_hire: "bg-purple-600 text-white",
 };
 
 const EMPLOYMENT_LABEL: Record<ScEmploymentType, string> = {
@@ -74,12 +79,16 @@ export default async function EmployeesPage({
         fullName: scEmployees.fullName,
         email: scEmployees.email,
         mobile: scEmployees.mobile,
-        department: scEmployees.department,
+        department: scDepartments.name,
         employmentType: scEmployees.employmentType,
         appUserId: scEmployees.appUserId,
         isActive: scEmployees.isActive,
       })
       .from(scEmployees)
+      .leftJoin(
+        scDepartments,
+        eq(scDepartments.id, scEmployees.departmentId),
+      )
       .where(eq(scEmployees.traceyTenantId, membership.tenant.id))
       .orderBy(asc(scEmployees.fullName)),
   );
@@ -122,7 +131,7 @@ export default async function EmployeesPage({
       </div>
 
       {added === "1" && (
-        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-800 dark:border-emerald-800/40 dark:bg-emerald-900/20 dark:text-emerald-300">
+        <div className="rounded-md border-2 border-emerald-500/60 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-900 dark:border-emerald-500/50 dark:bg-emerald-950/50 dark:text-emerald-100">
           Employee added.
         </div>
       )}
@@ -174,7 +183,7 @@ export default async function EmployeesPage({
                   <span
                     className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider ${ROLE_BADGE[r.role] ?? "bg-muted text-muted-foreground"}`}
                   >
-                    {r.role}
+                    {friendlyRoleLabel(r.role)}
                   </span>
                 </div>
               </li>
@@ -206,6 +215,9 @@ export default async function EmployeesPage({
                   <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                     ShiftCraft only
                   </span>
+                  <Button asChild variant="outline" size="sm">
+                    <Link href={`/app/employees/${r.id}/edit`}>Edit</Link>
+                  </Button>
                 </div>
               </li>
             ))}

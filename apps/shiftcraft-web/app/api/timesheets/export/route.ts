@@ -1,6 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { eq } from "drizzle-orm";
-import { db, members, users } from "@tracey/db";
+import { and, eq, sql } from "drizzle-orm";
+import {
+  db,
+  forTenant,
+  members,
+  scTimesheetApprovals,
+  users,
+  type ScTimesheetApprovalStatus,
+} from "@tracey/db";
 import { currentMembership, currentUser } from "~/lib/auth/current";
 import {
   addDays,
@@ -73,6 +80,29 @@ export async function GET(req: NextRequest) {
     byUser.set(e.appUserId, arr);
   }
 
+  // Approval status for this week, keyed by employee.
+  const weekStartIso = fmtIsoDate(weekStart);
+  const approvalRows = await forTenant(tenantId).run((tx) =>
+    tx
+      .select({
+        employeeUserId: scTimesheetApprovals.employeeUserId,
+        status: scTimesheetApprovals.status,
+      })
+      .from(scTimesheetApprovals)
+      .where(
+        and(
+          eq(scTimesheetApprovals.traceyTenantId, tenantId),
+          sql`${scTimesheetApprovals.weekStart} = ${weekStartIso}::date`,
+        ),
+      ),
+  );
+  const approvalByUser = new Map(
+    approvalRows.map((r) => [
+      r.employeeUserId,
+      r.status as ScTimesheetApprovalStatus,
+    ]),
+  );
+
   // CSV: one row per (user, day) with non-zero hours. Header below.
   const header = [
     "Employee",
@@ -80,6 +110,7 @@ export async function GET(req: NextRequest) {
     "Date",
     "Work hours (decimal)",
     "Break hours (decimal)",
+    "Approval status",
   ];
   const lines: string[] = [header.join(",")];
   for (const m of memberRows) {
@@ -106,6 +137,14 @@ export async function GET(req: NextRequest) {
       const w = perDayWork.get(key) ?? 0;
       const b = perDayBreak.get(key) ?? 0;
       if (!isAdmin && w === 0 && b === 0) continue;
+      const approval = approvalByUser.get(m.userId);
+      const statusLabel = approval
+        ? approval === "approved"
+          ? "Approved"
+          : "Disputed"
+        : w > 0 || b > 0
+          ? "Pending"
+          : "";
       lines.push(
         [
           csvCell(m.name ?? m.email),
@@ -113,6 +152,7 @@ export async function GET(req: NextRequest) {
           csvCell(key),
           fmtMsAsDecimalHours(w),
           fmtMsAsDecimalHours(b),
+          csvCell(statusLabel),
         ].join(","),
       );
     }

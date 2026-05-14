@@ -16,7 +16,22 @@ const locationSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(120, "Too long"),
   timezone: z.string().trim().min(1, "Timezone is required").max(64),
   address: z.string().trim().max(500).optional().or(z.literal("")),
+  color: z
+    .union([
+      z.literal(""),
+      z
+        .string()
+        .trim()
+        .regex(/^#[0-9a-f]{6}$/i, "Use a #RRGGBB hex value like #7C1F1F"),
+    ])
+    .optional(),
 });
+
+function emptyToNull(v: string | undefined | null): string | null {
+  if (!v) return null;
+  const trimmed = v.trim();
+  return trimmed.length === 0 ? null : trimmed;
+}
 
 async function requireTenant() {
   const m = await currentMembership();
@@ -32,6 +47,7 @@ export async function createLocationAction(
     name: formData.get("name"),
     timezone: formData.get("timezone"),
     address: formData.get("address") ?? "",
+    color: formData.get("color") ?? "",
   });
   if (!parsed.success) {
     return {
@@ -46,7 +62,8 @@ export async function createLocationAction(
     tx.insert(scLocations).values({
       name: parsed.data.name,
       timezone: parsed.data.timezone,
-      address: parsed.data.address?.length ? parsed.data.address : null,
+      address: emptyToNull(parsed.data.address),
+      color: emptyToNull(parsed.data.color)?.toLowerCase() ?? null,
       traceyTenantId: tenant.id,
     }),
   );
@@ -63,6 +80,7 @@ export async function updateLocationAction(
     name: formData.get("name"),
     timezone: formData.get("timezone"),
     address: formData.get("address") ?? "",
+    color: formData.get("color") ?? "",
   });
   if (!parsed.success) {
     return {
@@ -79,7 +97,8 @@ export async function updateLocationAction(
       .set({
         name: parsed.data.name,
         timezone: parsed.data.timezone,
-        address: parsed.data.address?.length ? parsed.data.address : null,
+        address: emptyToNull(parsed.data.address),
+        color: emptyToNull(parsed.data.color)?.toLowerCase() ?? null,
       })
       .where(and(eq(scLocations.id, id), eq(scLocations.traceyTenantId, tenant.id))),
   );

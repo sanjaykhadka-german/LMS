@@ -45,9 +45,9 @@ function fmtDayHeader(d: Date): string {
 }
 
 const STATUS_STYLES: Record<string, string> = {
-  draft: "bg-muted text-muted-foreground",
-  published: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300",
-  cancelled: "bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-300 line-through",
+  draft: "bg-slate-500 text-white",
+  published: "bg-emerald-600 text-white",
+  cancelled: "bg-rose-600 text-white line-through",
 };
 
 export default async function SchedulePage({
@@ -102,6 +102,7 @@ export default async function SchedulePage({
           endsAt: scShifts.endsAt,
           status: scShifts.status,
           locationName: scLocations.name,
+          locationColor: scLocations.color,
           acceptedCount,
           offeredCount,
         })
@@ -118,7 +119,11 @@ export default async function SchedulePage({
     ),
     ctx.run((tx) =>
       tx
-        .select({ id: scLocations.id, name: scLocations.name })
+        .select({
+          id: scLocations.id,
+          name: scLocations.name,
+          color: scLocations.color,
+        })
         .from(scLocations)
         .orderBy(asc(scLocations.name)),
     ),
@@ -213,7 +218,17 @@ export default async function SchedulePage({
               size="sm"
               variant={locationFilter === loc.id ? "default" : "outline"}
             >
-              <Link href={`/app/schedule${qs({ location: loc.id })}`}>
+              <Link
+                href={`/app/schedule${qs({ location: loc.id })}`}
+                className="inline-flex items-center gap-1.5"
+              >
+                {loc.color && (
+                  <span
+                    aria-hidden
+                    className="h-2 w-2 rounded-full"
+                    style={{ backgroundColor: loc.color }}
+                  />
+                )}
                 {loc.name}
               </Link>
             </Button>
@@ -235,11 +250,29 @@ export default async function SchedulePage({
             ) : (
               <ul className="divide-y divide-border">
                 {d.shifts.map((s) => (
-                  <li key={s.id} className="px-4 py-3">
+                  <li
+                    key={s.id}
+                    className="relative px-4 py-3"
+                    style={
+                      s.locationColor
+                        ? { boxShadow: `inset 3px 0 0 ${s.locationColor}` }
+                        : undefined
+                    }
+                  >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <div className="text-sm font-medium">
-                          {fmtTime(s.startsAt)} – {fmtTime(s.endsAt)} · {s.role}
+                        <div className="flex items-center gap-2 text-sm font-medium">
+                          {s.locationColor && (
+                            <span
+                              aria-hidden
+                              className="h-2 w-2 flex-shrink-0 rounded-full"
+                              style={{ backgroundColor: s.locationColor }}
+                            />
+                          )}
+                          <span>
+                            {fmtTime(s.startsAt)} – {fmtTime(s.endsAt)} ·{" "}
+                            {s.role}
+                          </span>
                         </div>
                         <div className="truncate text-xs text-muted-foreground">
                           {s.locationName ?? "—"}

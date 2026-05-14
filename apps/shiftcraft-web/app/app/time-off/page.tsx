@@ -17,10 +17,10 @@ type Filter = "pending" | "approved" | "denied" | "cancelled" | "all";
 const FILTERS: Filter[] = ["pending", "approved", "denied", "cancelled", "all"];
 
 const STATUS_BADGE: Record<string, string> = {
-  pending: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
-  approved: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300",
-  denied: "bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-300",
-  cancelled: "bg-muted text-muted-foreground line-through",
+  pending: "bg-amber-500 text-white",
+  approved: "bg-emerald-600 text-white",
+  denied: "bg-rose-600 text-white",
+  cancelled: "bg-slate-500 text-white line-through",
 };
 
 function fmtDate(iso: string): string {

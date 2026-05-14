@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { asc, eq } from "drizzle-orm";
+import { forTenant, scDepartments } from "@tracey/db";
 import { currentMembership } from "~/lib/auth/current";
 import { EmployeeForm } from "./_form";
 
@@ -8,6 +10,14 @@ export const metadata = { title: "Add employee · ShiftCraft" };
 export default async function NewEmployeePage() {
   const membership = await currentMembership();
   if (!membership) redirect("/app");
+
+  const departments = await forTenant(membership.tenant.id).run((tx) =>
+    tx
+      .select({ name: scDepartments.name })
+      .from(scDepartments)
+      .where(eq(scDepartments.traceyTenantId, membership.tenant.id))
+      .orderBy(asc(scDepartments.name)),
+  );
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-6 py-10">
@@ -30,7 +40,9 @@ export default async function NewEmployeePage() {
       </div>
 
       <section className="rounded-lg border border-border bg-card p-6 shadow-sm">
-        <EmployeeForm />
+        <EmployeeForm
+          departmentSuggestions={departments.map((d) => d.name)}
+        />
       </section>
     </div>
   );

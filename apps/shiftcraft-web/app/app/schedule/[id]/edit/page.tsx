@@ -32,11 +32,11 @@ function toLocalInput(d: Date): string {
 }
 
 const ASSIGN_BADGE: Record<string, string> = {
-  offered: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
-  accepted: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300",
-  declined: "bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-300",
-  swapped: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
-  no_show: "bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-300",
+  offered: "bg-amber-500 text-white",
+  accepted: "bg-emerald-600 text-white",
+  declined: "bg-rose-600 text-white",
+  swapped: "bg-blue-600 text-white",
+  no_show: "bg-rose-600 text-white",
 };
 
 export default async function EditShiftPage({

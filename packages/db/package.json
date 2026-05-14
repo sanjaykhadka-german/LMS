@@ -22,6 +22,7 @@
     "tenant-copy": "tsx src/cli/tenant-copy.ts",
     "tenant-freeze": "tsx src/cli/tenant-freeze.ts",
     "tenant-unfreeze": "tsx src/cli/tenant-unfreeze.ts",
+    "seed-shiftcraft": "tsx src/cli/shiftcraft-seed.ts",
     "reset": "tsx src/reset.ts",
     "studio": "drizzle-kit studio",
     "typecheck": "tsc --noEmit"

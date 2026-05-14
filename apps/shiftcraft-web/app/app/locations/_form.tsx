@@ -27,7 +27,12 @@ const COMMON_TIMEZONES = [
 interface Props {
   mode: "create" | "edit";
   locationId?: string;
-  defaultValues?: { name: string; timezone: string; address: string | null };
+  defaultValues?: {
+    name: string;
+    timezone: string;
+    address: string | null;
+    color: string | null;
+  };
 }
 
 export function LocationForm({ mode, locationId, defaultValues }: Props) {
@@ -92,6 +97,27 @@ export function LocationForm({ mode, locationId, defaultValues }: Props) {
         {state.status === "error" && state.fieldErrors?.address && (
           <p className="text-xs text-[color:var(--destructive)]">
             {state.fieldErrors.address[0]}
+          </p>
+        )}
+      </div>
+
+      <div className="space-y-1.5 sm:col-span-2">
+        <Label htmlFor="color">Accent colour (optional)</Label>
+        <div className="flex items-center gap-2">
+          <input
+            id="color"
+            name="color"
+            type="color"
+            defaultValue={defaultValues?.color ?? "#7c1f1f"}
+            className="h-9 w-12 cursor-pointer rounded-md border border-[color:var(--input)] bg-transparent p-1"
+          />
+          <span className="text-xs text-muted-foreground">
+            Used to colour-code this location on the schedule and dashboard.
+          </span>
+        </div>
+        {state.status === "error" && state.fieldErrors?.color && (
+          <p className="text-xs text-[color:var(--destructive)]">
+            {state.fieldErrors.color[0]}
           </p>
         )}
       </div>
