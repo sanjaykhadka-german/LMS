@@ -1,13 +1,21 @@
 import Link from "next/link";
 import { and, asc, between, count, eq } from "drizzle-orm";
 import {
+  db,
   forTenant,
+  members,
   scLocations,
   scShiftAssignments,
   scShifts,
   scTimeOffRequests,
+  users as appUsers,
 } from "@tracey/db";
 import { currentMembership, currentUser } from "~/lib/auth/current";
+import {
+  deriveClockState,
+  fmtHours,
+  getEventsInRangeForTenant,
+} from "~/lib/clock";
 
 function startOfWeek(d: Date): Date {
   const dow = (d.getDay() + 6) % 7;
@@ -118,6 +126,71 @@ export default async function DashboardPage() {
       .limit(3),
   );
 
+  // Who's on the floor right now: read the last 24h of clock events, group
+  // by user, derive each user's current state, keep those still working or
+  // on break. A 24h window is enough to catch overnight shifts without
+  // pulling the whole event history into memory.
+  const last24h = addDays(new Date(), -1);
+  const recentEvents = await getEventsInRangeForTenant(
+    membership.tenant.id,
+    last24h,
+    new Date(Date.now() + 60_000),
+  );
+  const eventsByUser = new Map<string, typeof recentEvents>();
+  for (const e of recentEvents) {
+    const arr = eventsByUser.get(e.appUserId) ?? [];
+    arr.push(e);
+    eventsByUser.set(e.appUserId, arr);
+  }
+  const userIds = Array.from(eventsByUser.keys());
+  const userRows =
+    userIds.length === 0
+      ? []
+      : await db
+          .select({
+            id: appUsers.id,
+            name: appUsers.name,
+            email: appUsers.email,
+          })
+          .from(appUsers)
+          .innerJoin(members, eq(members.userId, appUsers.id))
+          .where(eq(members.tenantId, membership.tenant.id));
+  const userById = new Map(userRows.map((u) => [u.id, u]));
+  const locationById = new Map<string, string>();
+  if (eventsByUser.size > 0) {
+    const locs = await forTenant(membership.tenant.id).run((tx) =>
+      tx
+        .select({ id: scLocations.id, name: scLocations.name })
+        .from(scLocations)
+        .where(eq(scLocations.traceyTenantId, membership.tenant.id)),
+    );
+    for (const l of locs) locationById.set(l.id, l.name);
+  }
+  const onTheFloor: Array<{
+    userId: string;
+    name: string;
+    status: "working" | "on_break";
+    sinceIso: string;
+    locationName: string | null;
+  }> = [];
+  for (const [uid, evts] of eventsByUser) {
+    const state = deriveClockState(evts);
+    if (state.status === "clocked_out") continue;
+    const u = userById.get(uid);
+    if (!u) continue;
+    const lastWithLoc = [...evts].reverse().find((e) => e.locationId != null);
+    onTheFloor.push({
+      userId: uid,
+      name: u.name ?? u.email,
+      status: state.status,
+      sinceIso: state.segmentStartedAt?.toISOString() ?? new Date().toISOString(),
+      locationName: lastWithLoc?.locationId
+        ? locationById.get(lastWithLoc.locationId) ?? null
+        : null,
+    });
+  }
+  onTheFloor.sort((a, b) => a.name.localeCompare(b.name));
+
   return (
     <div className="mx-auto max-w-5xl space-y-8 px-6 py-12">
       <div>
@@ -131,9 +204,10 @@ export default async function DashboardPage() {
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <Stat
-          label="Locations"
-          value={locationsCount}
-          href="/app/locations"
+          label="On the floor"
+          value={onTheFloor.length}
+          href="/app/clock"
+          highlight={onTheFloor.length > 0}
         />
         <Stat
           label="Shifts this week"
@@ -153,6 +227,59 @@ export default async function DashboardPage() {
           highlight={isAdmin && pendingTimeOffCount > 0}
         />
       </div>
+
+      <section className="rounded-lg border border-border bg-card shadow-sm">
+        <div className="flex items-center justify-between border-b border-border px-5 py-3">
+          <h2 className="text-base font-semibold">
+            Who's on the floor{" "}
+            <span className="ml-1 text-xs font-normal text-muted-foreground">
+              · {locationsCount} location{locationsCount === 1 ? "" : "s"}
+            </span>
+          </h2>
+          <Link
+            href="/app/timesheets"
+            className="text-xs text-primary hover:underline"
+          >
+            Timesheets →
+          </Link>
+        </div>
+        {onTheFloor.length === 0 ? (
+          <p className="px-5 py-6 text-sm text-muted-foreground">
+            No one currently clocked in.{" "}
+            <Link href="/app/clock" className="text-primary hover:underline">
+              Punch in →
+            </Link>
+          </p>
+        ) : (
+          <ul className="divide-y divide-border">
+            {onTheFloor.map((p) => {
+              const elapsedMs = Date.now() - new Date(p.sinceIso).getTime();
+              return (
+                <li
+                  key={p.userId}
+                  className="flex items-center justify-between gap-3 px-5 py-3"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium">{p.name}</div>
+                    <div className="truncate text-xs text-muted-foreground">
+                      {p.status === "working" ? "Working" : "On break"}
+                      {p.locationName ? ` · ${p.locationName}` : ""} ·{" "}
+                      since{" "}
+                      {new Date(p.sinceIso).toLocaleTimeString(undefined, {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </div>
+                  </div>
+                  <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                    {fmtHours(elapsedMs)}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
 
       <section className="rounded-lg border border-border bg-card shadow-sm">
         <div className="flex items-center justify-between border-b border-border px-5 py-3">

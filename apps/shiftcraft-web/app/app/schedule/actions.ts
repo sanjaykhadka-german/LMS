@@ -141,12 +141,17 @@ export async function bulkPublishWeekAction(formData: FormData): Promise<void> {
     throw new Error("Only admins can publish shifts.");
   }
 
+  // Pass ISO strings + explicit ::timestamptz cast inside the sql template.
+  // Drizzle's `sql` tag has no column-type info, so a raw Date would reach
+  // postgres-js (prepare:false) without a type hint and trip its
+  // Buffer.byteLength path — see locations/page.tsx for the same pattern.
+  const startsAtIso = new Date(weekStart).toISOString();
+  const endsAtIso = new Date(weekEnd).toISOString();
   const conditions = [
     eq(scShifts.traceyTenantId, membership.tenant.id),
     eq(scShifts.status, "draft"),
-    // Drizzle's between() expects Date|number, so we parse ISO strings here.
-    sql`${scShifts.startsAt} >= ${new Date(weekStart)}`,
-    sql`${scShifts.startsAt} < ${new Date(weekEnd)}`,
+    sql`${scShifts.startsAt} >= ${startsAtIso}::timestamptz`,
+    sql`${scShifts.startsAt} < ${endsAtIso}::timestamptz`,
   ];
   if (locationId) conditions.push(eq(scShifts.locationId, locationId));
 

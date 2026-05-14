@@ -24,12 +24,16 @@ export default async function LocationsPage({
   // Upcoming shift count per location: shifts that are published AND start
   // from now onward. Computed in-DB as a correlated subquery so it scales
   // with locations, not with shifts.
-  const now = new Date();
+  // ISO string + explicit cast: Drizzle's `sql` template has no column-type
+  // info, so a raw `Date` would be handed to postgres-js without a type hint
+  // and trip its `Buffer.byteLength(value)` path. Passing text and casting
+  // to timestamptz on the server side avoids the issue.
+  const nowIso = new Date().toISOString();
   const upcomingCount = sql<number>`(
     SELECT count(*)::int FROM ${scShifts}
     WHERE ${scShifts.locationId} = ${scLocations.id}
       AND ${scShifts.status} = 'published'
-      AND ${scShifts.startsAt} >= ${now}
+      AND ${scShifts.startsAt} >= ${nowIso}::timestamptz
   )`;
 
   const locations = await forTenant(membership.tenant.id).run((tx) =>

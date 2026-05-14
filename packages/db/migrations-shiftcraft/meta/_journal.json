@@ -15,6 +15,20 @@
       "when": 1778677326195,
       "tag": "0001_real_hobgoblin",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1778732552996,
+      "tag": "0002_young_longshot",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1778736973595,
+      "tag": "0003_material_chimera",
+      "breakpoints": true
     }
   ]
 }

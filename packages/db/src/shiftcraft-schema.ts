@@ -27,9 +27,11 @@
 
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   date,
   index,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -209,6 +211,118 @@ export const scShiftSwapRequests = pgTable(
   ],
 );
 
+// ─── Employees (HR-side roster) ───
+//
+// ShiftCraft-owned record of someone who can be assigned to shifts. Distinct
+// from `app.users` (auth identity) and `app.members` (tenant access) so that
+// labour-hire / contractor staff who never need a login still appear on the
+// roster. Permanent and casual employees can be linked to their auth user
+// (app_user_id) when they have one — for example after self-onboarding or
+// when the LMS admin confirms the suggested learner record.
+//
+// `email` is nullable because labour-hire rows often have only a name +
+// mobile. The partial unique index on (tracey_tenant_id, lower(email))
+// prevents duplicate emails within a tenant while still allowing many
+// null-email rows.
+//
+// `availability` is jsonb for now — kept flexible while we figure out the
+// shape (initial form uses `{ mon: "09-17", tue: "...", ... }`).
+
+export const scEmployees = pgTable(
+  "sc_employees",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    traceyTenantId: text("tracey_tenant_id").notNull(),
+    appUserId: uuid("app_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    fullName: text("full_name").notNull(),
+    email: text("email"),
+    mobile: text("mobile"),
+    department: text("department"),
+    availability: jsonb("availability"),
+    employmentType: text("employment_type").notNull().default("permanent"),
+    isActive: boolean("is_active").notNull().default(true),
+    notes: text("notes"),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("sc_employees_tenant_idx").on(t.traceyTenantId, t.isActive),
+    index("sc_employees_app_user_idx").on(t.appUserId),
+    uniqueIndex("sc_employees_tenant_email_uq")
+      .on(t.traceyTenantId, sql`lower(${t.email})`)
+      .where(sql`${t.email} is not null`),
+    check(
+      "sc_employees_employment_type_chk",
+      sql`${t.employmentType} in ('permanent','casual','labour_hire')`,
+    ),
+    check(
+      "sc_employees_email_format_chk",
+      sql`${t.email} is null or position('@' in ${t.email}) > 1`,
+    ),
+  ],
+);
+
+// ─── Clock events ───
+//
+// Append-only stream of clock punches. Each row is one transition:
+//   in           — start of a work segment
+//   break_start  — pause work (lunch / short break)
+//   break_end    — resume work after a break
+//   out          — end of work segment
+//
+// Derived state ("currently clocked in", "on break", "elapsed today",
+// "hours this week") is computed by walking the stream — see
+// apps/shiftcraft-web/lib/clock.ts. Keeping the table append-only means
+// edits/corrections are themselves rows (a future slice can add
+// `corrects_event_id` and `reason`) rather than mutating history.
+//
+// `location_id` is optional: kiosk/geofence integrations would populate
+// it, but a phone-based clock-in might not know which location the user
+// is at. No FK to sc_employees because clock events are keyed on
+// app_user_id (the auth identity) — a labour-hire row without an auth
+// user can't clock in anyway.
+
+export const scClockEvents = pgTable(
+  "sc_clock_events",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    traceyTenantId: text("tracey_tenant_id").notNull(),
+    appUserId: uuid("app_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    locationId: uuid("location_id"),
+    eventType: text("event_type").notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    source: text("source").notNull().default("manual"),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("sc_clock_events_user_occurred_idx").on(t.appUserId, t.occurredAt),
+    index("sc_clock_events_tenant_occurred_idx").on(
+      t.traceyTenantId,
+      t.occurredAt,
+    ),
+    check(
+      "sc_clock_events_type_chk",
+      sql`${t.eventType} in ('in','out','break_start','break_end')`,
+    ),
+    check(
+      "sc_clock_events_source_chk",
+      sql`${t.source} in ('manual','kiosk','geofence','admin_edit')`,
+    ),
+  ],
+);
+
 // ─── Inferred types ───
 
 export type ScLocation = typeof scLocations.$inferSelect;
@@ -221,6 +335,13 @@ export type ScTimeOffRequest = typeof scTimeOffRequests.$inferSelect;
 export type NewScTimeOffRequest = typeof scTimeOffRequests.$inferInsert;
 export type ScShiftSwapRequest = typeof scShiftSwapRequests.$inferSelect;
 export type NewScShiftSwapRequest = typeof scShiftSwapRequests.$inferInsert;
+export type ScEmployee = typeof scEmployees.$inferSelect;
+export type NewScEmployee = typeof scEmployees.$inferInsert;
+export type ScEmploymentType = "permanent" | "casual" | "labour_hire";
+export type ScClockEvent = typeof scClockEvents.$inferSelect;
+export type NewScClockEvent = typeof scClockEvents.$inferInsert;
+export type ScClockEventType = "in" | "out" | "break_start" | "break_end";
+export type ScClockEventSource = "manual" | "kiosk" | "geofence" | "admin_edit";
 export type ScShiftStatus = "draft" | "published" | "cancelled";
 export type ScAssignmentStatus =
   | "offered"

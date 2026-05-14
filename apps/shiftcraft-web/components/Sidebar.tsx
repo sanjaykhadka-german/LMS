@@ -7,23 +7,25 @@ import {
   CalendarCheck,
   CalendarDays,
   CalendarOff,
+  ClipboardList,
+  Clock,
   LayoutDashboard,
   LogOut,
   MapPin,
   Repeat,
   Users,
 } from "lucide-react";
-import { AppSwitcher } from "@tracey/ui";
 import { cn } from "~/lib/utils";
-import { APPS, CURRENT_APP_ID } from "~/lib/site-config";
 import { Logo } from "./Logo";
 import { signOutAction } from "~/app/app/_actions";
 
 const NAV = [
   { href: "/app", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/app/clock", label: "Time clock", icon: Clock },
   { href: "/app/my-shifts", label: "My shifts", icon: CalendarCheck },
   { href: "/app/schedule", label: "Schedule", icon: CalendarDays },
   { href: "/app/coverage-gaps", label: "Coverage gaps", icon: AlertCircle },
+  { href: "/app/timesheets", label: "Timesheets", icon: ClipboardList },
   { href: "/app/locations", label: "Locations", icon: MapPin },
   { href: "/app/employees", label: "Employees", icon: Users },
   { href: "/app/time-off", label: "Time off", icon: CalendarOff },
@@ -39,13 +41,8 @@ export function Sidebar({ name, role }: { name: string; role: string }) {
   const items = isAdmin ? [...NAV, ...ADMIN_NAV] : NAV;
   return (
     <aside className="sticky top-0 flex h-screen w-64 flex-col border-r border-border bg-card">
-      <div className="flex items-center justify-between border-b border-border px-5 py-6">
+      <div className="border-b border-border px-5 py-6">
         <Logo size="sm" />
-        <AppSwitcher
-          currentAppId={CURRENT_APP_ID}
-          apps={[APPS.lms, APPS.shiftcraft]}
-          hubUrl={APPS.hub.url}
-        />
       </div>
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
         {items.map((item) => {
