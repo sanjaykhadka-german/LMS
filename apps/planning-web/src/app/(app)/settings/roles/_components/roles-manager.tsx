@@ -1,10 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import {
+  createRoleAction,
+  setPermissionAction,
+  toggleRoleActiveAction,
+  type CreatedPermission,
+  type CreatedRole,
+} from "../actions";
 
-type Role = { id: string; name: string; description: string | null; is_system: boolean; is_active: boolean; sort_order: number };
-type Permission = { id: string; role_id: string; section: string; access: string };
+type Role = CreatedRole;
+type Permission = CreatedPermission;
 type AccessLevel = "none" | "read" | "write";
 
 const SECTIONS: { key: string; label: string; group: string }[] = [
@@ -36,20 +42,15 @@ const GROUPS = Array.from(new Set(SECTIONS.map(s => s.group)));
 export default function RolesManager({
   initialRoles,
   initialPermissions,
-  tenantId,
 }: {
   initialRoles: Role[];
   initialPermissions: Permission[];
-  tenantId: string;
 }) {
-  const supabase = createClient();
-
   const [roles, setRoles] = useState<Role[]>(initialRoles);
   const [permissions, setPermissions] = useState<Permission[]>(initialPermissions);
-  const [saving, setSaving] = useState<string | null>(null); // section::role_id being saved
+  const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // New role form
   const [showAddRole, setShowAddRole] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
@@ -64,49 +65,49 @@ export default function RolesManager({
     const key = `${section}::${roleId}`;
     setSaving(key);
     setError(null);
-
-    const existing = permissions.find(p => p.role_id === roleId && p.section === section);
-
-    if (existing) {
-      const { error: e } = await supabase
-        .from("role_permissions")
-        .update({ access: newAccess })
-        .eq("id", existing.id);
-      if (e) { setError(e.message); setSaving(null); return; }
-      setPermissions(prev => prev.map(p => p.id === existing.id ? { ...p, access: newAccess } : p));
-    } else {
-      const { data, error: e } = await supabase
-        .from("role_permissions")
-        .insert({ role_id: roleId, section, access: newAccess })
-        .select("id, role_id, section, access")
-        .single();
-      if (e || !data) { setError(e?.message ?? "Failed"); setSaving(null); return; }
-      setPermissions(prev => [...prev, data as Permission]);
+    try {
+      const saved = await setPermissionAction(roleId, section, newAccess);
+      setPermissions(prev => {
+        const idx = prev.findIndex(p => p.role_id === roleId && p.section === section);
+        if (idx === -1) return [...prev, saved];
+        const next = prev.slice();
+        next[idx] = saved;
+        return next;
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setSaving(null);
     }
-    setSaving(null);
   };
 
   const handleToggleRole = async (role: Role) => {
     if (role.is_system) return;
-    const { error: e } = await supabase.from("roles").update({ is_active: !role.is_active }).eq("id", role.id);
-    if (!e) setRoles(prev => prev.map(r => r.id === role.id ? { ...r, is_active: !role.is_active } : r));
+    try {
+      await toggleRoleActiveAction(role.id, !role.is_active);
+      setRoles(prev => prev.map(r => r.id === role.id ? { ...r, is_active: !role.is_active } : r));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Toggle failed");
+    }
   };
 
   const handleAddRole = async () => {
     if (!newName.trim()) { setAddError("Name is required"); return; }
     setAddingRole(true); setAddError(null);
-    const { data, error: e } = await supabase
-      .from("roles")
-      .insert({ tenant_id: tenantId, name: newName.trim(), description: newDesc.trim() || null, is_system: false, sort_order: roles.length + 1 })
-      .select("id, name, description, is_system, is_active, sort_order")
-      .single();
-    if (e || !data) { setAddError(e?.message ?? "Failed"); setAddingRole(false); return; }
-    // Seed all sections as 'none' for the new role
-    const inserts = SECTIONS.map(s => ({ role_id: data.id, section: s.key, access: "none" }));
-    const { data: newPerms } = await supabase.from("role_permissions").insert(inserts).select("id, role_id, section, access");
-    setRoles(prev => [...prev, data as Role]);
-    setPermissions(prev => [...prev, ...(newPerms ?? []) as Permission[]]);
-    setNewName(""); setNewDesc(""); setShowAddRole(false); setAddingRole(false);
+    try {
+      const { role: created, permissions: newPerms } = await createRoleAction({
+        name: newName,
+        description: newDesc,
+        sections: SECTIONS.map(s => s.key),
+      });
+      setRoles(prev => [...prev, created]);
+      setPermissions(prev => [...prev, ...newPerms]);
+      setNewName(""); setNewDesc(""); setShowAddRole(false);
+    } catch (err) {
+      setAddError(err instanceof Error ? err.message : "Failed");
+    } finally {
+      setAddingRole(false);
+    }
   };
 
   return (
