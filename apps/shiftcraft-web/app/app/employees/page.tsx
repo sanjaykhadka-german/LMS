@@ -12,6 +12,7 @@ import {
 } from "@tracey/db";
 import { currentMembership } from "~/lib/auth/current";
 import { friendlyRoleLabel } from "~/lib/roles";
+import { Avatar } from "~/components/Avatar";
 import { Button } from "~/components/ui/button";
 
 export const metadata = { title: "Employees · ShiftCraft" };
@@ -36,14 +37,6 @@ const EMPLOYMENT_LABEL: Record<ScEmploymentType, string> = {
   casual: "Casual",
   labour_hire: "Labour hire",
 };
-
-function initials(name: string | null, fallback: string): string {
-  if (name && name.trim().length > 0) {
-    const parts = name.trim().split(/\s+/);
-    return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase();
-  }
-  return (fallback[0] ?? "?").toUpperCase();
-}
 
 export default async function EmployeesPage({
   searchParams,
@@ -149,18 +142,13 @@ export default async function EmployeesPage({
                 className="flex items-center justify-between gap-3 px-5 py-3"
               >
                 <div className="flex min-w-0 items-center gap-3">
-                  {r.image ? (
-                    /* eslint-disable-next-line @next/next/no-img-element */
-                    <img
-                      src={r.image}
-                      alt=""
-                      className="h-9 w-9 rounded-full object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-xs font-semibold">
-                      {initials(r.name, r.email)}
-                    </div>
-                  )}
+                  <Avatar
+                    name={r.name}
+                    email={r.email}
+                    image={r.image}
+                    sizeClass="h-9 w-9"
+                    textClass="text-xs"
+                  />
                   <div className="min-w-0">
                     <div className="truncate text-sm font-medium">
                       {r.name ?? r.email}
@@ -194,9 +182,13 @@ export default async function EmployeesPage({
                 className="flex items-center justify-between gap-3 px-5 py-3"
               >
                 <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-xs font-semibold">
-                    {initials(r.fullName, r.email ?? r.fullName)}
-                  </div>
+                  <Avatar
+                    name={r.fullName}
+                    email={r.email ?? r.fullName}
+                    image={null}
+                    sizeClass="h-9 w-9"
+                    textClass="text-xs"
+                  />
                   <div className="min-w-0">
                     <div className="truncate text-sm font-medium">{r.fullName}</div>
                     <div className="truncate text-xs text-muted-foreground">

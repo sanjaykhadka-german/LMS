@@ -116,13 +116,21 @@ export default async function AnnouncementsPage({
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className="text-sm font-semibold">{r.title}</h3>
                         {r.pinned && !expired && (
-                          <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+                          <span className="inline-flex items-center rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white">
                             Pinned
                           </span>
                         )}
                         {expired && (
-                          <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                          <span className="inline-flex items-center rounded-full bg-slate-500 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white">
                             Expired
+                          </span>
+                        )}
+                        {r.emailedAt && (
+                          <span
+                            className="inline-flex items-center rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white"
+                            title={`Sent to ${r.emailedRecipientCount ?? 0} ${r.emailedRecipientCount === 1 ? "person" : "people"} on ${fmtWhen(r.emailedAt)}`}
+                          >
+                            Emailed · {r.emailedRecipientCount ?? 0}
                           </span>
                         )}
                       </div>

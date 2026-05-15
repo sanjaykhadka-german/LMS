@@ -76,6 +76,28 @@ export function AnnouncementForm() {
             aria-invalid={!!fieldErr(state, "expiresAt")}
           />
         </div>
+        <div className="sm:col-span-2 rounded-md border border-border bg-muted/30 p-3">
+          <div className="flex items-start gap-2">
+            <input
+              id="notifyByEmail"
+              name="notifyByEmail"
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 rounded border-[color:var(--input)]"
+            />
+            <div className="space-y-0.5">
+              <Label
+                htmlFor="notifyByEmail"
+                className="text-sm font-medium"
+              >
+                Also send by email to every team member
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Use sparingly — sends one email per member to the address
+                they signed up with. The author isn't emailed back.
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="flex items-center gap-3">

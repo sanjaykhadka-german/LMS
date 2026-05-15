@@ -6,44 +6,35 @@ import {
   ROLE_DESCRIPTIONS,
   friendlyRoleLabel,
 } from "~/lib/roles";
+import { Avatar } from "~/components/Avatar";
 
 export const metadata = { title: "Team · ShiftCraft" };
 
-// Per-tier visual treatment. The accent colour is used both as a card
-// top-border and as the badge fill so the permission cards and the
-// All-members group headers feel like they belong to the same system.
+// Per-tier visual treatment. Tailwind v4's themed palette renders
+// bg-X-50 + text-X-900 as a low-contrast tint pair, so the card header
+// band uses a solid mid-tone fill with white text instead. The body
+// below the band falls back to the regular card background.
 const ROLE_THEME: Record<
   Role,
-  {
-    accent: string;
-    headerBg: string;
-    headerText: string;
-    badge: string;
-    border: string;
-  }
+  { headerBg: string; badgeBg: string; border: string; accent: string }
 > = {
   owner: {
-    accent: "bg-indigo-500",
-    headerBg: "bg-indigo-50 dark:bg-indigo-900/20",
-    headerText: "text-indigo-900 dark:text-indigo-200",
-    badge:
-      "bg-indigo-600 text-white dark:bg-indigo-500/90",
-    border:
-      "border-indigo-200 dark:border-indigo-900/40",
+    headerBg: "bg-indigo-600",
+    badgeBg: "bg-indigo-900/40",
+    border: "border-indigo-200 dark:border-indigo-900/40",
+    accent: "bg-indigo-600",
   },
   admin: {
-    accent: "bg-blue-500",
-    headerBg: "bg-blue-50 dark:bg-blue-900/20",
-    headerText: "text-blue-900 dark:text-blue-200",
-    badge: "bg-blue-600 text-white dark:bg-blue-500/90",
+    headerBg: "bg-blue-600",
+    badgeBg: "bg-blue-900/40",
     border: "border-blue-200 dark:border-blue-900/40",
+    accent: "bg-blue-600",
   },
   member: {
-    accent: "bg-slate-400 dark:bg-slate-500",
-    headerBg: "bg-muted",
-    headerText: "text-foreground",
-    badge: "bg-slate-500 text-white dark:bg-slate-400/90",
+    headerBg: "bg-slate-600",
+    badgeBg: "bg-slate-900/40",
     border: "border-border",
+    accent: "bg-slate-500",
   },
 };
 
@@ -97,20 +88,19 @@ export default async function TeamPage() {
               key={role}
               className={`overflow-hidden rounded-lg border bg-card shadow-sm ${theme.border}`}
             >
-              <div aria-hidden className={`h-1 w-full ${theme.accent}`} />
               <div
-                className={`flex items-baseline justify-between gap-2 px-4 py-3 ${theme.headerBg}`}
+                className={`flex items-center justify-between gap-2 px-4 py-3 text-white ${theme.headerBg}`}
               >
                 <div>
-                  <h3 className={`text-base font-semibold ${theme.headerText}`}>
+                  <h3 className="text-base font-semibold leading-tight">
                     {desc.label}
                   </h3>
-                  <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                  <div className="font-mono text-[10px] uppercase tracking-wider text-white/70">
                     role: {desc.underlying}
                   </div>
                 </div>
                 <span
-                  className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${theme.badge}`}
+                  className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white ${theme.badgeBg}`}
                 >
                   Tier
                 </span>
@@ -170,9 +160,13 @@ export default async function TeamPage() {
                     className="flex items-center justify-between gap-3 px-5 py-3"
                   >
                     <div className="flex min-w-0 items-center gap-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-semibold">
-                        {(r.name ?? r.email)[0]?.toUpperCase() ?? "?"}
-                      </div>
+                      <Avatar
+                        name={r.name}
+                        email={r.email}
+                        image={r.image}
+                        sizeClass="h-8 w-8"
+                        textClass="text-xs"
+                      />
                       <div className="min-w-0">
                         <div className="truncate text-sm font-medium">
                           {r.name ?? r.email}

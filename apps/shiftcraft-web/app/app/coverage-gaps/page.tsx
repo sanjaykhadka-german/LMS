@@ -102,11 +102,11 @@ export default async function CoveragePage() {
 
       {rows.length === 0 ? (
         <section
-          className={`flex items-center gap-3 rounded-lg border-2 px-5 py-4 text-sm font-medium ${ALERT_TONE.success}`}
+          className={`flex items-center gap-3 rounded-lg border-2 px-5 py-4 text-sm font-medium ${ALERT_TONE.success.solid}`}
         >
           <span
             aria-hidden
-            className="inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-emerald-600 text-sm font-bold text-white"
+            className={`inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-sm font-bold ${ALERT_TONE.success.accent}`}
           >
             ✓
           </span>

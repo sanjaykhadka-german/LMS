@@ -30,16 +30,30 @@ export const BADGE_TONE: Record<BadgeTone, string> = {
 export const BADGE_CHIP =
   "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider";
 
-// Banner / alert surfaces (whole-section tints, not pill chips). Same
-// motivation as BADGE_TONE — light bg + light text under v4 reads as
-// washed-out. Strong border + bold text fixes contrast without losing
-// the soft-tint look.
+// Banner / alert surfaces. Tailwind v4's @theme-inline palette renders
+// the typical `bg-X-50 + text-X-900` pair as a muddy low-contrast tint
+// (the bg looks darker than expected and the text washes out). The
+// reliable fix in this app is a solid coloured fill with white text,
+// matching the BADGE_TONE pattern.
+//
+// Each tone provides:
+//   - `solid`: the banner body — full-colour bg + white text + matching border
+//   - `accent`: a small chip used inside the banner (icon background etc.)
 export const ALERT_TONE = {
-  success:
-    "border-emerald-500/60 bg-emerald-50 text-emerald-900 dark:border-emerald-500/50 dark:bg-emerald-950/50 dark:text-emerald-100",
-  warning:
-    "border-amber-500/60 bg-amber-50 text-amber-900 dark:border-amber-500/50 dark:bg-amber-950/50 dark:text-amber-100",
-  danger:
-    "border-red-500/60 bg-red-50 text-red-900 dark:border-red-500/50 dark:bg-red-950/50 dark:text-red-100",
-  info: "border-blue-500/60 bg-blue-50 text-blue-900 dark:border-blue-500/50 dark:bg-blue-950/50 dark:text-blue-100",
+  success: {
+    solid: "bg-emerald-600 text-white border-emerald-700",
+    accent: "bg-emerald-800 text-white",
+  },
+  warning: {
+    solid: "bg-amber-500 text-white border-amber-600",
+    accent: "bg-amber-700 text-white",
+  },
+  danger: {
+    solid: "bg-red-600 text-white border-red-700",
+    accent: "bg-red-800 text-white",
+  },
+  info: {
+    solid: "bg-blue-600 text-white border-blue-700",
+    accent: "bg-blue-800 text-white",
+  },
 } as const;

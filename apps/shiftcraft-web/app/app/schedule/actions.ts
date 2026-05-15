@@ -13,6 +13,7 @@ import {
   users,
 } from "@tracey/db";
 import { currentMembership, currentUser, requireUser } from "~/lib/auth/current";
+import { logAuditEvent } from "~/lib/audit";
 import { notifyShiftOffered } from "~/lib/email";
 
 export type FormState =
@@ -164,6 +165,170 @@ export async function bulkPublishWeekAction(formData: FormData): Promise<void> {
 
   revalidatePath("/app/schedule");
   revalidatePath("/app/coverage-gaps");
+}
+
+/**
+ * Duplicate every shift in [weekStart, weekStart+7d) forward by 7 days,
+ * inserting the copies as drafts. Skips a source shift if the
+ * destination week already has a shift at the same (day-of-week,
+ * time-of-day, location, role) — that's the common "I already filled
+ * this slot manually" case.
+ *
+ * Assignments are not copied — the destination shifts come up empty so
+ * the manager can offer them to whoever's available next week.
+ *
+ * After the copy completes, the action redirects to /app/schedule with
+ * `?copied=N&skipped=M` so the page can flash a confirmation banner.
+ */
+export async function duplicateWeekAction(formData: FormData): Promise<void> {
+  const weekStartRaw = String(formData.get("weekStart") ?? "");
+  if (!weekStartRaw) return;
+  const locationId = String(formData.get("location") ?? "");
+
+  const membership = await currentMembership();
+  if (!membership) throw new Error("You must belong to a workspace.");
+  if (membership.role !== "admin" && membership.role !== "owner") {
+    throw new Error("Only admins can duplicate a week.");
+  }
+  const tenantId = membership.tenant.id;
+  const me = await currentUser();
+
+  const sourceStart = new Date(weekStartRaw);
+  if (Number.isNaN(sourceStart.getTime())) return;
+  const sourceEnd = new Date(sourceStart);
+  sourceEnd.setDate(sourceEnd.getDate() + 7);
+  const destStart = new Date(sourceEnd);
+  const destEnd = new Date(destStart);
+  destEnd.setDate(destEnd.getDate() + 7);
+
+  const sourceStartIso = sourceStart.toISOString();
+  const sourceEndIso = sourceEnd.toISOString();
+  const destStartIso = destStart.toISOString();
+  const destEndIso = destEnd.toISOString();
+
+  // Source week: all shifts in [sourceStart, sourceEnd). Filtered by
+  // location if the user is browsing a specific site so the copy stays
+  // focused on what they're currently looking at.
+  const sourceShifts = await forTenant(tenantId).run((tx) =>
+    tx
+      .select({
+        id: scShifts.id,
+        locationId: scShifts.locationId,
+        role: scShifts.role,
+        startsAt: scShifts.startsAt,
+        endsAt: scShifts.endsAt,
+        notes: scShifts.notes,
+      })
+      .from(scShifts)
+      .where(
+        and(
+          eq(scShifts.traceyTenantId, tenantId),
+          sql`${scShifts.startsAt} >= ${sourceStartIso}::timestamptz`,
+          sql`${scShifts.startsAt} < ${sourceEndIso}::timestamptz`,
+          locationId ? eq(scShifts.locationId, locationId) : undefined,
+        ),
+      ),
+  );
+
+  // Destination week: pull the same set so we can de-dupe in code.
+  // Comparing (locationId, role, startsAt-shifted) catches the
+  // common case without trying to be clever about partial overlaps.
+  const destShifts = await forTenant(tenantId).run((tx) =>
+    tx
+      .select({
+        locationId: scShifts.locationId,
+        role: scShifts.role,
+        startsAt: scShifts.startsAt,
+      })
+      .from(scShifts)
+      .where(
+        and(
+          eq(scShifts.traceyTenantId, tenantId),
+          sql`${scShifts.startsAt} >= ${destStartIso}::timestamptz`,
+          sql`${scShifts.startsAt} < ${destEndIso}::timestamptz`,
+        ),
+      ),
+  );
+
+  // Key shape: "<locationId>|<role>|<startMs>". startMs is the
+  // destination week's milliseconds since epoch; the source-week loop
+  // shifts forward by exactly 7 * 86400000 so collisions line up.
+  const destKeys = new Set<string>();
+  for (const d of destShifts) {
+    destKeys.add(
+      `${d.locationId}|${d.role}|${d.startsAt.getTime()}`,
+    );
+  }
+
+  const SHIFT_MS = 7 * 24 * 60 * 60 * 1000;
+  let copied = 0;
+  let skipped = 0;
+  const toInsert: Array<{
+    traceyTenantId: string;
+    locationId: string;
+    role: string;
+    startsAt: Date;
+    endsAt: Date;
+    status: "draft";
+    notes: string | null;
+    createdByUserId: string | null;
+  }> = [];
+  for (const s of sourceShifts) {
+    const newStart = new Date(s.startsAt.getTime() + SHIFT_MS);
+    const newEnd = new Date(s.endsAt.getTime() + SHIFT_MS);
+    const key = `${s.locationId}|${s.role}|${newStart.getTime()}`;
+    if (destKeys.has(key)) {
+      skipped += 1;
+      continue;
+    }
+    toInsert.push({
+      traceyTenantId: tenantId,
+      locationId: s.locationId,
+      role: s.role,
+      startsAt: newStart,
+      endsAt: newEnd,
+      status: "draft",
+      notes: s.notes,
+      createdByUserId: me?.id ?? null,
+    });
+    // Reserve the slot so the same source week can't insert two
+    // duplicates of itself (defensive — shouldn't happen with the
+    // current data shape).
+    destKeys.add(key);
+    copied += 1;
+  }
+
+  if (toInsert.length > 0) {
+    await forTenant(tenantId).run((tx) =>
+      tx.insert(scShifts).values(toInsert),
+    );
+  }
+
+  await logAuditEvent({
+    action: "shiftcraft.schedule.week_duplicated",
+    targetKind: "sc_schedule_week",
+    details: {
+      from: sourceStartIso.slice(0, 10),
+      to: destStartIso.slice(0, 10),
+      copied,
+      skipped,
+      locationFilter: locationId || null,
+    },
+  });
+
+  revalidatePath("/app/schedule");
+  revalidatePath("/app/coverage-gaps");
+  // Send the user to the destination week so they immediately see the
+  // newly created drafts, with counters in the query string so the
+  // page can flash a confirmation.
+  const destWeekParam = destStart.toISOString().slice(0, 10);
+  const search = new URLSearchParams({
+    week: destWeekParam,
+    copied: String(copied),
+    skipped: String(skipped),
+  });
+  if (locationId) search.set("location", locationId);
+  redirect(`/app/schedule?${search.toString()}`);
 }
 
 async function setShiftStatus(

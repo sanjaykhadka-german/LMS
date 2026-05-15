@@ -4,7 +4,7 @@ import { and, asc, between, eq, sql } from "drizzle-orm";
 import { forTenant, scLocations, scShiftAssignments, scShifts } from "@tracey/db";
 import { currentMembership } from "~/lib/auth/current";
 import { Button } from "~/components/ui/button";
-import { bulkPublishWeekAction } from "./actions";
+import { bulkPublishWeekAction, duplicateWeekAction } from "./actions";
 
 export const metadata = { title: "Schedule · ShiftCraft" };
 
@@ -53,12 +53,25 @@ const STATUS_STYLES: Record<string, string> = {
 export default async function SchedulePage({
   searchParams,
 }: {
-  searchParams: Promise<{ week?: string; location?: string }>;
+  searchParams: Promise<{
+    week?: string;
+    location?: string;
+    copied?: string;
+    skipped?: string;
+  }>;
 }) {
   const membership = await currentMembership();
   if (!membership) redirect("/app");
 
-  const { week, location: locationFilter } = await searchParams;
+  const {
+    week,
+    location: locationFilter,
+    copied,
+    skipped,
+  } = await searchParams;
+  const copiedCount = Number.parseInt(copied ?? "", 10);
+  const skippedCount = Number.parseInt(skipped ?? "", 10);
+  const showCopyFlash = Number.isFinite(copiedCount) && copied !== undefined;
   const anchor = week ? new Date(`${week}T00:00:00`) : new Date();
   const weekStart = startOfWeek(isNaN(anchor.getTime()) ? new Date() : anchor);
   const weekEnd = addDays(weekStart, 7); // exclusive
@@ -187,6 +200,21 @@ export default async function SchedulePage({
               </Button>
             </form>
           )}
+          {isAdmin && shifts.length > 0 && (
+            <form action={duplicateWeekAction}>
+              <input
+                type="hidden"
+                name="weekStart"
+                value={weekStart.toISOString()}
+              />
+              {locationFilter && (
+                <input type="hidden" name="location" value={locationFilter} />
+              )}
+              <Button type="submit" variant="outline" size="sm">
+                Copy to next week
+              </Button>
+            </form>
+          )}
           {canCreate ? (
             <Button asChild size="sm">
               <Link href="/app/schedule/new">New shift</Link>
@@ -198,6 +226,30 @@ export default async function SchedulePage({
           )}
         </div>
       </div>
+
+      {showCopyFlash && (
+        <div className="rounded-md border-2 border-emerald-500/60 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-900 dark:border-emerald-500/50 dark:bg-emerald-950/50 dark:text-emerald-100">
+          {copiedCount > 0 ? (
+            <>
+              Copied {copiedCount} shift{copiedCount === 1 ? "" : "s"} into
+              this week as drafts.
+              {skippedCount > 0 && (
+                <span className="text-emerald-800/80 dark:text-emerald-200/80">
+                  {" "}
+                  Skipped {skippedCount} that already had a matching shift.
+                </span>
+              )}{" "}
+              Review and publish when ready.
+            </>
+          ) : (
+            <>
+              No new shifts to copy — this week already has every slot that
+              last week did
+              {skippedCount > 0 ? ` (${skippedCount} duplicates skipped)` : ""}.
+            </>
+          )}
+        </div>
+      )}
 
       {locations.length > 1 && (
         <div className="flex flex-wrap items-center gap-2">

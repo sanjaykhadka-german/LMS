@@ -17,6 +17,7 @@ import {
   fmtHours,
   getEventsInRangeForTenant,
 } from "~/lib/clock";
+import { Avatar } from "~/components/Avatar";
 
 function startOfWeek(d: Date): Date {
   const dow = (d.getDay() + 6) % 7;
@@ -152,6 +153,7 @@ export default async function DashboardPage() {
             id: appUsers.id,
             name: appUsers.name,
             email: appUsers.email,
+            image: appUsers.image,
           })
           .from(appUsers)
           .innerJoin(members, eq(members.userId, appUsers.id))
@@ -170,6 +172,8 @@ export default async function DashboardPage() {
   const onTheFloor: Array<{
     userId: string;
     name: string;
+    email: string;
+    image: string | null;
     status: "working" | "on_break";
     sinceIso: string;
     locationName: string | null;
@@ -183,6 +187,8 @@ export default async function DashboardPage() {
     onTheFloor.push({
       userId: uid,
       name: u.name ?? u.email,
+      email: u.email,
+      image: u.image,
       status: state.status,
       sinceIso: state.segmentStartedAt?.toISOString() ?? new Date().toISOString(),
       locationName: lastWithLoc?.locationId
@@ -317,16 +323,25 @@ export default async function DashboardPage() {
                   key={p.userId}
                   className="flex items-center justify-between gap-3 px-5 py-3"
                 >
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-medium">{p.name}</div>
-                    <div className="truncate text-xs text-muted-foreground">
-                      {p.status === "working" ? "Working" : "On break"}
-                      {p.locationName ? ` · ${p.locationName}` : ""} ·{" "}
-                      since{" "}
-                      {new Date(p.sinceIso).toLocaleTimeString(undefined, {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
+                  <div className="flex min-w-0 items-center gap-3">
+                    <Avatar
+                      name={p.name}
+                      email={p.email}
+                      image={p.image}
+                      sizeClass="h-8 w-8"
+                      textClass="text-xs"
+                    />
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium">{p.name}</div>
+                      <div className="truncate text-xs text-muted-foreground">
+                        {p.status === "working" ? "Working" : "On break"}
+                        {p.locationName ? ` · ${p.locationName}` : ""} ·{" "}
+                        since{" "}
+                        {new Date(p.sinceIso).toLocaleTimeString(undefined, {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </div>
                     </div>
                   </div>
                   <span className="font-mono text-xs tabular-nums text-muted-foreground">

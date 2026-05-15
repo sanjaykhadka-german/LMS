@@ -31,6 +31,7 @@ import {
   check,
   date,
   index,
+  integer,
   jsonb,
   numeric,
   pgTable,
@@ -443,6 +444,12 @@ export const scAnnouncements = pgTable(
     createdByUserId: uuid("created_by_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
+    // Email fan-out audit. `emailedAt` is set when the announcement
+    // was sent as an email blast; `emailedRecipientCount` records how
+    // many recipients it went to. Both null means email was not
+    // requested (the announcement only surfaces in-app).
+    emailedAt: timestamp("emailed_at", { withTimezone: true }),
+    emailedRecipientCount: integer("emailed_recipient_count"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -506,6 +513,40 @@ export const scTimesheetApprovals = pgTable(
       "sc_timesheet_approvals_status_chk",
       sql`${t.status} in ('approved','disputed')`,
     ),
+  ],
+);
+
+// ─── Email-notification opt-outs ───
+//
+// Per-(user, kind) opt-out ledger. Presence of a row = "do not email
+// this user for this kind". Absence = subscribed (the default).
+//
+// Kept as an opt-out so brand-new accounts get every notification by
+// default without us having to seed a row per tenant member at signup.
+// The `kind` column is a free-text discriminator so future kinds can be
+// added without a schema change; the Settings UI clamps it to a known
+// list (KNOWN_EMAIL_KINDS in lib/email-prefs.ts).
+
+export const scEmailUnsubscribes = pgTable(
+  "sc_email_unsubscribes",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    traceyTenantId: text("tracey_tenant_id").notNull(),
+    appUserId: uuid("app_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("sc_email_unsubscribes_uq").on(
+      t.traceyTenantId,
+      t.appUserId,
+      t.kind,
+    ),
+    index("sc_email_unsubscribes_kind_idx").on(t.traceyTenantId, t.kind),
   ],
 );
 

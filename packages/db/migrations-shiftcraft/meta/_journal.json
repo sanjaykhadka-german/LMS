@@ -57,6 +57,20 @@
       "when": 1778755816758,
       "tag": "0007_worried_black_cat",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1778798950584,
+      "tag": "0008_small_stark_industries",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1778810729431,
+      "tag": "0009_lovely_lucky_pierre",
+      "breakpoints": true
     }
   ]
 }

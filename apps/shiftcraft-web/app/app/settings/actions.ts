@@ -4,7 +4,13 @@ import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db, users as appUsers } from "@tracey/db";
-import { currentUser } from "~/lib/auth/current";
+import { currentMembership, currentUser } from "~/lib/auth/current";
+import { validateAvatarUrl } from "~/lib/avatar";
+import {
+  EMAIL_KINDS,
+  setEmailPref,
+  type EmailKind,
+} from "~/lib/email-prefs";
 import { hashPassword, verifyPassword } from "~/lib/auth/passwords";
 
 export type FormState =
@@ -122,4 +128,67 @@ export async function changePasswordAction(
     .where(eq(appUsers.id, me.id));
 
   return { status: "ok", message: "Password changed." };
+}
+
+/**
+ * Toggle one email-notification preference for the calling user in the
+ * current tenant. Bound directly to a <form>, so the return type stays
+ * void — the page revalidates and reads the new state on the next
+ * render.
+ */
+export async function toggleEmailPrefAction(
+  formData: FormData,
+): Promise<void> {
+  const me = await currentUser();
+  if (!me) return;
+  const membership = await currentMembership();
+  if (!membership) return;
+
+  const kindRaw = String(formData.get("kind") ?? "");
+  const enabledRaw = String(formData.get("enabled") ?? "");
+  if (!(EMAIL_KINDS as readonly string[]).includes(kindRaw)) return;
+  const kind = kindRaw as EmailKind;
+  const enabled = enabledRaw === "true";
+
+  await setEmailPref(membership.tenant.id, me.id, kind, enabled);
+  revalidatePath("/app/settings");
+}
+
+/**
+ * Update or clear the caller's avatar URL. Stored on app.users.image
+ * (shared identity column). Validation lives in lib/avatar.ts —
+ * http/https only, length-capped, no data: / javascript: schemes.
+ */
+export async function updateAvatarAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const me = await currentUser();
+  if (!me) return { status: "error", message: "Not signed in." };
+
+  let image: string | null;
+  try {
+    image = validateAvatarUrl(String(formData.get("avatarUrl") ?? ""));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Invalid URL.";
+    return {
+      status: "error",
+      message: "Please fix the highlighted fields.",
+      fieldErrors: { avatarUrl: [message] },
+    };
+  }
+
+  await db
+    .update(appUsers)
+    .set({ image, updatedAt: new Date() })
+    .where(eq(appUsers.id, me.id));
+
+  // The avatar shows up in the sidebar of every authenticated page, so
+  // revalidate the whole /app layout — otherwise the user has to navigate
+  // before the swatch updates.
+  revalidatePath("/app", "layout");
+  return {
+    status: "ok",
+    message: image ? "Avatar updated." : "Avatar cleared — using initials.",
+  };
 }

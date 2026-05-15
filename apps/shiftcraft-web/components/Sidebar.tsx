@@ -1,35 +1,44 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   AlertCircle,
   BarChart3,
+  Bell,
+  Building2,
   CalendarCheck,
   CalendarDays,
   CalendarOff,
   ClipboardList,
   Clock,
+  Hand,
   History,
   KanbanSquare,
   LayoutDashboard,
   LogOut,
   MapPin,
   Megaphone,
+  Menu,
   Repeat,
   Settings,
   Shield,
   Users,
+  X,
 } from "lucide-react";
 import { cn } from "~/lib/utils";
 import { friendlyRoleLabel } from "~/lib/roles";
+import { Avatar } from "./Avatar";
 import { Logo } from "./Logo";
 import { signOutAction } from "~/app/app/_actions";
 
 const NAV = [
   { href: "/app", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/app/notifications", label: "Notifications", icon: Bell },
   { href: "/app/clock", label: "Time clock", icon: Clock },
   { href: "/app/my-shifts", label: "My shifts", icon: CalendarCheck },
+  { href: "/app/open-shifts", label: "Open shifts", icon: Hand },
   { href: "/app/schedule", label: "Schedule", icon: CalendarDays },
   { href: "/app/coverage-gaps", label: "Coverage gaps", icon: AlertCircle },
   { href: "/app/timesheets", label: "Timesheets", icon: ClipboardList },
@@ -37,6 +46,7 @@ const NAV = [
   { href: "/app/locations", label: "Locations", icon: MapPin },
   { href: "/app/employees", label: "Employees", icon: Users },
   { href: "/app/team", label: "Team", icon: Shield },
+  { href: "/app/availability", label: "My availability", icon: CalendarCheck },
   { href: "/app/time-off", label: "Time off", icon: CalendarOff },
   { href: "/app/announcements", label: "Announcements", icon: Megaphone },
   { href: "/app/settings", label: "Settings", icon: Settings },
@@ -44,24 +54,63 @@ const NAV = [
 
 const ADMIN_NAV = [
   { href: "/app/reports", label: "Reports", icon: BarChart3 },
+  { href: "/app/departments", label: "Departments", icon: Building2 },
   { href: "/app/swaps", label: "Swap requests", icon: Repeat },
   { href: "/app/audit", label: "Audit log", icon: History },
 ];
 
-export function Sidebar({ name, role }: { name: string; role: string }) {
+export function Sidebar({
+  name,
+  email,
+  image,
+  role,
+  unreadNotifications = 0,
+}: {
+  name: string;
+  email: string;
+  image: string | null;
+  role: string;
+  unreadNotifications?: number;
+}) {
   const pathname = usePathname();
   const isAdmin = role === "admin" || role === "owner";
   const items = isAdmin ? [...NAV, ...ADMIN_NAV] : NAV;
-  return (
-    <aside className="sticky top-0 flex h-screen w-64 flex-col border-r border-border bg-card">
-      <div className="border-b border-border px-5 py-6">
+
+  // Mobile drawer state. Closes automatically on route change so the user
+  // doesn't see the drawer linger across navigation. Esc closes it too.
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  const drawerContents = (
+    <>
+      <div className="flex items-center justify-between border-b border-border px-5 py-6">
         <Logo size="sm" />
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          aria-label="Close menu"
+          className="md:hidden rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <X className="h-5 w-5" />
+        </button>
       </div>
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
         {items.map((item) => {
           const active =
             pathname === item.href || pathname.startsWith(item.href + "/");
           const Icon = item.icon;
+          const showBadge =
+            item.href === "/app/notifications" && unreadNotifications > 0;
           return (
             <Link
               key={item.href}
@@ -75,18 +124,40 @@ export function Sidebar({ name, role }: { name: string; role: string }) {
             >
               <Icon className="h-4 w-4" strokeWidth={2} />
               <span className="flex-1">{item.label}</span>
+              {showBadge && (
+                <span
+                  className={cn(
+                    "inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full px-1.5 text-[10px] font-bold tabular-nums",
+                    active
+                      ? "bg-primary-foreground/20 text-primary-foreground"
+                      : "bg-rose-600 text-white",
+                  )}
+                  aria-label={`${unreadNotifications} unread`}
+                >
+                  {unreadNotifications > 99 ? "99+" : unreadNotifications}
+                </span>
+              )}
             </Link>
           );
         })}
       </nav>
       <div className="border-t border-border px-3 py-4">
-        <div className="mb-2 px-3">
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-            Signed in as
-          </div>
-          <div className="truncate text-sm font-medium">{name}</div>
-          <div className="text-[11px] text-muted-foreground">
-            {friendlyRoleLabel(role)}
+        <div className="mb-2 flex items-center gap-3 px-3">
+          <Avatar
+            name={name}
+            email={email}
+            image={image}
+            sizeClass="h-9 w-9"
+            textClass="text-xs"
+          />
+          <div className="min-w-0">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Signed in as
+            </div>
+            <div className="truncate text-sm font-medium">{name}</div>
+            <div className="text-[11px] text-muted-foreground">
+              {friendlyRoleLabel(role)}
+            </div>
           </div>
         </div>
         <form action={signOutAction}>
@@ -99,6 +170,50 @@ export function Sidebar({ name, role }: { name: string; role: string }) {
           </button>
         </form>
       </div>
-    </aside>
+    </>
+  );
+
+  return (
+    <>
+      {/* Mobile top bar — only visible below md. Lets the user open the
+          drawer and shows the logo so the brand stays present. */}
+      <div className="md:hidden sticky top-0 z-30 flex items-center justify-between border-b border-border bg-card px-4 py-3">
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          aria-label="Open menu"
+          className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+        <Logo size="sm" />
+        <div className="w-7" aria-hidden />
+      </div>
+
+      {/* Backdrop. Click anywhere outside the drawer to close. */}
+      {open && (
+        <div
+          className="md:hidden fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
+          onClick={() => setOpen(false)}
+          aria-hidden
+        />
+      )}
+
+      {/* Mobile drawer — slides in from the left when `open`. */}
+      <aside
+        className={cn(
+          "md:hidden fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col border-r border-border bg-card shadow-xl transition-transform duration-200",
+          open ? "translate-x-0" : "-translate-x-full",
+        )}
+        aria-hidden={!open}
+      >
+        {drawerContents}
+      </aside>
+
+      {/* Desktop sidebar — unchanged from before, just hidden on small. */}
+      <aside className="hidden md:sticky md:top-0 md:flex md:h-screen md:w-64 md:flex-col md:border-r md:border-border md:bg-card">
+        {drawerContents}
+      </aside>
+    </>
   );
 }

@@ -26,6 +26,7 @@ function client(): Resend {
 
 const APP_URL = APPS.shiftcraft.url;
 const MY_SHIFTS_URL = `${APP_URL}/app/my-shifts`;
+const ANNOUNCEMENTS_URL = `${APP_URL}/app/announcements`;
 
 function fmtShift(s: { startsAt: Date; endsAt: Date; role: string; locationName: string | null }): string {
   const start = s.startsAt.toLocaleString(undefined, {
@@ -200,6 +201,55 @@ export async function notifySwapAccepted(opts: {
     `,
     context: "notifySwapAccepted(cover)",
   });
+}
+
+/**
+ * Fan out an announcement to a list of recipients. Each recipient gets a
+ * personalised greeting; the body is the announcement text as-typed
+ * (newlines preserved in the text part, wrapped in <p> for HTML).
+ *
+ * Returns the count of recipients we actually attempted to send to —
+ * Resend hiccups during a per-recipient call are swallowed by safeSend
+ * but each attempt still counts toward the total recorded in
+ * sc_announcements.emailed_recipient_count.
+ */
+export async function notifyAnnouncementPosted(opts: {
+  recipients: Array<{ email: string; name: string | null }>;
+  postedBy: { name: string | null; email: string };
+  tenantName: string;
+  title: string;
+  body: string;
+}): Promise<number> {
+  if (opts.recipients.length === 0) return 0;
+  const senderName = displayName(opts.postedBy.name, opts.postedBy.email);
+  const subject = `${opts.tenantName} · ${opts.title}`;
+  const bodyHtml = opts.body
+    .split(/\n{2,}/)
+    .map((p) => `<p>${p.replace(/\n/g, "<br/>")}</p>`)
+    .join("");
+
+  let sent = 0;
+  for (const r of opts.recipients) {
+    const greeting = `Hi ${displayName(r.name, r.email).split(" ")[0]},`;
+    await safeSend({
+      to: r.email,
+      subject,
+      text:
+        `${greeting}\n\n${senderName} posted an announcement in ${opts.tenantName}:\n\n` +
+        `${opts.title}\n\n${opts.body}\n\n` +
+        `Read on ShiftCraft: ${ANNOUNCEMENTS_URL}`,
+      html: `
+        <p>${greeting}</p>
+        <p><strong>${senderName}</strong> posted an announcement in <strong>${opts.tenantName}</strong>:</p>
+        <h3 style="margin:1em 0 0.5em">${opts.title}</h3>
+        ${bodyHtml}
+        <p><a href="${ANNOUNCEMENTS_URL}">Read on ShiftCraft</a></p>
+      `,
+      context: `notifyAnnouncementPosted to ${r.email}`,
+    });
+    sent += 1;
+  }
+  return sent;
 }
 
 export async function notifySwapDeclined(opts: {
