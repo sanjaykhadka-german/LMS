@@ -1,16 +1,33 @@
+import { asc, eq } from "drizzle-orm";
+import { forTenant, plUnitsOfMeasure } from "@tracey/db";
+import { requireTenant } from "@/lib/auth/current";
 import { createClient } from "@/lib/supabase/server";
 import UnitsOfMeasureManager from "./_components/units-of-measure-manager";
 
 export default async function UnitsOfMeasurePage() {
-  const supabase = await createClient();
-  const { data: uoms } = await supabase
-    .from("units_of_measure")
-    .select("*")
-    .order("sort_order")
-    .order("code");
+  const { tenant } = await requireTenant();
 
-  // Pull current usage counts so the operator can see which UOMs are in use
-  // (and avoid deleting a UOM that's wired into items).
+  const uoms = await forTenant(tenant.id).run((tx) =>
+    tx
+      .select({
+        id: plUnitsOfMeasure.id,
+        code: plUnitsOfMeasure.code,
+        name: plUnitsOfMeasure.name,
+        description: plUnitsOfMeasure.description,
+        category: plUnitsOfMeasure.category,
+        is_base: plUnitsOfMeasure.isBase,
+        is_active: plUnitsOfMeasure.isActive,
+        sort_order: plUnitsOfMeasure.sortOrder,
+      })
+      .from(plUnitsOfMeasure)
+      .where(eq(plUnitsOfMeasure.traceyTenantId, tenant.id))
+      .orderBy(asc(plUnitsOfMeasure.sortOrder), asc(plUnitsOfMeasure.code)),
+  );
+
+  // Items still live in Supabase during Phase 4; usage counts are read from
+  // there until Slice 9 ports the items module to Tracey. Once that lands,
+  // swap this for a Drizzle query against plItems.
+  const supabase = await createClient();
   const { data: items } = await supabase
     .from("items")
     .select("unit, batch_unit, purchase_uom");
@@ -25,5 +42,5 @@ export default async function UnitsOfMeasurePage() {
     }
   }
 
-  return <UnitsOfMeasureManager initialUoms={uoms ?? []} usage={usage} />;
+  return <UnitsOfMeasureManager initialUoms={uoms} usage={usage} />;
 }

@@ -1,9 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { BackButton } from "@/components/back-button";
+import {
+  createDepartmentAction,
+  deleteDepartmentAction,
+  toggleDepartmentActiveAction,
+  updateDepartmentAction,
+} from "../actions";
 
 type Department = {
   id: string;
@@ -17,14 +22,13 @@ type Department = {
 const BLANK = { name: "", code: "", description: "", sort_order: 0 };
 
 export default function DepartmentsManager({ initialDepartments }: { initialDepartments: Department[] }) {
-  const supabase = createClient();
   const router = useRouter();
-  // No local list state — use the server-fetched prop directly so router.refresh() always shows fresh data
   const [editing, setEditing] = useState<Department | null>(null);
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState(BLANK);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
 
   function set(k: string, v: string | number) { setForm(f => ({ ...f, [k]: v })); }
 
@@ -32,42 +36,44 @@ export default function DepartmentsManager({ initialDepartments }: { initialDepa
     if (!form.name.trim()) { setError("Name is required"); return; }
     setSaving(true); setError(null);
 
-    const { data: { user } } = await supabase.auth.getUser();
-    const { data: profile } = await supabase.from("profiles").select("tenant_id").eq("id", user!.id).single();
-
-    const payload = {
-      tenant_id: profile!.tenant_id,
-      name: form.name.trim(),
-      code: form.code.trim().toUpperCase() || null,
-      description: form.description.trim() || null,
-      sort_order: Number(form.sort_order) || 0,
-    };
-
-    if (editing) {
-      const { error: err } = await supabase.from("departments").update(payload).eq("id", editing.id);
-      if (err) { setError(err.message); setSaving(false); return; }
-    } else {
-      const { error: err } = await supabase.from("departments").insert(payload);
-      if (err) { setError(err.message); setSaving(false); return; }
+    try {
+      if (editing) {
+        await updateDepartmentAction(editing.id, form);
+      } else {
+        await createDepartmentAction(form);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Save failed");
+      setSaving(false);
+      return;
     }
 
     setSaving(false);
     setEditing(null);
     setAdding(false);
     setForm(BLANK);
-    router.refresh();
+    startTransition(() => router.refresh());
   }
 
   async function toggleActive(dept: Department) {
-    await supabase.from("departments").update({ is_active: !dept.is_active }).eq("id", dept.id);
-    router.refresh();
+    try {
+      await toggleDepartmentActiveAction(dept.id, !dept.is_active);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Toggle failed");
+      return;
+    }
+    startTransition(() => router.refresh());
   }
 
   async function deleteDept(dept: Department) {
     if (!confirm(`Delete department "${dept.name}"? This cannot be undone.`)) return;
-    const { error: err } = await supabase.from("departments").delete().eq("id", dept.id);
-    if (err) { alert(err.message); return; }
-    router.refresh();
+    try {
+      await deleteDepartmentAction(dept.id);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Delete failed");
+      return;
+    }
+    startTransition(() => router.refresh());
   }
 
   function startEdit(dept: Department) {

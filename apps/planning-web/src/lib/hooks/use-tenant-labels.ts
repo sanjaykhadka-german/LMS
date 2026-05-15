@@ -17,7 +17,6 @@
  */
 
 import { useState, useEffect } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { getCached, setCached, invalidateCache } from "@/lib/cache";
 
 const CACHE_KEY = "tenant_labels";
@@ -43,7 +42,6 @@ function rowsToMap(rows: LabelRow[]): LabelMap {
 }
 
 export function useTenantLabels() {
-  const supabase = createClient();
   const [data, setData] = useState<LabelRow[]>(() =>
     getCached<LabelRow[]>(CACHE_KEY, STALE_MS) ?? []
   );
@@ -57,21 +55,27 @@ export function useTenantLabels() {
     }
     let cancelled = false;
     setIsFetching(true);
-    supabase.rpc("get_tenant_labels").then(({ data: rows, error }) => {
-      if (cancelled) return;
-      if (error) {
-        // eslint-disable-next-line no-console
-        console.warn("get_tenant_labels failed:", error.message);
+    fetch("/api/labels")
+      .then(async (r) => {
+        if (cancelled) return;
+        if (!r.ok) {
+          // eslint-disable-next-line no-console
+          console.warn("get tenant labels failed:", r.statusText);
+          setIsFetching(false);
+          return;
+        }
+        const rows = (await r.json()) as LabelRow[];
+        setCached(CACHE_KEY, rows);
+        setData(rows);
         setIsFetching(false);
-        return;
-      }
-      const list = (rows ?? []) as LabelRow[];
-      setCached(CACHE_KEY, list);
-      setData(list);
-      setIsFetching(false);
-    });
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        // eslint-disable-next-line no-console
+        console.warn("get tenant labels failed:", err);
+        setIsFetching(false);
+      });
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const map = rowsToMap(data);

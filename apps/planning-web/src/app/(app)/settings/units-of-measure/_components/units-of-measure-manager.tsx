@@ -1,9 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { BackButton } from "@/components/back-button";
+import {
+  createUomAction,
+  deleteUomAction,
+  toggleUomActiveAction,
+  updateUomAction,
+} from "../actions";
 
 type UomCategory = "weight" | "count" | "volume" | "length" | "other";
 
@@ -12,7 +17,7 @@ type Uom = {
   code: string;
   name: string;
   description: string | null;
-  category: UomCategory;
+  category: string;
   is_base: boolean;
   is_active: boolean;
   sort_order: number;
@@ -39,17 +44,17 @@ const BLANK = {
   category: "other" as UomCategory, is_base: false, sort_order: 100,
 };
 
+function asCategory(value: string): UomCategory {
+  return CATEGORIES.find((c) => c.value === value)?.value ?? "other";
+}
+
 export default function UnitsOfMeasureManager({
   initialUoms,
   usage,
 }: {
   initialUoms: Uom[];
-  // Map of lower(code) → number of items currently using that UOM. Drives the
-  // "in use" badge and gates deletion (we don't let you delete a UOM that's
-  // referenced anywhere — would orphan the text on those items).
   usage: Record<string, number>;
 }) {
-  const supabase = createClient();
   const router = useRouter();
   const [editing, setEditing] = useState<Uom | null>(null);
   const [adding, setAdding] = useState(false);
@@ -57,6 +62,7 @@ export default function UnitsOfMeasureManager({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<"" | UomCategory>("");
+  const [, startTransition] = useTransition();
 
   function set<K extends keyof typeof BLANK>(k: K, v: typeof BLANK[K]) {
     setForm(f => ({ ...f, [k]: v }));
@@ -67,12 +73,7 @@ export default function UnitsOfMeasureManager({
     if (!form.name.trim()) { setError("Name is required"); return; }
     setSaving(true); setError(null);
 
-    const { data: { user } } = await supabase.auth.getUser();
-    const { data: profile } = await supabase
-      .from("profiles").select("tenant_id").eq("id", user!.id).single();
-
     const payload = {
-      tenant_id: profile!.tenant_id,
       code: form.code.trim().toLowerCase(),
       name: form.name.trim(),
       description: form.description.trim() || null,
@@ -81,29 +82,35 @@ export default function UnitsOfMeasureManager({
       sort_order: Number(form.sort_order) || 100,
     };
 
-    if (editing) {
-      // If the operator changed the code on a UOM that's in use, that would
-      // orphan items. Block it — they should rename the display name instead.
-      if (editing.code !== payload.code && (usage[editing.code] ?? 0) > 0) {
-        setError(`Can't change the code: ${usage[editing.code]} item(s) reference "${editing.code}". Rename the display name instead, or migrate items first.`);
-        setSaving(false); return;
+    try {
+      if (editing) {
+        if (editing.code !== payload.code && (usage[editing.code] ?? 0) > 0) {
+          setError(`Can't change the code: ${usage[editing.code]} item(s) reference "${editing.code}". Rename the display name instead, or migrate items first.`);
+          setSaving(false); return;
+        }
+        await updateUomAction(editing.id, payload);
+      } else {
+        await createUomAction(payload);
       }
-      const { error: err } = await supabase
-        .from("units_of_measure").update(payload).eq("id", editing.id);
-      if (err) { setError(err.message); setSaving(false); return; }
-    } else {
-      const { error: err } = await supabase.from("units_of_measure").insert(payload);
-      if (err) { setError(err.message); setSaving(false); return; }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Save failed");
+      setSaving(false);
+      return;
     }
 
     setSaving(false);
     setEditing(null); setAdding(false); setForm(BLANK);
-    router.refresh();
+    startTransition(() => router.refresh());
   }
 
   async function toggleActive(u: Uom) {
-    await supabase.from("units_of_measure").update({ is_active: !u.is_active }).eq("id", u.id);
-    router.refresh();
+    try {
+      await toggleUomActiveAction(u.id, !u.is_active);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Toggle failed");
+      return;
+    }
+    startTransition(() => router.refresh());
   }
 
   async function deleteUom(u: Uom) {
@@ -113,16 +120,20 @@ export default function UnitsOfMeasureManager({
       return;
     }
     if (!confirm(`Delete UOM "${u.code} (${u.name})"? This cannot be undone.`)) return;
-    const { error: err } = await supabase.from("units_of_measure").delete().eq("id", u.id);
-    if (err) { alert(err.message); return; }
-    router.refresh();
+    try {
+      await deleteUomAction(u.id);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Delete failed");
+      return;
+    }
+    startTransition(() => router.refresh());
   }
 
   function startEdit(u: Uom) {
     setEditing(u);
     setForm({
       code: u.code, name: u.name, description: u.description ?? "",
-      category: u.category, is_base: u.is_base, sort_order: u.sort_order,
+      category: asCategory(u.category), is_base: u.is_base, sort_order: u.sort_order,
     });
     setAdding(false);
   }
@@ -212,7 +223,6 @@ export default function UnitsOfMeasureManager({
         </div>
       )}
 
-      {/* Category filter pills */}
       <div style={{ display: "flex", gap: "0.4rem", marginBottom: "1rem", flexWrap: "wrap" }}>
         <button onClick={() => setFilter("")} className={filter === "" ? "btn-primary" : "btn-secondary"}
           style={{ fontSize: "0.75rem", padding: "0.3rem 0.6rem" }}>
@@ -254,14 +264,15 @@ export default function UnitsOfMeasureManager({
             )}
             {visible.map(u => {
               const inUse = usage[u.code] ?? 0;
+              const category = asCategory(u.category);
               return (
                 <tr key={u.id} style={{ opacity: u.is_active ? 1 : 0.55 }}>
                   <td style={{ fontFamily: "monospace", fontSize: "0.8125rem", fontWeight: 600 }}>{u.code}</td>
                   <td style={{ fontWeight: 500 }}>{u.name}</td>
                   <td style={{ color: "#78716c", fontSize: "0.8125rem" }}>{u.description ?? "—"}</td>
                   <td>
-                    <span className={`badge ${CATEGORY_COLORS[u.category]}`} style={{ fontSize: "0.6875rem", textTransform: "capitalize" }}>
-                      {u.category}
+                    <span className={`badge ${CATEGORY_COLORS[category]}`} style={{ fontSize: "0.6875rem", textTransform: "capitalize" }}>
+                      {category}
                     </span>
                   </td>
                   <td style={{ textAlign: "center" }}>

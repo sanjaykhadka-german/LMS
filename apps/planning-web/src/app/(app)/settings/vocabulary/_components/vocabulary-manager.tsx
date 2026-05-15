@@ -5,22 +5,22 @@
  * labels to match the words their team actually uses. The engine continues
  * to use the canonical_key behind the scenes; only the display label changes.
  *
- * Edits go through set_tenant_label / reset_tenant_label RPCs, both of
- * which already enforce admin-only via RLS server-side.
+ * Edits go through the setLabelAction / resetLabelAction server actions,
+ * both of which re-check the caller's role on the server before writing.
  */
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { BackButton } from "@/components/back-button";
 import { invalidateTenantLabels, type LabelRow } from "@/lib/hooks/use-tenant-labels";
+import { setLabelAction, resetLabelAction } from "../actions";
 
 export default function VocabularyManager({ initialLabels }: { initialLabels: LabelRow[] }) {
-  const supabase = createClient();
   const router = useRouter();
   const [rows, setRows] = useState<LabelRow[]>(initialLabels);
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
 
   async function saveRow(key: string, newLabel: string) {
     const trimmed = newLabel.trim();
@@ -30,17 +30,19 @@ export default function VocabularyManager({ initialLabels }: { initialLabels: La
     }
     setSavingKey(key);
     setError(null);
-    const { error: err } = await supabase.rpc("set_tenant_label", {
-      p_canonical_key: key,
-      p_display_label: trimmed,
-    });
+    try {
+      await setLabelAction(key, trimmed);
+    } catch (err) {
+      setSavingKey(null);
+      setError(err instanceof Error ? err.message : "Save failed");
+      return;
+    }
     setSavingKey(null);
-    if (err) { setError(err.message); return; }
     invalidateTenantLabels();
     setRows(rows.map(r => r.canonical_key === key
       ? { ...r, display_label: trimmed, is_overridden: trimmed !== r.default_label }
       : r));
-    router.refresh();
+    startTransition(() => router.refresh());
   }
 
   async function resetRow(key: string) {
@@ -49,14 +51,19 @@ export default function VocabularyManager({ initialLabels }: { initialLabels: La
     if (!confirm(`Reset "${row.display_label}" back to the default "${row.default_label}"?`)) return;
     setSavingKey(key);
     setError(null);
-    const { error: err } = await supabase.rpc("reset_tenant_label", { p_canonical_key: key });
+    try {
+      await resetLabelAction(key);
+    } catch (err) {
+      setSavingKey(null);
+      setError(err instanceof Error ? err.message : "Reset failed");
+      return;
+    }
     setSavingKey(null);
-    if (err) { setError(err.message); return; }
     invalidateTenantLabels();
     setRows(rows.map(r => r.canonical_key === key
       ? { ...r, display_label: r.default_label, is_overridden: false }
       : r));
-    router.refresh();
+    startTransition(() => router.refresh());
   }
 
   function setLocal(key: string, value: string) {
@@ -128,7 +135,6 @@ export default function VocabularyManager({ initialLabels }: { initialLabels: La
                     onChange={e => setLocal(r.canonical_key, e.target.value)}
                     onBlur={e => {
                       const v = e.target.value.trim();
-                      // Only save if it's actually different from what's stored
                       if (v && v !== (r.is_overridden ? r.display_label : r.default_label)) {
                         saveRow(r.canonical_key, v);
                       } else if (!v) {
