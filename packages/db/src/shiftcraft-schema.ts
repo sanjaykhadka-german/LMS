@@ -550,6 +550,64 @@ export const scEmailUnsubscribes = pgTable(
   ],
 );
 
+// ─── Shift templates ───
+//
+// Saved shift patterns that managers can stamp onto a specific date —
+// e.g. "Saturday morning butcher 7-15 at Brunswick". Time-of-day is
+// stored as separate hour/minute integers (not a full timestamp) since
+// a template isn't bound to any particular day; the form on
+// /app/schedule/new combines a chosen date with the template's
+// time-of-day to produce the concrete startsAt/endsAt.
+//
+// Templates are tenant-scoped, named (unique per tenant
+// case-insensitively), and linked to a location. Role is free-text so
+// it matches whatever the rest of the schedule uses.
+
+export const scShiftTemplates = pgTable(
+  "sc_shift_templates",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    traceyTenantId: text("tracey_tenant_id").notNull(),
+    name: text("name").notNull(),
+    locationId: uuid("location_id").notNull(),
+    role: text("role").notNull(),
+    startHour: integer("start_hour").notNull(),
+    startMinute: integer("start_minute").notNull().default(0),
+    endHour: integer("end_hour").notNull(),
+    endMinute: integer("end_minute").notNull().default(0),
+    defaultNotes: text("default_notes"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("sc_shift_templates_tenant_name_uq").on(
+      t.traceyTenantId,
+      sql`lower(${t.name})`,
+    ),
+    index("sc_shift_templates_tenant_idx").on(t.traceyTenantId),
+    check(
+      "sc_shift_templates_start_hour_chk",
+      sql`${t.startHour} between 0 and 23`,
+    ),
+    check(
+      "sc_shift_templates_end_hour_chk",
+      sql`${t.endHour} between 0 and 23`,
+    ),
+    check(
+      "sc_shift_templates_start_minute_chk",
+      sql`${t.startMinute} in (0, 15, 30, 45)`,
+    ),
+    check(
+      "sc_shift_templates_end_minute_chk",
+      sql`${t.endMinute} in (0, 15, 30, 45)`,
+    ),
+  ],
+);
+
 // ─── Inferred types ───
 
 export type ScLocation = typeof scLocations.$inferSelect;
@@ -577,6 +635,8 @@ export type ScTaskStatus = "open" | "in_progress" | "done";
 export type ScTaskPriority = "low" | "normal" | "high" | "urgent";
 export type ScAnnouncement = typeof scAnnouncements.$inferSelect;
 export type NewScAnnouncement = typeof scAnnouncements.$inferInsert;
+export type ScShiftTemplate = typeof scShiftTemplates.$inferSelect;
+export type NewScShiftTemplate = typeof scShiftTemplates.$inferInsert;
 export type ScTimesheetApproval = typeof scTimesheetApprovals.$inferSelect;
 export type NewScTimesheetApproval = typeof scTimesheetApprovals.$inferInsert;
 export type ScTimesheetApprovalStatus = "approved" | "disputed";

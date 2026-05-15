@@ -55,6 +55,7 @@ const NAV = [
 const ADMIN_NAV = [
   { href: "/app/reports", label: "Reports", icon: BarChart3 },
   { href: "/app/departments", label: "Departments", icon: Building2 },
+  { href: "/app/shift-templates", label: "Shift templates", icon: CalendarDays },
   { href: "/app/swaps", label: "Swap requests", icon: Repeat },
   { href: "/app/audit", label: "Audit log", icon: History },
 ];
