@@ -6,6 +6,7 @@ import {
   forTenant,
   members,
   scDepartments,
+  scEmployees,
   scLocations,
   scShiftAssignments,
   scShiftComments,
@@ -13,6 +14,7 @@ import {
   users,
 } from "@tracey/db";
 import { currentMembership, currentUser } from "~/lib/auth/current";
+import { checkAvailability } from "~/lib/availability-check";
 import { findConflictedUserIds } from "~/lib/shift-conflicts";
 import { Button } from "~/components/ui/button";
 import { ShiftForm } from "../../_form";
@@ -166,6 +168,47 @@ export default async function EditShiftPage({
     shiftRow.id,
   );
 
+  // Availability check: pull each assigned user's declared free-text
+  // availability and run the parser to see whether the shift falls
+  // inside it. Only confident mismatches surface a chip; "unknown"
+  // (blank or unparseable) stays silent.
+  const assignedEmployeeRows =
+    assignments.length === 0
+      ? []
+      : await ctx.run((tx) =>
+          tx
+            .select({
+              appUserId: scEmployees.appUserId,
+              availability: scEmployees.availability,
+            })
+            .from(scEmployees)
+            .where(eq(scEmployees.traceyTenantId, membership.tenant.id)),
+        );
+  const availabilityByUser = new Map<string, Record<string, string> | null>();
+  for (const r of assignedEmployeeRows) {
+    if (r.appUserId) {
+      availabilityByUser.set(
+        r.appUserId,
+        (r.availability as Record<string, string> | null) ?? null,
+      );
+    }
+  }
+  const availabilityVerdictByAssignment = new Map<
+    string,
+    { kind: "mismatch"; reason: string } | null
+  >();
+  for (const a of assignments) {
+    const verdict = checkAvailability(
+      availabilityByUser.get(a.userId) ?? null,
+      shiftRow.startsAt,
+      shiftRow.endsAt,
+    );
+    availabilityVerdictByAssignment.set(
+      a.id,
+      verdict.kind === "mismatch" ? verdict : null,
+    );
+  }
+
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-6 py-10">
       <div className="flex items-start justify-between gap-3">
@@ -242,6 +285,14 @@ export default async function EditShiftPage({
                       className="inline-flex items-center rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-white"
                     >
                       Conflict
+                    </span>
+                  )}
+                  {availabilityVerdictByAssignment.get(a.id) && (
+                    <span
+                      title={availabilityVerdictByAssignment.get(a.id)!.reason}
+                      className="inline-flex items-center rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-white"
+                    >
+                      Outside avail
                     </span>
                   )}
                   <span
