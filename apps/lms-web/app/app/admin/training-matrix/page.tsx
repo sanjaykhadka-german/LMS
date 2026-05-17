@@ -220,10 +220,12 @@ export default async function TrainingMatrixPage({
                   <th
                     key={m.id}
                     scope="col"
-                    className="px-3 py-2 text-center font-medium whitespace-nowrap"
+                    className="h-48 px-1 py-2 align-bottom font-medium"
                     title={m.title}
                   >
-                    {m.title}
+                    <div className="mx-auto whitespace-nowrap [writing-mode:vertical-rl] [transform:rotate(180deg)]">
+                      {m.title}
+                    </div>
                   </th>
                 ))}
               </tr>
