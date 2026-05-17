@@ -3,7 +3,9 @@ import { redirect } from "next/navigation";
 import { and, asc, between, eq, sql } from "drizzle-orm";
 import { forTenant, scLocations, scShiftAssignments, scShifts } from "@tracey/db";
 import { currentMembership } from "~/lib/auth/current";
+import { forecastWeek } from "~/lib/labour-forecast";
 import { Button } from "~/components/ui/button";
+import { WeeklyLabourForecast } from "~/components/WeeklyLabourForecast";
 import { bulkPublishWeekAction, duplicateWeekAction } from "./actions";
 
 export const metadata = { title: "Schedule · ShiftCraft" };
@@ -156,6 +158,9 @@ export default async function SchedulePage({
   const canCreate = locations.length > 0;
   const isAdmin = membership.role === "admin" || membership.role === "owner";
   const draftCount = shifts.filter((s) => s.status === "draft").length;
+  const labourForecast = isAdmin
+    ? await forecastWeek(membership.tenant.id, weekStart, weekEnd)
+    : null;
   const activeLocation = locationFilter
     ? locations.find((l) => l.id === locationFilter)
     : null;
@@ -286,6 +291,10 @@ export default async function SchedulePage({
             </Button>
           ))}
         </div>
+      )}
+
+      {labourForecast && (
+        <WeeklyLabourForecast forecast={labourForecast} />
       )}
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
