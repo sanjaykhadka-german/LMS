@@ -13,6 +13,7 @@ import {
   users,
 } from "@tracey/db";
 import { currentMembership, currentUser } from "~/lib/auth/current";
+import { findConflictedUserIds } from "~/lib/shift-conflicts";
 import { Button } from "~/components/ui/button";
 import { ShiftForm } from "../../_form";
 import {
@@ -153,6 +154,18 @@ export default async function EditShiftPage({
   const assignedIds = new Set(assignments.map((a) => a.userId));
   const availableEmployees = tenantMembers.filter((m) => !assignedIds.has(m.id));
 
+  // Conflict guard: which of the currently-assigned users already have an
+  // accepted shift overlapping this one? (We pass the current shift's ID
+  // as `excludeShiftId` so an "accepted" row on THIS shift doesn't
+  // self-conflict.)
+  const conflictedUserIds = await findConflictedUserIds(
+    membership.tenant.id,
+    assignments.map((a) => a.userId),
+    shiftRow.startsAt,
+    shiftRow.endsAt,
+    shiftRow.id,
+  );
+
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-6 py-10">
       <div className="flex items-start justify-between gap-3">
@@ -223,6 +236,14 @@ export default async function EditShiftPage({
                   )}
                 </div>
                 <div className="flex items-center gap-2">
+                  {conflictedUserIds.has(a.userId) && (
+                    <span
+                      title="This person already has another accepted shift overlapping this time."
+                      className="inline-flex items-center rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-white"
+                    >
+                      Conflict
+                    </span>
+                  )}
                   <span
                     className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider ${ASSIGN_BADGE[a.status] ?? ""}`}
                   >
