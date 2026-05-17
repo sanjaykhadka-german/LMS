@@ -17,7 +17,9 @@ import {
   fmtHours,
   getEventsInRangeForTenant,
 } from "~/lib/clock";
+import { getNextShiftForUser } from "~/lib/next-shift";
 import { Avatar } from "~/components/Avatar";
+import { NextShiftCountdown } from "~/components/NextShiftCountdown";
 
 function startOfWeek(d: Date): Date {
   const dow = (d.getDay() + 6) % 7;
@@ -104,6 +106,8 @@ export default async function DashboardPage() {
         ),
     ),
   ]);
+
+  const nextShift = await getNextShiftForUser(membership.tenant.id, user.id);
 
   const upcomingMine = await ctx.run((tx) =>
     tx
@@ -234,6 +238,17 @@ export default async function DashboardPage() {
           You're signed in to {membership.tenant.name} as {membership.role}.
         </p>
       </div>
+
+      {nextShift && (
+        <NextShiftCountdown
+          shiftId={nextShift.id}
+          startsAtIso={nextShift.startsAt.toISOString()}
+          endsAtIso={nextShift.endsAt.toISOString()}
+          role={nextShift.role}
+          locationName={nextShift.locationName}
+          locationColor={nextShift.locationColor}
+        />
+      )}
 
       {pinnedAnnouncements.length > 0 && (
         <section className="space-y-2">
