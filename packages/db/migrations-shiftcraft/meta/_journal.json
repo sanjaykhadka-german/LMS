@@ -78,6 +78,13 @@
       "when": 1778825645146,
       "tag": "0010_daily_namora",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1778981151636,
+      "tag": "0011_same_gateway",
+      "breakpoints": true
     }
   ]
 }

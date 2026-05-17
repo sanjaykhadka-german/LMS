@@ -608,6 +608,38 @@ export const scShiftTemplates = pgTable(
   ],
 );
 
+// ─── Shift comments ───
+//
+// Append-only thread of notes attached to a single shift. Anyone in
+// the tenant can read + post; deletion is gated to the author or an
+// admin in the action layer (RLS handles tenant isolation; intra-tenant
+// authorship checks aren't representable as a single policy).
+//
+// FK to scShifts is ON DELETE CASCADE so deleting a shift cleans up its
+// thread. FK to app.users is ON DELETE SET NULL so removing a user
+// keeps the comment history intact — the row just shows "Unknown" for
+// the author, mirroring how audit_events handle the same case.
+
+export const scShiftComments = pgTable(
+  "sc_shift_comments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    traceyTenantId: text("tracey_tenant_id").notNull(),
+    shiftId: uuid("shift_id").notNull(),
+    authorUserId: uuid("author_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("sc_shift_comments_shift_created_idx").on(t.shiftId, t.createdAt),
+    index("sc_shift_comments_tenant_idx").on(t.traceyTenantId),
+  ],
+);
+
 // ─── Inferred types ───
 
 export type ScLocation = typeof scLocations.$inferSelect;
@@ -637,6 +669,8 @@ export type ScAnnouncement = typeof scAnnouncements.$inferSelect;
 export type NewScAnnouncement = typeof scAnnouncements.$inferInsert;
 export type ScShiftTemplate = typeof scShiftTemplates.$inferSelect;
 export type NewScShiftTemplate = typeof scShiftTemplates.$inferInsert;
+export type ScShiftComment = typeof scShiftComments.$inferSelect;
+export type NewScShiftComment = typeof scShiftComments.$inferInsert;
 export type ScTimesheetApproval = typeof scTimesheetApprovals.$inferSelect;
 export type NewScTimesheetApproval = typeof scTimesheetApprovals.$inferInsert;
 export type ScTimesheetApprovalStatus = "approved" | "disputed";

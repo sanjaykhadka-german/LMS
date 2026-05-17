@@ -7,6 +7,8 @@ import { z } from "zod";
 import {
   db,
   forTenant,
+  scDepartments,
+  scEmployees,
   scLocations,
   scShiftAssignments,
   scShifts,
@@ -15,6 +17,7 @@ import {
 import { currentMembership, currentUser, requireUser } from "~/lib/auth/current";
 import { logAuditEvent } from "~/lib/audit";
 import { notifyShiftOffered } from "~/lib/email";
+import { getUnsubscribedUserIds } from "~/lib/email-prefs";
 
 export type FormState =
   | { status: "idle" }
@@ -495,6 +498,182 @@ export async function assignEmployeeAction(
   revalidatePath("/app/schedule");
   revalidatePath("/app/my-shifts");
   return { status: "ok", message: "Offer sent." };
+}
+
+/**
+ * Bulk-offer one shift to every linked employee — either all of them
+ * or those in a chosen department. "Linked" means sc_employees rows
+ * with a non-null app_user_id (labour-hire rows without an auth
+ * account can't accept anyway).
+ *
+ * - Skips users already on the shift (any status).
+ * - Skips users who've opted out of "offers" emails (the assignment
+ *   row is still inserted; only the email is suppressed). This
+ *   mirrors how 1:1 assign works once they're back in the app.
+ * - Resilient to partial failure: one bad email send doesn't block
+ *   the rest — safeSend() inside notifyShiftOffered swallows hiccups.
+ *
+ * Bound to a <form>, so returns void; the page revalidates and the
+ * caller's edit page reloads with the new assignment list. A flash
+ * banner reads `?offered=N&skipped=M` after the redirect.
+ */
+const bulkOfferSchema = z.object({
+  shiftId: z.string().uuid("Pick a shift"),
+  // Empty string = "everyone in the tenant". A UUID = "this department".
+  departmentId: z.string().optional().or(z.literal("")),
+});
+
+export async function bulkOfferShiftAction(formData: FormData): Promise<void> {
+  const parsed = bulkOfferSchema.safeParse({
+    shiftId: formData.get("shiftId"),
+    departmentId: formData.get("departmentId") ?? "",
+  });
+  if (!parsed.success) return;
+  const membership = await requireAdminMembership();
+  const tenantId = membership.tenant.id;
+
+  // Validate the shift exists in this tenant + capture details for the
+  // email payload. Doing this BEFORE the candidate query catches the
+  // common "wrong-shift-id form replay" case cheaply.
+  const [shift] = await forTenant(tenantId).run((tx) =>
+    tx
+      .select({
+        id: scShifts.id,
+        startsAt: scShifts.startsAt,
+        endsAt: scShifts.endsAt,
+        role: scShifts.role,
+        locationName: scLocations.name,
+      })
+      .from(scShifts)
+      .leftJoin(scLocations, eq(scLocations.id, scShifts.locationId))
+      .where(
+        and(
+          eq(scShifts.id, parsed.data.shiftId),
+          eq(scShifts.traceyTenantId, tenantId),
+        ),
+      )
+      .limit(1),
+  );
+  if (!shift) return;
+
+  // Candidates: linked employees, optionally scoped by department.
+  const deptId = parsed.data.departmentId?.trim();
+  const candidateRows = await forTenant(tenantId).run((tx) =>
+    tx
+      .select({
+        appUserId: scEmployees.appUserId,
+        departmentName: scDepartments.name,
+      })
+      .from(scEmployees)
+      .leftJoin(
+        scDepartments,
+        eq(scDepartments.id, scEmployees.departmentId),
+      )
+      .where(
+        and(
+          eq(scEmployees.traceyTenantId, tenantId),
+          sql`${scEmployees.appUserId} is not null`,
+          deptId ? eq(scEmployees.departmentId, deptId) : undefined,
+        ),
+      ),
+  );
+  const candidateIds = Array.from(
+    new Set(
+      candidateRows
+        .map((r) => r.appUserId)
+        .filter((v): v is string => !!v),
+    ),
+  );
+  if (candidateIds.length === 0) {
+    await logAuditEvent({
+      action: "shiftcraft.shift.bulk_offered",
+      targetKind: "sc_shift",
+      targetId: shift.id,
+      details: {
+        departmentId: deptId || null,
+        offered: 0,
+        skipped: 0,
+        candidates: 0,
+      },
+    });
+    revalidatePath(`/app/schedule/${shift.id}/edit`);
+    redirect(`/app/schedule/${shift.id}/edit?offered=0&skipped=0`);
+  }
+
+  // Insert one row per candidate with onConflictDoNothing so re-offers
+  // (race or repeat clicks) collapse cleanly against sc_shift_user_uq.
+  let offered = 0;
+  let skipped = 0;
+  await forTenant(tenantId).run(async (tx) => {
+    for (const uid of candidateIds) {
+      const result = await tx
+        .insert(scShiftAssignments)
+        .values({ shiftId: shift.id, userId: uid })
+        .onConflictDoNothing()
+        .returning({ id: scShiftAssignments.id });
+      if (result.length > 0) offered += 1;
+      else skipped += 1;
+    }
+  });
+
+  // Email the offer to anyone newly added who hasn't opted out.
+  if (offered > 0) {
+    const unsubscribed = await getUnsubscribedUserIds(tenantId, "offers");
+    const newlyOfferedIds = new Set<string>();
+    // Re-derive newly-offered by another pass: we tracked count above
+    // but not which ids. Pull them in one query.
+    const newly = await forTenant(tenantId).run((tx) =>
+      tx
+        .select({
+          userId: scShiftAssignments.userId,
+        })
+        .from(scShiftAssignments)
+        .where(
+          and(
+            eq(scShiftAssignments.shiftId, shift.id),
+            eq(scShiftAssignments.status, "offered"),
+            sql`${scShiftAssignments.userId} = ANY(${candidateIds})`,
+          ),
+        ),
+    );
+    for (const r of newly) newlyOfferedIds.add(r.userId);
+
+    const recipientRows = await db
+      .select({
+        id: users.id,
+        email: users.email,
+        name: users.name,
+      })
+      .from(users)
+      .where(sql`${users.id} = ANY(${Array.from(newlyOfferedIds)})`);
+
+    for (const r of recipientRows) {
+      if (unsubscribed.has(r.id)) continue;
+      await notifyShiftOffered({
+        to: { email: r.email, name: r.name },
+        shift,
+      });
+    }
+  }
+
+  await logAuditEvent({
+    action: "shiftcraft.shift.bulk_offered",
+    targetKind: "sc_shift",
+    targetId: shift.id,
+    details: {
+      departmentId: deptId || null,
+      offered,
+      skipped,
+      candidates: candidateIds.length,
+    },
+  });
+
+  revalidatePath(`/app/schedule/${shift.id}/edit`);
+  revalidatePath("/app/schedule");
+  revalidatePath("/app/my-shifts");
+  redirect(
+    `/app/schedule/${shift.id}/edit?offered=${offered}&skipped=${skipped}`,
+  );
 }
 
 export async function unassignAction(formData: FormData): Promise<void> {

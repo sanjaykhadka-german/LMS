@@ -5,15 +5,18 @@ import {
   db,
   forTenant,
   members,
+  scDepartments,
   scLocations,
   scShiftAssignments,
+  scShiftComments,
   scShifts,
   users,
 } from "@tracey/db";
-import { currentMembership } from "~/lib/auth/current";
+import { currentMembership, currentUser } from "~/lib/auth/current";
 import { Button } from "~/components/ui/button";
 import { ShiftForm } from "../../_form";
 import {
+  bulkOfferShiftAction,
   cancelShiftAction,
   deleteShiftAction,
   duplicateShiftAction,
@@ -21,6 +24,8 @@ import {
   unassignAction,
 } from "../../actions";
 import { AssignForm } from "../../_assign-form";
+import { ShiftComments, type ShiftComment } from "../../_comments";
+import { deleteShiftCommentAction } from "../../comment-actions";
 
 export const metadata = { title: "Edit shift · ShiftCraft" };
 
@@ -41,12 +46,21 @@ const ASSIGN_BADGE: Record<string, string> = {
 
 export default async function EditShiftPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ offered?: string; skipped?: string }>;
 }) {
   const { id } = await params;
+  const { offered: offeredRaw, skipped: skippedRaw } = await searchParams;
+  const offeredCount = Number.parseInt(offeredRaw ?? "", 10);
+  const skippedCount = Number.parseInt(skippedRaw ?? "", 10);
+  const showOfferFlash =
+    Number.isFinite(offeredCount) && offeredRaw !== undefined;
   const membership = await currentMembership();
   if (!membership) redirect("/app");
+  const me = await currentUser();
+  if (!me) redirect("/sign-in");
 
   const isAdmin = membership.role === "admin" || membership.role === "owner";
 
@@ -71,36 +85,70 @@ export default async function EditShiftPage({
 
   if (!shiftRow) notFound();
 
-  const [locations, assignments, tenantMembers] = await Promise.all([
-    ctx.run((tx) =>
-      tx
-        .select({ id: scLocations.id, name: scLocations.name })
-        .from(scLocations)
-        .orderBy(asc(scLocations.name)),
-    ),
-    ctx.run((tx) =>
-      tx
-        .select({
-          id: scShiftAssignments.id,
-          userId: scShiftAssignments.userId,
-          status: scShiftAssignments.status,
-          respondedAt: scShiftAssignments.respondedAt,
-          createdAt: scShiftAssignments.createdAt,
-          userName: users.name,
-          userEmail: users.email,
-        })
-        .from(scShiftAssignments)
-        .leftJoin(users, eq(users.id, scShiftAssignments.userId))
-        .where(eq(scShiftAssignments.shiftId, id))
-        .orderBy(asc(scShiftAssignments.createdAt)),
-    ),
-    db
-      .select({ id: users.id, name: users.name, email: users.email })
-      .from(members)
-      .innerJoin(users, eq(users.id, members.userId))
-      .where(eq(members.tenantId, membership.tenant.id))
-      .orderBy(asc(users.name), asc(users.email)),
-  ]);
+  const [locations, assignments, tenantMembers, departments, commentRows] =
+    await Promise.all([
+      ctx.run((tx) =>
+        tx
+          .select({ id: scLocations.id, name: scLocations.name })
+          .from(scLocations)
+          .orderBy(asc(scLocations.name)),
+      ),
+      ctx.run((tx) =>
+        tx
+          .select({
+            id: scShiftAssignments.id,
+            userId: scShiftAssignments.userId,
+            status: scShiftAssignments.status,
+            respondedAt: scShiftAssignments.respondedAt,
+            createdAt: scShiftAssignments.createdAt,
+            userName: users.name,
+            userEmail: users.email,
+          })
+          .from(scShiftAssignments)
+          .leftJoin(users, eq(users.id, scShiftAssignments.userId))
+          .where(eq(scShiftAssignments.shiftId, id))
+          .orderBy(asc(scShiftAssignments.createdAt)),
+      ),
+      db
+        .select({ id: users.id, name: users.name, email: users.email })
+        .from(members)
+        .innerJoin(users, eq(users.id, members.userId))
+        .where(eq(members.tenantId, membership.tenant.id))
+        .orderBy(asc(users.name), asc(users.email)),
+      ctx.run((tx) =>
+        tx
+          .select({ id: scDepartments.id, name: scDepartments.name })
+          .from(scDepartments)
+          .where(eq(scDepartments.traceyTenantId, membership.tenant.id))
+          .orderBy(asc(scDepartments.name)),
+      ),
+      ctx.run((tx) =>
+        tx
+          .select({
+            id: scShiftComments.id,
+            body: scShiftComments.body,
+            createdAt: scShiftComments.createdAt,
+            authorUserId: scShiftComments.authorUserId,
+            authorName: users.name,
+            authorEmail: users.email,
+            authorImage: users.image,
+          })
+          .from(scShiftComments)
+          .leftJoin(users, eq(users.id, scShiftComments.authorUserId))
+          .where(eq(scShiftComments.shiftId, id))
+          .orderBy(asc(scShiftComments.createdAt)),
+      ),
+    ]);
+
+  const comments: ShiftComment[] = commentRows.map((c) => ({
+    id: c.id,
+    body: c.body,
+    createdAt: c.createdAt,
+    authorUserId: c.authorUserId,
+    authorName: c.authorName,
+    authorEmail: c.authorEmail,
+    authorImage: c.authorImage,
+  }));
 
   const assignedIds = new Set(assignments.map((a) => a.userId));
   const availableEmployees = tenantMembers.filter((m) => !assignedIds.has(m.id));
@@ -133,6 +181,16 @@ export default async function EditShiftPage({
           }}
         />
       </section>
+
+      {showOfferFlash && (
+        <div className="rounded-md border-2 border-emerald-500/60 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-900 dark:border-emerald-500/50 dark:bg-emerald-950/50 dark:text-emerald-100">
+          {offeredCount > 0
+            ? `Offered to ${offeredCount} ${offeredCount === 1 ? "person" : "people"}.`
+            : "No new offers — every candidate already had an assignment."}
+          {skippedCount > 0 &&
+            ` Skipped ${skippedCount} who already had one.`}
+        </div>
+      )}
 
       <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
         <h2 className="text-base font-semibold">
@@ -196,6 +254,59 @@ export default async function EditShiftPage({
             availableEmployees={availableEmployees}
           />
         )}
+
+        {isAdmin && (
+          <form
+            action={bulkOfferShiftAction}
+            className="mt-4 flex flex-wrap items-end gap-2 rounded-md border border-border bg-muted/30 p-3"
+          >
+            <input type="hidden" name="shiftId" value={shiftRow.id} />
+            <div className="flex-1 min-w-[180px] space-y-1">
+              <label
+                htmlFor="bulk-dept"
+                className="text-xs font-medium uppercase tracking-wider text-muted-foreground"
+              >
+                Bulk offer
+              </label>
+              <select
+                id="bulk-dept"
+                name="departmentId"
+                defaultValue=""
+                className="flex h-9 w-full rounded-md border border-[color:var(--input)] bg-transparent px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[color:var(--ring)]"
+              >
+                <option value="">Everyone in {membership.tenant.name}</option>
+                {departments.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <Button type="submit" variant="outline" size="sm">
+              Offer to all
+            </Button>
+            <p className="w-full text-[11px] text-muted-foreground">
+              Sends an offer to every linked employee in the chosen scope.
+              Skips anyone already on this shift. Email opt-outs are
+              respected.
+            </p>
+          </form>
+        )}
+      </section>
+
+      <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+        <h2 className="text-base font-semibold">Comments</h2>
+        <p className="mt-1 mb-4 text-xs text-muted-foreground">
+          Visible to everyone in {membership.tenant.name}. Anyone can post;
+          authors and admins can delete.
+        </p>
+        <ShiftComments
+          shiftId={shiftRow.id}
+          currentUserId={me.id}
+          isAdmin={isAdmin}
+          comments={comments}
+          onDelete={deleteShiftCommentAction}
+        />
       </section>
 
       <section className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-5 shadow-sm">
