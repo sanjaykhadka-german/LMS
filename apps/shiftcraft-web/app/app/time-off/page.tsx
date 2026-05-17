@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { and, desc, eq } from "drizzle-orm";
 import { forTenant, scTimeOffRequests, users } from "@tracey/db";
 import { currentMembership, requireUser } from "~/lib/auth/current";
+import { findAffectedShiftsForRequests } from "~/lib/time-off-impact";
 import { Button } from "~/components/ui/button";
 import { TimeOffForm } from "./_form";
 import {
@@ -75,6 +76,24 @@ export default async function TimeOffPage({
     return q;
   });
 
+  // For admins, surface which published shifts each pending request
+  // would affect — accepted shifts are the obvious fallout, offered
+  // shifts also disappear since the employee can't accept while on
+  // leave. Computed once per request; the helper itself short-circuits
+  // when the list is empty.
+  const pendingForImpact = isAdmin
+    ? rows.filter((r) => r.status === "pending")
+    : [];
+  const impactByRequest = await findAffectedShiftsForRequests(
+    membership.tenant.id,
+    pendingForImpact.map((r) => ({
+      id: r.id,
+      userId: r.userId,
+      startDate: r.startDate,
+      endDate: r.endDate,
+    })),
+  );
+
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-6 py-10">
       <div>
@@ -122,6 +141,13 @@ export default async function TimeOffPage({
               const isOwn = r.userId === user.id;
               const canReview = isAdmin && r.status === "pending";
               const canCancel = isOwn && r.status === "pending";
+              const affected = impactByRequest.get(r.id) ?? [];
+              const acceptedAffected = affected.filter(
+                (a) => a.status === "accepted",
+              ).length;
+              const offeredAffected = affected.filter(
+                (a) => a.status === "offered",
+              ).length;
               return (
                 <li key={r.id} className="px-5 py-4">
                   <div className="flex items-start justify-between gap-3">
@@ -149,6 +175,65 @@ export default async function TimeOffPage({
                       {r.status}
                     </span>
                   </div>
+
+                  {canReview && affected.length > 0 && (
+                    <details className="mt-3 rounded-md border border-rose-500/40 bg-rose-50/60 px-3 py-2 text-xs dark:border-rose-500/30 dark:bg-rose-950/20">
+                      <summary className="cursor-pointer font-medium text-rose-900 dark:text-rose-200">
+                        Impact:{" "}
+                        {acceptedAffected > 0 && (
+                          <span className="inline-flex items-center rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white">
+                            {acceptedAffected} accepted
+                          </span>
+                        )}
+                        {offeredAffected > 0 && (
+                          <span className="ml-1 inline-flex items-center rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white">
+                            {offeredAffected} offered
+                          </span>
+                        )}{" "}
+                        <span className="font-normal text-muted-foreground">
+                          — click to see which shifts
+                        </span>
+                      </summary>
+                      <ul className="mt-2 divide-y divide-rose-500/20">
+                        {affected.map((s) => (
+                          <li
+                            key={s.shiftId}
+                            className="flex items-center justify-between gap-3 py-1.5"
+                          >
+                            <span className="truncate">
+                              <span className="font-medium">{s.role}</span>
+                              {s.locationName ? ` · ${s.locationName}` : ""}
+                            </span>
+                            <span className="flex items-center gap-2 font-mono tabular-nums text-muted-foreground">
+                              {s.startsAt.toLocaleString(undefined, {
+                                weekday: "short",
+                                day: "numeric",
+                                month: "short",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                              <span
+                                className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${
+                                  s.status === "accepted"
+                                    ? "bg-rose-600 text-white"
+                                    : "bg-amber-500 text-white"
+                                }`}
+                              >
+                                {s.status}
+                              </span>
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
+
+                  {canReview && affected.length === 0 && (
+                    <p className="mt-3 text-xs text-emerald-700 dark:text-emerald-300">
+                      No published shifts assigned to this person in the
+                      requested window.
+                    </p>
+                  )}
 
                   {(canReview || canCancel) && (
                     <div className="mt-3 flex items-center gap-2">
