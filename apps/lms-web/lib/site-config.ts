@@ -30,9 +30,6 @@ export const siteConfig = {
   contact: {
     sales: "sanjay.khadka@germanbutchery.com.au",
   },
-  links: {
-    flask: process.env.FLASK_BASE_URL ?? "http://localhost:5000",
-  },
 } as const;
 
 interface PriceSlot {

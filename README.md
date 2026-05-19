@@ -204,20 +204,22 @@ helpers, and the `/api/health` route.
 
 ## Deploy to Render
 
-`render.yaml` defines three services + one database:
+`render.yaml` defines the Tracey services + one database:
 
 | Service | Type | Notes |
 |---|---|---|
-| `lms` | web (python) | Existing Flask app — unchanged |
-| `lms-web` | web (node) | New Next.js app, `healthCheckPath: /api/health` |
+| `lms-web` | web (node) | Tracey Next.js app, `healthCheckPath: /api/health` |
+| `planning-web` | web (node) | Tracey Planning, `autoDeploy: false` until Phase 6 cutover |
+| `shiftcraft-web` | web (node) | ShiftCraft, `autoDeploy: false`; promoted from dashboard against the shiftcraft branch |
 | `lms-stripe-reconcile` | cron (node) | Nightly Stripe → DB drift check |
-| `lms-db` | postgres | Shared by both apps |
+| `lms-whs-reminders` | cron (node) | Daily WHS expiry reminder pass |
+| `lms-db` | postgres | Shared by lms-web (Flask service retired 2026-05-19) |
 
 After connecting the repo as a Render Blueprint:
 
 1. Open the `lms-web` service env vars and fill in everything marked
-   `sync: false` (Clerk keys, Stripe keys, Stripe price IDs,
-   `NEXT_PUBLIC_APP_URL`, `FLASK_BASE_URL`).
+   `sync: false` (Stripe keys, Stripe price IDs, `NEXT_PUBLIC_APP_URL`,
+   `AUTH_URL`, `PLATFORM_ADMIN_EMAILS`).
 2. Add Stripe webhook endpoint `https://lms-web.onrender.com/api/webhooks/stripe`
    in the Stripe dashboard, copy the signing secret into
    `STRIPE_WEBHOOK_SECRET`.

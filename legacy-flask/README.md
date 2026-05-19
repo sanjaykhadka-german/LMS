@@ -47,26 +47,36 @@ always to make the change in `apps/lms-web/` instead.
 
 ## Render service rollback
 
-The Flask Render service (`lms` in `render.yaml`) has been marked
-`autoDeploy: false` and stopped in the dashboard. Its build/start
-commands have been updated to point at this directory so it can still be
-restarted in <60s for emergency rollback:
+**2026-05-19 update:** the Flask Render service was deleted from the
+dashboard to reclaim the free-tier slot for ShiftCraft. The `lms` block
+in `render.yaml` was also removed in the same commit. The <60s
+"just restart it" rollback is no longer available; rollback now takes
+~10-15 min:
 
-- buildCommand: `pip install -r legacy-flask/requirements.txt`
-- startCommand: `cd legacy-flask && gunicorn app:app --timeout 180 --workers 2`
+1. Recover the `lms` service block from git history (the commit
+   immediately before this README change), restore it to `render.yaml`,
+   with the same build/start commands as before:
+   - buildCommand: `pip install -r legacy-flask/requirements.txt`
+   - startCommand: `cd legacy-flask && gunicorn app:app --timeout 180 --workers 2`
+2. Push to main; Render Blueprint sync recreates the service.
+3. From the dashboard, trigger a manual deploy.
+
+Source in this directory is unchanged — the Python app still builds and
+runs. Rollback failure mode is "slower", not "blocked".
 
 ## When this directory can be deleted
 
 Only after **all** of these are true:
 1. lms-web has been the sole sign-in path in production for at least 60
-   days (suggest 90)
+   days from 2026-05-08 (suggest 90)
 2. `SELECT count(*) FROM public.users WHERE tracey_user_id IS NULL` returns
    0 (every Flask-era user has migrated to Tracey)
 3. The legacy auth bridge (`apps/lms-web/lib/auth/legacy-bridge.ts`) has
    been removed
-4. The `lms` service has been removed from `render.yaml` and from the
-   Render dashboard
-5. `users` has been re-added to `0004_enable_rls.sql`'s text_tables array
+4. `users` has been re-added to `0004_enable_rls.sql`'s text_tables array
    and the migration re-applied
+
+(Item 4 from the original list — "lms service removed from render.yaml
+and dashboard" — was completed 2026-05-19.)
 
 Until then, leave it untouched.
