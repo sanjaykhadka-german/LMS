@@ -1,12 +1,22 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { and, asc, between, eq, sql } from "drizzle-orm";
-import { forTenant, scLocations, scShiftAssignments, scShifts } from "@tracey/db";
+import {
+  forTenant,
+  scEmployees,
+  scLocations,
+  scShiftAssignments,
+  scShifts,
+  users,
+} from "@tracey/db";
 import { currentMembership } from "~/lib/auth/current";
 import { forecastWeek } from "~/lib/labour-forecast";
 import { Button } from "~/components/ui/button";
 import { WeeklyLabourForecast } from "~/components/WeeklyLabourForecast";
+import { AreaScheduleView, type AreaShift } from "./_area-view";
 import { bulkPublishWeekAction, duplicateWeekAction } from "./actions";
+
+type ScheduleView = "day" | "area";
 
 export const metadata = { title: "Schedule · ShiftCraft" };
 
@@ -58,6 +68,7 @@ export default async function SchedulePage({
   searchParams: Promise<{
     week?: string;
     location?: string;
+    view?: string;
     copied?: string;
     skipped?: string;
   }>;
@@ -68,9 +79,11 @@ export default async function SchedulePage({
   const {
     week,
     location: locationFilter,
+    view: viewRaw,
     copied,
     skipped,
   } = await searchParams;
+  const view: ScheduleView = viewRaw === "area" ? "area" : "day";
   const copiedCount = Number.parseInt(copied ?? "", 10);
   const skippedCount = Number.parseInt(skipped ?? "", 10);
   const showCopyFlash = Number.isFinite(copiedCount) && copied !== undefined;
@@ -78,7 +91,11 @@ export default async function SchedulePage({
   const weekStart = startOfWeek(isNaN(anchor.getTime()) ? new Date() : anchor);
   const weekEnd = addDays(weekStart, 7); // exclusive
 
-  const qs = (overrides: { week?: string; location?: string | null }) => {
+  const qs = (overrides: {
+    week?: string;
+    location?: string | null;
+    view?: ScheduleView | null;
+  }) => {
     const params = new URLSearchParams();
     const w = overrides.week ?? week;
     if (w) params.set("week", w);
@@ -87,6 +104,9 @@ export default async function SchedulePage({
         ? undefined
         : (overrides.location ?? locationFilter);
     if (loc) params.set("location", loc);
+    const v =
+      overrides.view === null ? undefined : (overrides.view ?? view);
+    if (v && v !== "day") params.set("view", v);
     const s = params.toString();
     return s ? `?${s}` : "";
   };
@@ -106,7 +126,18 @@ export default async function SchedulePage({
     WHERE ${scShiftAssignments.shiftId} = ${scShifts.id}
       AND ${scShiftAssignments.status} = 'offered'
   )`;
-  const [shifts, locations] = await Promise.all([
+  // First accepted assignee's display name (auth user.name fallback to email).
+  // Null when nobody has accepted yet — area view renders "Unassigned".
+  const assigneeName = sql<string | null>`(
+    SELECT coalesce(${users.name}, ${users.email}) FROM ${users}
+    INNER JOIN ${scShiftAssignments}
+      ON ${scShiftAssignments.userId} = ${users.id}
+    WHERE ${scShiftAssignments.shiftId} = ${scShifts.id}
+      AND ${scShiftAssignments.status} = 'accepted'
+    ORDER BY ${scShiftAssignments.createdAt} ASC
+    LIMIT 1
+  )`;
+  const [shifts, locations, employees] = await Promise.all([
     ctx.run((tx) =>
       tx
         .select({
@@ -120,6 +151,7 @@ export default async function SchedulePage({
           locationColor: scLocations.color,
           acceptedCount,
           offeredCount,
+          assigneeName,
         })
         .from(scShifts)
         .leftJoin(scLocations, eq(scLocations.id, scShifts.locationId))
@@ -142,6 +174,26 @@ export default async function SchedulePage({
         .from(scLocations)
         .orderBy(asc(scLocations.name)),
     ),
+    view === "area"
+      ? ctx.run((tx) =>
+          tx
+            .select({
+              id: scEmployees.id,
+              fullName: scEmployees.fullName,
+              email: scEmployees.email,
+            })
+            .from(scEmployees)
+            .where(
+              and(
+                eq(scEmployees.traceyTenantId, membership.tenant.id),
+                eq(scEmployees.isActive, true),
+              ),
+            )
+            .orderBy(asc(scEmployees.fullName)),
+        )
+      : Promise.resolve(
+          [] as Array<{ id: string; fullName: string; email: string | null }>,
+        ),
   ]);
 
   // Group shifts by day index (0=Mon … 6=Sun).
@@ -177,6 +229,28 @@ export default async function SchedulePage({
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <div className="mr-1 inline-flex overflow-hidden rounded-md border border-border">
+            <Link
+              href={`/app/schedule${qs({ view: "day" })}`}
+              className={`px-3 py-1.5 text-xs font-medium ${
+                view === "day"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-background hover:bg-muted"
+              }`}
+            >
+              Day
+            </Link>
+            <Link
+              href={`/app/schedule${qs({ view: "area" })}`}
+              className={`px-3 py-1.5 text-xs font-medium ${
+                view === "area"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-background hover:bg-muted"
+              }`}
+            >
+              Area
+            </Link>
+          </div>
           <Button asChild variant="outline" size="sm">
             <Link href={`/app/schedule${qs({ week: prevWeek })}`}>← Prev</Link>
           </Button>
@@ -297,6 +371,13 @@ export default async function SchedulePage({
         <WeeklyLabourForecast forecast={labourForecast} />
       )}
 
+      {view === "area" ? (
+        <AreaScheduleView
+          weekStart={weekStart}
+          shifts={shifts as unknown as AreaShift[]}
+          employees={employees}
+        />
+      ) : (
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {days.map((d) => (
           <section
@@ -363,6 +444,7 @@ export default async function SchedulePage({
           </section>
         ))}
       </div>
+      )}
     </div>
   );
 }
