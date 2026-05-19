@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { Button } from "~/components/ui/button";
 import { Label } from "~/components/ui/label";
+import { fmtShortDateTime } from "~/lib/date-format";
 import {
   initiateCoverAction,
   initiateSwapAction,
@@ -230,12 +231,5 @@ function FormFooter({
 }
 
 function fmt(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleString(undefined, {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return fmtShortDateTime(new Date(iso));
 }

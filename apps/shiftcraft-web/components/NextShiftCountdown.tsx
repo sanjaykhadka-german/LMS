@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { countdownFor, type CountdownTone } from "~/lib/next-shift";
+import { countdownFor, type CountdownTone } from "~/lib/next-shift-format";
+import { fmtShortDateTime, fmtTime24 } from "~/lib/date-format";
 
 interface Props {
   shiftId: string;
@@ -28,30 +29,12 @@ const TONE_CHIP: Record<CountdownTone, string> = {
 };
 
 function fmtRange(startsAt: Date, endsAt: Date): string {
-  const sameDay =
-    startsAt.toDateString() === endsAt.toDateString();
-  const start = startsAt.toLocaleString(undefined, {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const sameDay = startsAt.toDateString() === endsAt.toDateString();
+  const start = fmtShortDateTime(startsAt);
   if (sameDay) {
-    const end = endsAt.toLocaleTimeString(undefined, {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-    return `${start} – ${end}`;
+    return `${start} – ${fmtTime24(endsAt)}`;
   }
-  const end = endsAt.toLocaleString(undefined, {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-  return `${start} → ${end}`;
+  return `${start} → ${fmtShortDateTime(endsAt)}`;
 }
 
 /**

@@ -20,6 +20,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { fmtShortDate } from "~/lib/date-format";
 import { moveTaskAction } from "./actions";
 
 export type TaskStatus = "open" | "in_progress" | "done";
@@ -54,11 +55,7 @@ function fmtDue(due: string | null): string | null {
   if (!due) return null;
   const d = new Date(`${due}T00:00:00`);
   if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleDateString(undefined, {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-  });
+  return fmtShortDate(d);
 }
 
 function isOverdue(due: string | null, status: TaskStatus): boolean {

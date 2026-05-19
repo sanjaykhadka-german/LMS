@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useRef } from "react";
 import { Button } from "~/components/ui/button";
 import { Avatar } from "~/components/Avatar";
+import { fmtDayMonth } from "~/lib/date-format";
 import {
   postShiftCommentAction,
   type CommentFormState,
@@ -20,10 +21,7 @@ function relativeTime(d: Date, now: Date = new Date()): string {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   if (days < 7) return `${days}d ago`;
-  return d.toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-  });
+  return fmtDayMonth(d);
 }
 
 export interface ShiftComment {
