@@ -1,0 +1,1 @@
+ALTER TABLE "app"."tenants" ADD COLUMN "audit_mode" boolean DEFAULT false NOT NULL;

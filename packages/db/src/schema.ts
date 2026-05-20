@@ -95,6 +95,7 @@ export const tenants = appSchema.table(
     stripeSubscriptionId: text("stripe_subscription_id"),
     seatsPurchased: integer("seats_purchased").notNull().default(0),
     timezone: text("timezone").notNull().default("Australia/Sydney"),
+    auditMode: boolean("audit_mode").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
