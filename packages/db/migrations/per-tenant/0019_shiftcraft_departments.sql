@@ -29,23 +29,43 @@ ALTER TABLE sc_employees
 --    via the unique index), then UPDATE the employee row to point at it.
 --    Run inside one transaction (provided by the migration runner) so a
 --    failure mid-backfill rolls back cleanly.
-INSERT INTO sc_departments (tracey_tenant_id, name)
-SELECT DISTINCT
-  current_setting('app.tenant_id', true),
-  trim(department)
-FROM sc_employees
-WHERE department IS NOT NULL
-  AND trim(department) <> ''
-ON CONFLICT (tracey_tenant_id, lower(name)) DO NOTHING;
+--
+--    Guarded by a column-existence check: fresh per-tenant copies created
+--    from the current public.sc_employees template (post-rename) don't have
+--    a `department` text column to backfill from. Wrapping the legacy SQL
+--    in EXECUTE defers parsing to runtime, so the column reference doesn't
+--    fail when the IF branch is skipped.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = current_schema()
+      AND table_name = 'sc_employees'
+      AND column_name = 'department'
+  ) THEN
+    EXECUTE $sql$
+      INSERT INTO sc_departments (tracey_tenant_id, name)
+      SELECT DISTINCT
+        current_setting('app.tenant_id', true),
+        trim(department)
+      FROM sc_employees
+      WHERE department IS NOT NULL
+        AND trim(department) <> ''
+      ON CONFLICT (tracey_tenant_id, lower(name)) DO NOTHING
+    $sql$;
 
-UPDATE sc_employees e
-SET department_id = d.id
-FROM sc_departments d
-WHERE e.department_id IS NULL
-  AND e.department IS NOT NULL
-  AND trim(e.department) <> ''
-  AND lower(trim(e.department)) = lower(d.name)
-  AND d.tracey_tenant_id = current_setting('app.tenant_id', true);
+    EXECUTE $sql$
+      UPDATE sc_employees e
+      SET department_id = d.id
+      FROM sc_departments d
+      WHERE e.department_id IS NULL
+        AND e.department IS NOT NULL
+        AND trim(e.department) <> ''
+        AND lower(trim(e.department)) = lower(d.name)
+        AND d.tracey_tenant_id = current_setting('app.tenant_id', true)
+    $sql$;
+  END IF;
+END $$;
 
 -- 5. FK on the new column, pointing at the per-tenant sc_departments.
 ALTER TABLE sc_employees
