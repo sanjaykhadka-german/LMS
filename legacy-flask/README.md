@@ -47,11 +47,13 @@ always to make the change in `apps/lms-web/` instead.
 
 ## Render service rollback
 
-**2026-05-19 update:** the Flask Render service was deleted from the
-dashboard to reclaim the free-tier slot for ShiftCraft. The `lms` block
-in `render.yaml` was also removed in the same commit. The <60s
-"just restart it" rollback is no longer available; rollback now takes
-~10-15 min:
+**2026-05-19 update:** the `lms` block was removed from `render.yaml`,
+stopping Blueprint sync and reclaiming the free-tier slot for ShiftCraft.
+The actual dashboard service was deleted on **2026-05-21** (38 Flask-era
+users still had `tracey_user_id IS NULL` at that point; the legacy bridge
+in `apps/lms-web/lib/auth/legacy-bridge.ts` continues to serve them via
+shared `lms-db`). The <60s "just restart it" rollback is no longer
+available; rollback now takes ~10-15 min:
 
 1. Recover the `lms` service block from git history (the commit
    immediately before this README change), restore it to `render.yaml`,
@@ -77,6 +79,6 @@ Only after **all** of these are true:
    and the migration re-applied
 
 (Item 4 from the original list — "lms service removed from render.yaml
-and dashboard" — was completed 2026-05-19.)
+and dashboard" — yaml removal 2026-05-19, dashboard deletion 2026-05-21.)
 
 Until then, leave it untouched.
