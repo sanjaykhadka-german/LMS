@@ -50,3 +50,36 @@ export async function updateWorkspaceTimezoneAction(
   revalidatePath("/app", "layout");
   return { status: "ok", message: `Timezone set to ${tz}.` };
 }
+
+export async function updateWorkspaceAuditModeAction(
+  _prev: WorkspaceFormState,
+  formData: FormData,
+): Promise<WorkspaceFormState> {
+  const ctx = await requireAdminAction();
+  const tid = ctx.traceyTenantId;
+  const enabled = formData.get("auditMode") === "on";
+
+  await db
+    .update(tenants)
+    .set({ auditMode: enabled, updatedAt: new Date() })
+    .where(eq(tenants.id, tid));
+
+  await logAuditEvent({
+    tenantId: tid,
+    actorUserId: ctx.traceyUserId,
+    actorEmail: ctx.lmsUser.email,
+    action: enabled
+      ? "workspace.audit_mode.enabled"
+      : "workspace.audit_mode.disabled",
+    targetKind: "tenant",
+    targetId: tid,
+    details: {},
+  });
+
+  revalidatePath("/app/admin/workspace");
+  revalidatePath("/app", "layout");
+  return {
+    status: "ok",
+    message: enabled ? "Audit Mode is now ON." : "Audit Mode is now OFF.",
+  };
+}

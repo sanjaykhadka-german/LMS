@@ -9,6 +9,7 @@ import {
 } from "~/components/ui/card";
 import { PageHeader } from "~/components/page-header";
 import { TimezoneForm } from "./TimezoneForm";
+import { AuditModeForm } from "./AuditModeForm";
 
 export const metadata = { title: "Workspace" };
 
@@ -54,6 +55,20 @@ export default async function WorkspaceSettingsPage() {
         </CardHeader>
         <CardContent>
           <TimezoneForm current={ctx.tenantTimezone} zones={zones} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Audit Mode</CardTitle>
+          <CardDescription>
+            Flip this on before an external auditor (SQF, HACCP, customer)
+            sits down at the screen. Hides in-progress and non-compliant
+            rows from admin views — without modifying any underlying data.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <AuditModeForm current={ctx.tenantAuditMode} />
         </CardContent>
       </Card>
     </div>
