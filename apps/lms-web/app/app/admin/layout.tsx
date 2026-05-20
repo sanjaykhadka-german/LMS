@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { headers } from "next/headers";
+import { notFound } from "next/navigation";
 import {
   Building2,
   ClipboardList,
@@ -16,62 +18,96 @@ import {
 } from "lucide-react";
 import { requireAdmin } from "~/lib/auth/admin";
 
+const AUDIT_HIDDEN_ROUTES = [
+  "/app/admin/audit-logs",
+  "/app/admin/register",
+  "/app/admin/modules/ai-studio",
+] as const;
+
+function isAuditHidden(pathname: string): boolean {
+  return AUDIT_HIDDEN_ROUTES.some((r) => pathname === r || pathname.startsWith(`${r}/`));
+}
+
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  await requireAdmin();
+  const ctx = await requireAdmin();
+  const auditMode = ctx.tenantAuditMode;
+
+  if (auditMode) {
+    const h = await headers();
+    const pathname = h.get("x-pathname") ?? "";
+    if (isAuditHidden(pathname)) {
+      notFound();
+    }
+  }
 
   return (
-    <div className="mx-auto flex max-w-[1800px] gap-8 px-4 py-8">
-      <aside className="hidden w-56 shrink-0 md:block">
-        <nav className="text-sm">
-          <SidebarSection label="Training">
-            <SidebarLink href="/app/admin" icon={GraduationCap}>
-              Overview
-            </SidebarLink>
-            <SidebarLink href="/app/admin/modules" icon={Library}>
-              Modules
-            </SidebarLink>
-            <SidebarLink href="/app/admin/modules/ai-studio" icon={Sparkles}>
-              AI Studio
-            </SidebarLink>
-            <SidebarLink href="/app/admin/assignments" icon={ClipboardList}>
-              Assignments
-            </SidebarLink>
-            <SidebarLink href="/app/admin/training-matrix" icon={Grid3x3}>
-              Training matrix
-            </SidebarLink>
-            <SidebarLink href="/app/admin/whs" icon={HardHat}>
-              WHS register
-            </SidebarLink>
-            <SidebarLink href="/app/admin/register" icon={Receipt}>
-              Staff register
-            </SidebarLink>
-          </SidebarSection>
-          <SidebarSection label="Settings">
-            <SidebarLink href="/app/admin/employees" icon={Users}>
-              Employees
-            </SidebarLink>
-            <SidebarLink href="/app/admin/departments" icon={Building2}>
-              Departments
-            </SidebarLink>
-            <SidebarLink href="/app/admin/employers" icon={Building2}>
-              Employers
-            </SidebarLink>
-            <SidebarLink href="/app/admin/positions" icon={Network}>
-              Positions
-            </SidebarLink>
-            <SidebarLink href="/app/admin/machines" icon={Cog}>
-              Machines
-            </SidebarLink>
-            <SidebarLink href="/app/admin/audit-logs" icon={FileText}>
-              Audit logs
-            </SidebarLink>
-            <SidebarLink href="/app/admin/workspace" icon={Settings}>
-              Workspace
-            </SidebarLink>
-          </SidebarSection>
-        </nav>
-      </aside>
-      <main className="min-w-0 flex-1">{children}</main>
+    <div className="mx-auto flex max-w-[1800px] flex-col gap-4 px-4 py-8">
+      {auditMode ? (
+        <div className="flex items-center gap-2 rounded-md bg-amber-500 px-4 py-2 text-sm font-medium text-white shadow-sm">
+          <span className="inline-block h-2 w-2 rounded-full bg-white" aria-hidden />
+          Audit Mode — limited view. Toggle off in Workspace settings to
+          restore the full admin view.
+        </div>
+      ) : null}
+      <div className="flex gap-8">
+        <aside className="hidden w-56 shrink-0 md:block">
+          <nav className="text-sm">
+            <SidebarSection label="Training">
+              <SidebarLink href="/app/admin" icon={GraduationCap}>
+                Overview
+              </SidebarLink>
+              <SidebarLink href="/app/admin/modules" icon={Library}>
+                Modules
+              </SidebarLink>
+              {auditMode ? null : (
+                <SidebarLink href="/app/admin/modules/ai-studio" icon={Sparkles}>
+                  AI Studio
+                </SidebarLink>
+              )}
+              <SidebarLink href="/app/admin/assignments" icon={ClipboardList}>
+                Assignments
+              </SidebarLink>
+              <SidebarLink href="/app/admin/training-matrix" icon={Grid3x3}>
+                Training matrix
+              </SidebarLink>
+              <SidebarLink href="/app/admin/whs" icon={HardHat}>
+                WHS register
+              </SidebarLink>
+              {auditMode ? null : (
+                <SidebarLink href="/app/admin/register" icon={Receipt}>
+                  Staff register
+                </SidebarLink>
+              )}
+            </SidebarSection>
+            <SidebarSection label="Settings">
+              <SidebarLink href="/app/admin/employees" icon={Users}>
+                Employees
+              </SidebarLink>
+              <SidebarLink href="/app/admin/departments" icon={Building2}>
+                Departments
+              </SidebarLink>
+              <SidebarLink href="/app/admin/employers" icon={Building2}>
+                Employers
+              </SidebarLink>
+              <SidebarLink href="/app/admin/positions" icon={Network}>
+                Positions
+              </SidebarLink>
+              <SidebarLink href="/app/admin/machines" icon={Cog}>
+                Machines
+              </SidebarLink>
+              {auditMode ? null : (
+                <SidebarLink href="/app/admin/audit-logs" icon={FileText}>
+                  Audit logs
+                </SidebarLink>
+              )}
+              <SidebarLink href="/app/admin/workspace" icon={Settings}>
+                Workspace
+              </SidebarLink>
+            </SidebarSection>
+          </nav>
+        </aside>
+        <main className="min-w-0 flex-1">{children}</main>
+      </div>
     </div>
   );
 }
