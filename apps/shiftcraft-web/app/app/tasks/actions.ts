@@ -194,5 +194,3 @@ export async function deleteTaskAction(formData: FormData): Promise<void> {
   revalidatePath("/app/tasks");
   redirect("/app/tasks");
 }
-
-export { TASK_STATUSES, TASK_PRIORITIES };
