@@ -113,8 +113,11 @@ export default async function TrainingMatrixPage({
     for (const r of rows) assignmentSet.add(`${r.userId}|${r.moduleId}`);
   }
 
-  // Latest attempts by (user, module).
-  const latest = await latestAttemptsByUserModule(tid);
+  // Latest attempts by (user, module). In Audit Mode the inner query
+  // filters to passing attempts only so failed cells collapse to blank.
+  const latest = await latestAttemptsByUserModule(tid, {
+    auditMode: ctx.tenantAuditMode,
+  });
 
   return (
     <div className="space-y-4">

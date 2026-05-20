@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { and, asc, inArray, sql } from "drizzle-orm";
-import { lmsAssignments, lmsModules, lmsQuestions } from "@tracey/db";
+import { and, inArray, sql } from "drizzle-orm";
+import { lmsAssignments, lmsQuestions } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
+import { listAdminModules } from "~/lib/lms/queries/modules";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -18,25 +19,11 @@ export default async function ModulesPage() {
   const ctx = await requireAdmin();
   const tid = ctx.traceyTenantId;
 
-  // Fetch modules first, then compute question + assignment counts in
-  // separate aggregated queries. The previous correlated-subquery shape
-  // returned 0 in the rendered count column for every module — drizzle
-  // interpolated the inner table reference in a way that escaped the
-  // outer tenant context. GROUP BY on a tenant-filtered SELECT is the
-  // bulletproof shape and avoids the inline-subquery edge case.
-  const baseRows = await ctx.db.run((tx) =>
-    tx
-      .select({
-        id: lmsModules.id,
-        title: lmsModules.title,
-        description: lmsModules.description,
-        isPublished: lmsModules.isPublished,
-        createdAt: lmsModules.createdAt,
-      })
-      .from(lmsModules)
-      .where(tenantWhere(lmsModules, tid))
-      .orderBy(asc(lmsModules.title)),
-  );
+  // Fetch modules via the data-access helper so the Audit Mode filter
+  // (hide unpublished) is enforced centrally rather than inline in this
+  // page. Question + assignment counts are computed separately because
+  // they're scoped joins and don't need the audit-mode filter.
+  const baseRows = await listAdminModules(ctx);
 
   const moduleIds = baseRows.map((m) => m.id);
   const [questionCounts, assignmentCounts] = await Promise.all([

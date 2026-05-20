@@ -154,7 +154,7 @@ export default async function AdminOverviewPage({
         .where(tenantWhere(lmsModules, tid))
         .orderBy(asc(lmsModules.title)),
     ),
-    buildDashboardModel({ tid, from, to, deptId, moduleId }),
+    buildDashboardModel({ tid, from, to, deptId, moduleId, auditMode: ctx.tenantAuditMode }),
   ]);
 
   const fromStr = toIsoDate(from);
@@ -217,7 +217,14 @@ export default async function AdminOverviewPage({
         <WorkspaceChip icon={Wrench} label="Machines" value={machineCount} href="/app/admin/machines" />
       </div>
 
-      <SectionTitle>Training insights</SectionTitle>
+      <div className="flex items-center gap-3">
+        <SectionTitle>Training insights</SectionTitle>
+        {ctx.tenantAuditMode ? (
+          <span className="rounded bg-amber-500 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-white">
+            Audit view
+          </span>
+        ) : null}
+      </div>
       <DashboardFilters
         from={fromStr}
         to={toStr}

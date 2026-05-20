@@ -1,12 +1,15 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import {
-  lmsAssignments,
   lmsDepartments,
   lmsModules,
   lmsUsers,
 } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
 import { formatDateTime } from "~/lib/format/datetime";
+import {
+  listAdminAssignments,
+  listRecentAdminAssignments,
+} from "~/lib/lms/queries/assignments";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
 import { Badge } from "~/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
@@ -23,42 +26,8 @@ export default async function AssignmentsPage() {
   const tid = ctx.traceyTenantId;
 
   const [rows, recent, employees, modulesList] = await Promise.all([
-    ctx.db.run((tx) =>
-      tx
-        .select({
-          id: lmsAssignments.id,
-          moduleId: lmsAssignments.moduleId,
-          moduleTitle: lmsModules.title,
-          userId: lmsAssignments.userId,
-          userName: lmsUsers.name,
-          userEmail: lmsUsers.email,
-          assignedAt: lmsAssignments.assignedAt,
-          dueAt: lmsAssignments.dueAt,
-          completedAt: lmsAssignments.completedAt,
-          departmentName: lmsDepartments.name,
-        })
-        .from(lmsAssignments)
-        .innerJoin(lmsModules, eq(lmsModules.id, lmsAssignments.moduleId))
-        .innerJoin(lmsUsers, eq(lmsUsers.id, lmsAssignments.userId))
-        .leftJoin(lmsDepartments, eq(lmsDepartments.id, lmsUsers.departmentId))
-        .where(tenantWhere(lmsAssignments, tid))
-        .orderBy(asc(lmsModules.title), asc(lmsUsers.name)),
-    ),
-    ctx.db.run((tx) =>
-      tx
-        .select({
-          id: lmsAssignments.id,
-          moduleTitle: lmsModules.title,
-          userName: lmsUsers.name,
-          assignedAt: lmsAssignments.assignedAt,
-        })
-        .from(lmsAssignments)
-        .innerJoin(lmsModules, eq(lmsModules.id, lmsAssignments.moduleId))
-        .innerJoin(lmsUsers, eq(lmsUsers.id, lmsAssignments.userId))
-        .where(tenantWhere(lmsAssignments, tid))
-        .orderBy(desc(lmsAssignments.assignedAt))
-        .limit(5),
-    ),
+    listAdminAssignments(ctx),
+    listRecentAdminAssignments(ctx, 5),
     ctx.db.run((tx) =>
       tx
         .select({
