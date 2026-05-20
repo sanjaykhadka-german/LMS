@@ -37,6 +37,7 @@ export default async function EmployeeDetailPage({
 
   const ctx = await requireAdmin();
   const tid = ctx.traceyTenantId;
+  const auditMode = ctx.tenantAuditMode;
   const formatDate = (d: Date | string): string =>
     fmtDateInTz(d, ctx.tenantTimezone, { year: "numeric", month: "short", day: "numeric" }) || "—";
 
@@ -79,8 +80,13 @@ export default async function EmployeeDetailPage({
         .innerJoin(lmsModules, eq(lmsModules.id, lmsAssignments.moduleId))
         .where(and(eq(lmsAssignments.userId, userId), tenantWhere(lmsAssignments, tid))),
     ),
-    ctx.db.run((tx) =>
-      tx
+    ctx.db.run((tx) => {
+      const filters = [eq(lmsAttempts.userId, userId), tenantWhere(lmsAttempts, tid)];
+      // Audit Mode: only passing attempts contribute to per-module status,
+      // best score, and the Recent attempts card. Failed-attempt rows
+      // disappear entirely — no red badges, no "Attempts: 4" noise.
+      if (auditMode) filters.push(eq(lmsAttempts.passed, true));
+      return tx
         .select({
           id: lmsAttempts.id,
           moduleId: lmsAttempts.moduleId,
@@ -91,9 +97,9 @@ export default async function EmployeeDetailPage({
         })
         .from(lmsAttempts)
         .leftJoin(lmsModules, eq(lmsModules.id, lmsAttempts.moduleId))
-        .where(and(eq(lmsAttempts.userId, userId), tenantWhere(lmsAttempts, tid)))
-        .orderBy(desc(lmsAttempts.createdAt)),
-    ),
+        .where(and(...filters))
+        .orderBy(desc(lmsAttempts.createdAt));
+    }),
     ctx.db.run((tx) =>
       tx
         .select({
@@ -108,9 +114,22 @@ export default async function EmployeeDetailPage({
   ]);
   if (!user) notFound();
 
-  // Group attempts by module.
+  // Group attempts by module. In Audit Mode the SQL already filtered to
+  // passed=true, then we collapse to the most recent passing attempt per
+  // module so the per-row "Attempts" count is 1 and there's no failed
+  // history to render.
+  const dedupedAttempts = auditMode
+    ? (() => {
+        const seen = new Set<number>();
+        return attempts.filter((a) => {
+          if (seen.has(a.moduleId)) return false;
+          seen.add(a.moduleId);
+          return true;
+        });
+      })()
+    : attempts;
   const attemptsByModule = new Map<number, typeof attempts>();
-  for (const a of attempts) {
+  for (const a of dedupedAttempts) {
     const arr = attemptsByModule.get(a.moduleId) ?? [];
     arr.push(a);
     attemptsByModule.set(a.moduleId, arr);
@@ -241,7 +260,7 @@ export default async function EmployeeDetailPage({
     };
   });
 
-  const recentAttempts = attempts.slice(0, 20);
+  const recentAttempts = dedupedAttempts.slice(0, 20);
 
   return (
     <div className="space-y-6">
@@ -296,11 +315,15 @@ export default async function EmployeeDetailPage({
           <CardTitle className="text-lg">Training</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="grid gap-2 sm:grid-cols-4">
+          <div className={auditMode ? "grid gap-2 sm:grid-cols-2" : "grid gap-2 sm:grid-cols-4"}>
             <Stat label="Passed" value={counts.passed} variant="success" />
-            <Stat label="Failed" value={counts.failed} variant="destructive" />
+            {!auditMode && (
+              <Stat label="Failed" value={counts.failed} variant="destructive" />
+            )}
             <Stat label="Not attempted" value={counts.not_attempted} variant="outline" />
-            <Stat label="Unassigned attempts" value={counts.unassigned_attempt} variant="secondary" />
+            {!auditMode && (
+              <Stat label="Unassigned attempts" value={counts.unassigned_attempt} variant="secondary" />
+            )}
           </div>
           <p className="text-xs text-[color:var(--muted-foreground)]">
             Pass mark: {PASS_THRESHOLD}%
@@ -318,7 +341,7 @@ export default async function EmployeeDetailPage({
                     <th className="px-3 py-2">Module</th>
                     <th className="px-3 py-2">Status</th>
                     <th className="px-3 py-2 text-right">Best</th>
-                    <th className="px-3 py-2">Attempts</th>
+                    {!auditMode && <th className="px-3 py-2">Attempts</th>}
                     <th className="px-3 py-2">Due</th>
                     <th className="px-3 py-2">Completed</th>
                   </tr>
@@ -333,7 +356,9 @@ export default async function EmployeeDetailPage({
                       <td className="px-3 py-2 align-middle text-right">
                         {r.bestScore !== null ? `${r.bestScore}%` : "—"}
                       </td>
-                      <td className="px-3 py-2 align-middle">{r.attempts.length}</td>
+                      {!auditMode && (
+                        <td className="px-3 py-2 align-middle">{r.attempts.length}</td>
+                      )}
                       <td className="px-3 py-2 align-middle">
                         {r.dueAt ? formatDate(r.dueAt) : "—"}
                       </td>
