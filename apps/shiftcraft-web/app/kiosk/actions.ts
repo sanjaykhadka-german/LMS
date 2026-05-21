@@ -2,14 +2,24 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { eq } from "drizzle-orm";
-import { forTenant, scEmployeePins } from "@tracey/db";
+import { and, desc, eq } from "drizzle-orm";
+import {
+  forTenant,
+  scClockEventPhotos,
+  scClockEvents,
+  scEmployeePins,
+  scKioskDevices,
+  type ScClockEventType,
+  type ScSelfieStatus,
+} from "@tracey/db";
 import { verifyPassword } from "~/lib/auth/passwords";
+import { validateTransition } from "~/lib/clock";
 import {
   KIOSK_ACTOR_COOKIE,
   KIOSK_COOKIE_OPTS,
   KIOSK_DEVICE_COOKIE,
   signActorCookie,
+  verifyActorCookie,
   verifyDeviceCookie,
 } from "~/lib/kiosk/cookies";
 
@@ -139,4 +149,168 @@ export async function clearActorAction(): Promise<void> {
   const cookieStore = await cookies();
   cookieStore.delete(KIOSK_ACTOR_COOKIE);
   redirect("/kiosk");
+}
+
+// Server-side guard for the selfie blob the client sends. Defends against
+// a manipulated form posting a 10 MB image to bloat the DB. Allowed inputs:
+// data:image/jpeg;base64,<base64>  with decoded size ≤ MAX_SELFIE_BYTES.
+const MAX_SELFIE_BYTES = 50 * 1024;
+const DATA_URL_RE = /^data:image\/jpeg;base64,(.+)$/i;
+
+interface DecodedSelfie {
+  buffer: Buffer;
+  mimeType: "image/jpeg";
+}
+
+function decodeSelfie(raw: string): DecodedSelfie | null {
+  const m = DATA_URL_RE.exec(raw);
+  if (!m) return null;
+  let buf: Buffer;
+  try {
+    buf = Buffer.from(m[1]!, "base64");
+  } catch {
+    return null;
+  }
+  if (buf.length === 0 || buf.length > MAX_SELFIE_BYTES) return null;
+  // JPEG magic bytes: FF D8 FF. Reject anything that doesn't start with
+  // them so a renamed PNG / arbitrary blob can't slip through.
+  if (buf[0] !== 0xff || buf[1] !== 0xd8 || buf[2] !== 0xff) return null;
+  return { buffer: buf, mimeType: "image/jpeg" };
+}
+
+// Punches the clock from the kiosk. Bound by the client with the eventType
+// already chosen ("in" / "out" / "break_start" / "break_end") so the form
+// surface stays simple. Selfie blob is optional in the formData — present
+// for in/out punches on selfie-enabled devices, absent for breaks or when
+// the device has require_selfie=false.
+export async function kioskPunchAction(
+  eventType: ScClockEventType,
+  formData: FormData,
+): Promise<void> {
+  const cookieStore = await cookies();
+  const deviceClaim = verifyDeviceCookie(
+    cookieStore.get(KIOSK_DEVICE_COOKIE)?.value,
+  );
+  const actorClaim = verifyActorCookie(
+    cookieStore.get(KIOSK_ACTOR_COOKIE)?.value,
+  );
+  if (
+    !deviceClaim ||
+    !actorClaim ||
+    actorClaim.deviceId !== deviceClaim.deviceId
+  ) {
+    redirect("/kiosk");
+  }
+
+  const tenantId = deviceClaim.tenantId;
+  const appUserId = actorClaim.appUserId;
+
+  // Reuse the same transition guard as /app/clock. If the user's state is
+  // wrong (e.g. they're already clocked in), redirect with an error rather
+  // than throwing; the kiosk page reads ?error= and shows it.
+  const last = await forTenant(tenantId).run((tx) =>
+    tx
+      .select({ eventType: scClockEvents.eventType })
+      .from(scClockEvents)
+      .where(eq(scClockEvents.appUserId, appUserId))
+      .orderBy(desc(scClockEvents.occurredAt))
+      .limit(1),
+  );
+  const transitionErr = validateTransition(
+    last[0]?.eventType as ScClockEventType | undefined,
+    eventType,
+  );
+  if (transitionErr) {
+    cookieStore.delete(KIOSK_ACTOR_COOKIE);
+    redirect(
+      `/kiosk?error=transition&detail=${encodeURIComponent(transitionErr)}`,
+    );
+  }
+
+  // Resolve the selfie state. Three modes per the scClockEventPhotos
+  // selfie_status enum:
+  //   captured     — image present and validates
+  //   denied       — device required selfie, user blocked camera
+  //   unavailable  — device.require_selfie = false
+  let selfieStatus: ScSelfieStatus = "unavailable";
+  let selfieBuffer: Buffer | null = null;
+
+  // Only in/out carry selfies. Breaks always skip — quick taps, low fraud
+  // signal, friendlier UX.
+  if (eventType === "in" || eventType === "out") {
+    const [deviceRow] = await forTenant(tenantId).run((tx) =>
+      tx
+        .select({ requireSelfie: scKioskDevices.requireSelfie })
+        .from(scKioskDevices)
+        .where(eq(scKioskDevices.id, deviceClaim.deviceId))
+        .limit(1),
+    );
+    if (deviceRow?.requireSelfie) {
+      const raw = String(formData.get("selfie") ?? "");
+      if (raw.length > 0) {
+        const decoded = decodeSelfie(raw);
+        if (decoded) {
+          selfieStatus = "captured";
+          selfieBuffer = decoded.buffer;
+        } else {
+          // Client sent something we couldn't trust. Treat as denied rather
+          // than blocking the punch — the audit chip will surface it.
+          selfieStatus = "denied";
+        }
+      } else {
+        selfieStatus = "denied";
+      }
+    }
+  }
+
+  // Write the clock event + the photo row in a single tenant tx so a partial
+  // failure can't leave a photo orphaned (FK on photos.clock_event_id would
+  // refuse it anyway, but this is more explicit).
+  await forTenant(tenantId).run(async (tx) => {
+    const [inserted] = await tx
+      .insert(scClockEvents)
+      .values({
+        traceyTenantId: tenantId,
+        appUserId,
+        locationId: deviceClaim.locationId,
+        eventType,
+        source: "kiosk",
+      })
+      .returning({ id: scClockEvents.id });
+
+    if (eventType === "in" || eventType === "out") {
+      await tx.insert(scClockEventPhotos).values({
+        traceyTenantId: tenantId,
+        clockEventId: inserted!.id,
+        image: selfieBuffer ?? undefined,
+        mimeType: selfieBuffer ? "image/jpeg" : undefined,
+        selfieStatus,
+      });
+    }
+
+    // Refresh the PIN's last_used_at for the manager audit display.
+    await tx
+      .update(scEmployeePins)
+      .set({ lastUsedAt: new Date() })
+      .where(
+        and(
+          eq(scEmployeePins.appUserId, appUserId),
+          eq(scEmployeePins.traceyTenantId, tenantId),
+        ),
+      );
+
+    // Bump the device's last_seen_at so the admin device list shows it
+    // active right now (we already bumped on /kiosk page load but a punch
+    // is a stronger signal).
+    await tx
+      .update(scKioskDevices)
+      .set({ lastSeenAt: new Date() })
+      .where(eq(scKioskDevices.id, deviceClaim.deviceId));
+  });
+
+  // Clear the actor cookie immediately. The 60-sec expiry is a hard cap;
+  // we tighten that to "single use per punch" to keep the kiosk safe when
+  // multiple staff queue up.
+  cookieStore.delete(KIOSK_ACTOR_COOKIE);
+  redirect(`/kiosk?punched=${eventType}`);
 }

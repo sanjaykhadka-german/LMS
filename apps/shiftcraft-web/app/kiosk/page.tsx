@@ -88,18 +88,43 @@ function errorMessage(reason: string | undefined): string | null {
       return "That pairing link wasn't valid. Ask a manager for a new one.";
     case "code_invalid":
       return "Pairing code was wrong, expired, or already used. Ask a manager to generate a new one.";
+    case "transition":
+      return null; // handled separately, uses ?detail=
     default:
       return "Pairing didn't work. Ask a manager for a new code.";
+  }
+}
+
+function punchedLabel(p: string | undefined): string | null {
+  switch (p) {
+    case "in":
+      return "✓ Clocked in";
+    case "out":
+      return "✓ Clocked out — see you next shift";
+    case "break_start":
+      return "✓ On break";
+    case "break_end":
+      return "✓ Back on shift";
+    default:
+      return null;
   }
 }
 
 export default async function KioskHome({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{
+    error?: string;
+    detail?: string;
+    punched?: string;
+  }>;
 }) {
-  const { error } = await searchParams;
-  const errMsg = errorMessage(error);
+  const { error, detail, punched } = await searchParams;
+  const errMsg =
+    error === "transition" && detail
+      ? decodeURIComponent(detail)
+      : errorMessage(error);
+  const punched_msg = punchedLabel(punched);
   const paired = await resolvePairing();
 
   if (!paired) {
@@ -138,7 +163,37 @@ export default async function KioskHome({
           {paired.locationName}
         </h1>
       </header>
-      <KioskNumpad />
+      {punched_msg ? (
+        <PunchedSplash message={punched_msg} />
+      ) : (
+        <>
+          {errMsg ? (
+            <p className="rounded-md border border-rose-900/40 bg-rose-950/30 px-4 py-2 text-sm text-rose-300">
+              {errMsg}
+            </p>
+          ) : null}
+          <KioskNumpad />
+        </>
+      )}
     </main>
+  );
+}
+
+// 3-second confirmation splash after a successful punch. Auto-redirects to
+// the bare /kiosk so the next employee sees a clean numpad. The meta
+// refresh works even if JS is off (defensive).
+function PunchedSplash({ message }: { message: string }) {
+  return (
+    <>
+      <meta httpEquiv="refresh" content="3;url=/kiosk" />
+      <div className="rounded-xl border border-emerald-900/40 bg-emerald-950/30 px-10 py-8 text-center">
+        <div className="text-3xl font-semibold text-emerald-300">
+          {message}
+        </div>
+        <div className="mt-2 text-xs text-emerald-500/80">
+          Returning to the kiosk in a moment…
+        </div>
+      </div>
+    </>
   );
 }

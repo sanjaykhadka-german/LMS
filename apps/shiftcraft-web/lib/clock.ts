@@ -258,6 +258,59 @@ export function fmtHours(ms: number): string {
   return `${h}:${String(m).padStart(2, "0")}`;
 }
 
+// ─── Transition guard ─────────────────────────────────────────────────────
+//
+// The DB can't enforce "valid next event" with a CHECK constraint because
+// the validity depends on the *stream's* current state, not on the row
+// being inserted. Both the per-user /app/clock surface and the on-premise
+// kiosk gate on this same guard so the rule is stated once.
+
+export function stateFor(
+  prev: ScClockEventType | undefined,
+): ClockStatus {
+  switch (prev) {
+    case "in":
+    case "break_end":
+      return "working";
+    case "break_start":
+      return "on_break";
+    case "out":
+    case undefined:
+      return "clocked_out";
+    default:
+      return "clocked_out";
+  }
+}
+
+/**
+ * Returns an error string if `next` would be an invalid transition from
+ * `prev`, or null when the move is allowed. The shape mirrors the original
+ * inline check in app/clock/actions.ts — keeping the error copy stable so
+ * existing tests pass.
+ */
+export function validateTransition(
+  prev: ScClockEventType | undefined,
+  next: ScClockEventType,
+): string | null {
+  const state = stateFor(prev);
+  switch (next) {
+    case "in":
+      return state === "clocked_out" ? null : "You're already clocked in.";
+    case "break_start":
+      return state === "working"
+        ? null
+        : "Start a shift before taking a break.";
+    case "break_end":
+      return state === "on_break" ? null : "You're not on a break.";
+    case "out":
+      return state === "working" || state === "on_break"
+        ? null
+        : "You're not clocked in.";
+    default:
+      return "Unknown action.";
+  }
+}
+
 // ─── DB-touching helpers ───────────────────────────────────────────────────
 
 /**
