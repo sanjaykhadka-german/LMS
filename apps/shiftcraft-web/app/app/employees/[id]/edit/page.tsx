@@ -1,11 +1,18 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { and, asc, eq } from "drizzle-orm";
-import { forTenant, scDepartments, scEmployees } from "@tracey/db";
+import {
+  forTenant,
+  scDepartments,
+  scEmployeePins,
+  scEmployees,
+} from "@tracey/db";
 import { currentMembership } from "~/lib/auth/current";
+import { isAtLeastManager } from "~/lib/roles";
 import { Button } from "~/components/ui/button";
 import { EmployeeForm } from "../../new/_form";
 import { deleteEmployeeAction } from "../../new/actions";
+import { SetPinCard } from "./_set_pin_card";
 
 export const metadata = { title: "Edit employee · ShiftCraft" };
 
@@ -23,6 +30,7 @@ export default async function EditEmployeePage({
     tx
       .select({
         id: scEmployees.id,
+        appUserId: scEmployees.appUserId,
         fullName: scEmployees.fullName,
         email: scEmployees.email,
         mobile: scEmployees.mobile,
@@ -47,6 +55,26 @@ export default async function EditEmployeePage({
       .limit(1),
   );
   if (!row) notFound();
+
+  // PIN state is only queried when the employee has an attached auth user.
+  // Labour-hire roster rows never have a PIN — the card just doesn't render.
+  const pinRow =
+    row.appUserId !== null
+      ? (
+          await forTenant(tenantId).run((tx) =>
+            tx
+              .select({ lastUsedAt: scEmployeePins.lastUsedAt })
+              .from(scEmployeePins)
+              .where(
+                and(
+                  eq(scEmployeePins.appUserId, row.appUserId!),
+                  eq(scEmployeePins.traceyTenantId, tenantId),
+                ),
+              )
+              .limit(1),
+          )
+        )[0] ?? null
+      : null;
 
   const departments = await forTenant(tenantId).run((tx) =>
     tx
@@ -98,6 +126,14 @@ export default async function EditEmployeePage({
           departmentSuggestions={departments.map((d) => d.name)}
         />
       </section>
+
+      {row.appUserId && isAtLeastManager(membership.role) ? (
+        <SetPinCard
+          appUserId={row.appUserId}
+          hasPin={pinRow !== null}
+          lastUsedAt={pinRow?.lastUsedAt ?? null}
+        />
+      ) : null}
 
       <section className="rounded-lg border border-[color:var(--destructive)]/30 bg-card p-5 shadow-sm">
         <h2 className="text-sm font-semibold text-[color:var(--destructive)]">

@@ -4,10 +4,17 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
-import { forTenant, scDepartments, scEmployees } from "@tracey/db";
+import {
+  forTenant,
+  scDepartments,
+  scEmployeePins,
+  scEmployees,
+} from "@tracey/db";
 import { currentMembership, currentUser } from "~/lib/auth/current";
+import { hashPassword } from "~/lib/auth/passwords";
 import { logAuditEvent } from "~/lib/audit";
 import { notifyTenantAdmins } from "~/lib/notifications";
+import { isAtLeastManager } from "~/lib/roles";
 
 type TenantTx = Parameters<
   Parameters<ReturnType<typeof forTenant>["run"]>[0]
@@ -310,6 +317,160 @@ export async function updateEmployeeAction(
   revalidatePath("/app/employees");
   revalidatePath(`/app/employees/${id}/edit`);
   return { status: "ok", message: "Saved." };
+}
+
+// ─── Kiosk PIN management ───
+//
+// Sets or rotates the 4-digit PIN an employee uses to authenticate at the
+// on-premise kiosk. Stored as a bcrypt-12 hash in sc_employee_pins, keyed
+// on (tenant, app_user_id). One PIN per (tenant, user); resetting overwrites.
+//
+// Authorization: Manager+ (Tracey `admin` or `owner`). Employees cannot set
+// their own PIN — the kiosk surface is operator-managed.
+//
+// Anchored on app_user_id (the auth identity) rather than sc_employees.id
+// because clock events are keyed on the same identifier. Labour-hire roster
+// rows without an attached auth user can't have a PIN — the UI hides the
+// card in that case.
+
+export type PinFormState =
+  | { status: "idle" }
+  | { status: "ok"; message: string }
+  | { status: "error"; message: string };
+
+const pinSchema = z
+  .object({
+    pin: z
+      .string()
+      .trim()
+      .regex(/^\d{4}$/, "PIN must be exactly 4 digits."),
+    confirm: z.string().trim(),
+  })
+  .refine((d) => d.pin === d.confirm, {
+    message: "PINs don't match.",
+    path: ["confirm"],
+  });
+
+// Resolves the sc_employees row for (tenant, app_user_id) — used to verify
+// the employee really belongs to this tenant and to revalidate the right
+// edit page path after a write. Returns null if no match.
+async function findEmployeeIdByAppUser(
+  tenantId: string,
+  appUserId: string,
+): Promise<string | null> {
+  const rows = await forTenant(tenantId).run((tx) =>
+    tx
+      .select({ id: scEmployees.id })
+      .from(scEmployees)
+      .where(
+        and(
+          eq(scEmployees.appUserId, appUserId),
+          eq(scEmployees.traceyTenantId, tenantId),
+        ),
+      )
+      .limit(1),
+  );
+  return rows[0]?.id ?? null;
+}
+
+export async function setPinAction(
+  appUserId: string,
+  _prev: PinFormState,
+  formData: FormData,
+): Promise<PinFormState> {
+  const membership = await currentMembership();
+  if (!membership || !isAtLeastManager(membership.role)) {
+    return {
+      status: "error",
+      message: "You don't have permission to set kiosk PINs.",
+    };
+  }
+  const tenantId = membership.tenant.id;
+
+  const parsed = pinSchema.safeParse({
+    pin: formData.get("pin"),
+    confirm: formData.get("confirm"),
+  });
+  if (!parsed.success) {
+    return {
+      status: "error",
+      message: parsed.error.errors[0]?.message ?? "Invalid PIN.",
+    };
+  }
+
+  const employeeId = await findEmployeeIdByAppUser(tenantId, appUserId);
+  if (!employeeId) {
+    return {
+      status: "error",
+      message: "Employee not found in this workspace.",
+    };
+  }
+
+  const me = await currentUser();
+  const pinHash = await hashPassword(parsed.data.pin);
+
+  // Upsert via INSERT … ON CONFLICT — one PIN per (tenant, app_user). On
+  // rotate, reset lastUsedAt so the audit display doesn't show a stale
+  // "last used" tied to the old PIN.
+  await forTenant(tenantId).run((tx) =>
+    tx
+      .insert(scEmployeePins)
+      .values({
+        traceyTenantId: tenantId,
+        appUserId,
+        pinHash,
+        setByUserId: me?.id ?? null,
+      })
+      .onConflictDoUpdate({
+        target: [scEmployeePins.traceyTenantId, scEmployeePins.appUserId],
+        set: {
+          pinHash,
+          setByUserId: me?.id ?? null,
+          updatedAt: new Date(),
+          lastUsedAt: null,
+        },
+      }),
+  );
+
+  await logAuditEvent({
+    action: "shiftcraft.kiosk.pin_set",
+    targetKind: "sc_employee_pin",
+    targetId: appUserId,
+  });
+
+  revalidatePath(`/app/employees/${employeeId}/edit`);
+  return { status: "ok", message: "PIN saved." };
+}
+
+export async function removePinAction(formData: FormData): Promise<void> {
+  const appUserId = String(formData.get("appUserId") ?? "");
+  if (!appUserId) return;
+
+  const membership = await currentMembership();
+  if (!membership || !isAtLeastManager(membership.role)) return;
+  const tenantId = membership.tenant.id;
+
+  const employeeId = await findEmployeeIdByAppUser(tenantId, appUserId);
+  if (!employeeId) return;
+
+  await forTenant(tenantId).run((tx) =>
+    tx
+      .delete(scEmployeePins)
+      .where(
+        and(
+          eq(scEmployeePins.appUserId, appUserId),
+          eq(scEmployeePins.traceyTenantId, tenantId),
+        ),
+      ),
+  );
+
+  await logAuditEvent({
+    action: "shiftcraft.kiosk.pin_removed",
+    targetKind: "sc_employee_pin",
+    targetId: appUserId,
+  });
+
+  revalidatePath(`/app/employees/${employeeId}/edit`);
 }
 
 export async function deleteEmployeeAction(formData: FormData): Promise<void> {
