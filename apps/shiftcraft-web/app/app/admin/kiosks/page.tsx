@@ -128,7 +128,10 @@ export default async function KiosksAdminPage({
   let qrDataUrl: string | null = null;
   if (showPairedCard) {
     const origin = await publicOrigin();
-    pairUrl = `${origin}/kiosk/pair?code=${pairedDevice.pairingCode}`;
+    // Tenant id is in the URL because pairing codes are unique only within
+    // a tenant (partial index). Without it the /kiosk/pair handler would
+    // need to fan out across every tenant schema to find the row.
+    pairUrl = `${origin}/kiosk/pair?code=${pairedDevice.pairingCode}&t=${tenantId}`;
     qrDataUrl = await QRCode.toDataURL(pairUrl, {
       margin: 1,
       width: 256,
