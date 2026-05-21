@@ -18,12 +18,10 @@ const STATUS_LABEL: Record<EmployeeStatus, string> = {
 // Tailwind utility classes per state — applied to the select so the row
 // gets a colour hint without needing a separate badge.
 const STATUS_CLASS: Record<EmployeeStatus, string> = {
-  active:
-    "border-emerald-600 bg-emerald-100 text-emerald-900 dark:border-emerald-500/60 dark:bg-emerald-900/40 dark:text-emerald-100",
-  disabled:
-    "border-amber-600 bg-amber-100 text-amber-900 dark:border-amber-500/60 dark:bg-amber-900/40 dark:text-amber-100",
+  active: "bg-emerald-500 text-white dark:bg-emerald-400 dark:text-emerald-950",
+  disabled: "bg-amber-500 text-white dark:bg-amber-400 dark:text-amber-950",
   terminated:
-    "border-[color:var(--border)] bg-[color:var(--muted)] text-[color:var(--foreground)]",
+    "bg-[color:var(--secondary)] text-[color:var(--muted-foreground)]",
 };
 
 export function StatusPicker({ id, status, terminationDate }: Props) {
@@ -36,7 +34,7 @@ export function StatusPicker({ id, status, terminationDate }: Props) {
           defaultValue={status}
           onChange={(e) => e.currentTarget.form?.requestSubmit()}
           aria-label="Employee status"
-          className={`h-8 rounded-md border px-2 text-xs font-medium shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[color:var(--ring)] ${STATUS_CLASS[status]}`}
+          className={`h-6 rounded-full border-0 px-2.5 text-xs font-medium focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[color:var(--ring)] ${STATUS_CLASS[status]}`}
         >
           <option value="active">{STATUS_LABEL.active}</option>
           <option value="disabled">{STATUS_LABEL.disabled}</option>

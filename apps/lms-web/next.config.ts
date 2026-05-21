@@ -6,6 +6,7 @@ const nextConfig: NextConfig = {
   // Next's server bundler doesn't ship into .next/server/chunks. Marking
   // them as external keeps them resolvable from node_modules in prod.
   serverExternalPackages: ["pdf-parse", "pdfjs-dist"],
+  allowedDevOrigins: ["192.168.2.78"],
   experimental: {
     // 10mb covers photo upload (capped at 8mb in lib/lms/photos.ts) and
     // CSV bulk upload (a few hundred KB at most). Stripe webhooks have

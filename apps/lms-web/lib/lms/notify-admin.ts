@@ -21,6 +21,13 @@ function client(): Resend {
   return resend;
 }
 
+// RFC 2606 / RFC 6761 reserved domains — never deliver real mail to these.
+// Guards against leftover @example.test seed rows (e.g. from reminders.test.ts)
+// being hit by a manual admin reminder button or a future cron.
+function isReservedTestRecipient(to: string): boolean {
+  return /@(example\.(test|com|org|net)|invalid|localhost|test)$/i.test(to.trim());
+}
+
 const baseUrl = (): string => siteConfig.url.replace(/\/$/, "");
 
 interface Envelope {
@@ -31,6 +38,7 @@ interface Envelope {
 
 export async function sendInviteEmail(opts: Envelope): Promise<boolean> {
   if (!apiKey) return false;
+  if (isReservedTestRecipient(opts.to)) return false;
   const greeting = opts.name ? `Hi ${opts.name},` : "Hi,";
   const html =
     `<p>${greeting}</p>` +
@@ -59,6 +67,7 @@ export async function sendAssignmentReminderEmail(opts: {
   moduleTitles: string[];
 }): Promise<boolean> {
   if (!apiKey) return false;
+  if (isReservedTestRecipient(opts.to)) return false;
   const greeting = opts.name ? `Hi ${opts.name},` : "Hi,";
   const items = opts.moduleTitles.map((t) => `<li>${escapeHtml(t)}</li>`).join("");
   const html =
@@ -87,6 +96,7 @@ export async function sendAssignmentsAddedEmail(opts: {
   modules: Array<{ title: string; dueAt: Date | null }>;
 }): Promise<boolean> {
   if (!apiKey) return false;
+  if (isReservedTestRecipient(opts.to)) return false;
   if (opts.modules.length === 0) return false;
   const greeting = opts.name ? `Hi ${opts.name},` : "Hi,";
   const items = opts.modules
@@ -127,6 +137,7 @@ export async function sendWhsExpiryReminderEmail(opts: {
   expiresOn: string | null;
 }): Promise<boolean> {
   if (!apiKey) return false;
+  if (isReservedTestRecipient(opts.to)) return false;
   const greeting = opts.name ? `Hi ${opts.name},` : "Hi,";
   const expires = opts.expiresOn ? formatDate(opts.expiresOn) : "soon";
   const html =
@@ -165,6 +176,7 @@ function formatDate(yyyyMmDd: string): string {
 
 export async function sendPasswordResetEmail(opts: Envelope): Promise<boolean> {
   if (!apiKey) return false;
+  if (isReservedTestRecipient(opts.to)) return false;
   const greeting = opts.name ? `Hi ${opts.name},` : "Hi,";
   const html =
     `<p>${greeting}</p>` +
