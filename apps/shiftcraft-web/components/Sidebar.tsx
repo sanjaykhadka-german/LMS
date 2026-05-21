@@ -24,6 +24,7 @@ import {
   Repeat,
   Settings,
   Shield,
+  Tablet,
   Users,
   X,
 } from "lucide-react";
@@ -57,6 +58,7 @@ const ADMIN_NAV = [
   { href: "/app/departments", label: "Departments", icon: Building2 },
   { href: "/app/shift-templates", label: "Shift templates", icon: CalendarDays },
   { href: "/app/swaps", label: "Swap requests", icon: Repeat },
+  { href: "/app/admin/kiosks", label: "Kiosks", icon: Tablet },
   { href: "/app/audit", label: "Audit log", icon: History },
 ];
 
