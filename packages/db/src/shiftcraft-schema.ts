@@ -29,6 +29,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   check,
+  customType,
   date,
   index,
   integer,
@@ -41,6 +42,14 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { users } from "./schema";
+
+// Drizzle pg-core doesn't ship a bytea helper. Used by sc_clock_event_photos
+// to store kiosk selfies as binary blobs (Buffer in JS, BYTEA in Postgres).
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType() {
+    return "bytea";
+  },
+});
 
 // ─── Locations ───
 //
@@ -640,6 +649,136 @@ export const scShiftComments = pgTable(
   ],
 );
 
+// ─── Employee PINs (kiosk auth) ───
+//
+// 4-digit numeric PIN per employee, hashed with bcrypt cost 12. Used by the
+// on-premise kiosk to authenticate a punch (PIN replaces the email+password
+// login for the kiosk surface only — kiosk auth never grants /app access).
+//
+// PIN uniqueness within a tenant is intentionally NOT enforced. Collisions
+// are resolved at PIN-entry time by showing a disambiguation list ("Which
+// one of you is it?"). Enforcing uniqueness would let an attacker enumerate
+// valid PINs by exclusion.
+//
+// One PIN per (tenant, user). Resetting/updating overwrites. `last_used_at`
+// powers the audit trail in /app/employees/[id].
+export const scEmployeePins = pgTable(
+  "sc_employee_pins",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    traceyTenantId: text("tracey_tenant_id").notNull(),
+    appUserId: uuid("app_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    pinHash: text("pin_hash").notNull(),
+    setByUserId: uuid("set_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("sc_employee_pins_tenant_user_uq").on(
+      t.traceyTenantId,
+      t.appUserId,
+    ),
+  ],
+);
+
+// ─── Kiosk devices ───
+//
+// A registered on-premise device (tablet / laptop) pinned to one location.
+// Pairing flow: admin generates a `pairing_code` (8-char, 15-min window) at
+// /app/admin/kiosks, hands it to the device which visits /kiosk/pair?code=…,
+// the device exchanges the code for a long-lived HttpOnly `kiosk.device`
+// cookie carrying {deviceId, tenantId, locationId} signed with
+// KIOSK_DEVICE_SECRET. The pairing_code is nulled on claim (single use).
+//
+// `revoked_at` is a soft delete — keeps clock-event audit links intact.
+// `require_selfie` controls whether the kiosk asks for a webcam photo on
+// in/out punches (per-device so a webcam-less unit can still operate).
+export const scKioskDevices = pgTable(
+  "sc_kiosk_devices",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    traceyTenantId: text("tracey_tenant_id").notNull(),
+    label: text("label").notNull(),
+    locationId: uuid("location_id").notNull(),
+    pairingCode: text("pairing_code"),
+    pairingExpiresAt: timestamp("pairing_expires_at", { withTimezone: true }),
+    pairedAt: timestamp("paired_at", { withTimezone: true }),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    requireSelfie: boolean("require_selfie").notNull().default(true),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("sc_kiosk_devices_tenant_idx").on(t.traceyTenantId, t.revokedAt),
+    index("sc_kiosk_devices_location_idx").on(t.locationId),
+    // Pairing codes are short-lived and unique while active — enforce
+    // uniqueness within a tenant so two simultaneous "Add kiosk" forms
+    // can't generate colliding codes. Partial so the index doesn't bloat
+    // with NULLs for already-paired devices.
+    uniqueIndex("sc_kiosk_devices_pairing_uq")
+      .on(t.traceyTenantId, t.pairingCode)
+      .where(sql`${t.pairingCode} is not null`),
+  ],
+);
+
+// ─── Clock event photos (kiosk selfies) ───
+//
+// One row per (clock event, photo) — exactly one per event. Image is stored
+// as bytea (small: client resizes to ~320x240 JPEG q70 ≈ 15 KB). Keeping it
+// in Postgres rather than S3 honours the cost-sensitivity of the Render free
+// tier; if storage grows past ~100 MB per tenant the operator can migrate
+// to object storage.
+//
+// `selfie_status` discriminates three soft-fail modes:
+//   captured     — image is non-null, employee took a photo
+//   denied       — required by device, but user denied camera permission
+//   unavailable  — device.require_selfie = false (e.g. webcam-less kiosk)
+//
+// FK to sc_clock_events has ON DELETE CASCADE so deleting a clock event
+// (admin correction) cleans up its photo too.
+export const scClockEventPhotos = pgTable(
+  "sc_clock_event_photos",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    traceyTenantId: text("tracey_tenant_id").notNull(),
+    clockEventId: uuid("clock_event_id").notNull(),
+    image: bytea("image"),
+    mimeType: text("mime_type"),
+    selfieStatus: text("selfie_status").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("sc_clock_event_photos_event_uq").on(
+      t.traceyTenantId,
+      t.clockEventId,
+    ),
+    index("sc_clock_event_photos_tenant_idx").on(
+      t.traceyTenantId,
+      t.createdAt,
+    ),
+    check(
+      "sc_clock_event_photos_status_chk",
+      sql`${t.selfieStatus} in ('captured','denied','unavailable')`,
+    ),
+  ],
+);
+
 // ─── Inferred types ───
 
 export type ScLocation = typeof scLocations.$inferSelect;
@@ -683,3 +822,10 @@ export type ScAssignmentStatus =
   | "no_show";
 export type ScTimeOffStatus = "pending" | "approved" | "denied" | "cancelled";
 export type ScSwapStatus = "pending" | "accepted" | "declined" | "cancelled";
+export type ScEmployeePin = typeof scEmployeePins.$inferSelect;
+export type NewScEmployeePin = typeof scEmployeePins.$inferInsert;
+export type ScKioskDevice = typeof scKioskDevices.$inferSelect;
+export type NewScKioskDevice = typeof scKioskDevices.$inferInsert;
+export type ScClockEventPhoto = typeof scClockEventPhotos.$inferSelect;
+export type NewScClockEventPhoto = typeof scClockEventPhotos.$inferInsert;
+export type ScSelfieStatus = "captured" | "denied" | "unavailable";
