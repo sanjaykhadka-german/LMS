@@ -121,6 +121,36 @@ export function PunchScreen(props: PunchScreenProps) {
     setSelfieFor(null);
   };
 
+  // 30-sec idle bounce. The actor cookie has a 60-sec hard cap server-side
+  // (see signActorCookie default), but if a user PIN'd in then walked away
+  // we want the next person seeing the kiosk to start fresh — not see
+  // someone else's name / schedule. Any mouse / key / touch event resets
+  // the timer; on expiry we submit the existing clearActorAction form.
+  const idleFormRef = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const IDLE_MS = 30_000;
+    const reset = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        idleFormRef.current?.requestSubmit();
+      }, IDLE_MS);
+    };
+    reset();
+    const events: Array<keyof WindowEventMap> = [
+      "mousemove",
+      "mousedown",
+      "keydown",
+      "touchstart",
+      "scroll",
+    ];
+    events.forEach((e) => window.addEventListener(e, reset, { passive: true }));
+    return () => {
+      if (timer) clearTimeout(timer);
+      events.forEach((e) => window.removeEventListener(e, reset));
+    };
+  }, []);
+
   if (!ackd && announcement) {
     return (
       <section className="mx-auto mt-12 w-full max-w-xl space-y-5 rounded-xl border border-amber-900/40 bg-amber-950/30 p-8 text-center">
@@ -266,6 +296,11 @@ export function PunchScreen(props: PunchScreenProps) {
           onCancel={() => setSelfieFor(null)}
         />
       ) : null}
+
+      {/* Invisible form for the idle-timeout submit. requestSubmit() on this
+          triggers clearActorAction without needing to import the server
+          action call directly into client code. */}
+      <form ref={idleFormRef} action={clearActorAction} className="hidden" />
     </>
   );
 }

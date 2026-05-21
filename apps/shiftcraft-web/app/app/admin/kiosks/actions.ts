@@ -152,6 +152,41 @@ export async function revokeKioskAction(formData: FormData): Promise<void> {
   revalidatePath("/app/admin/kiosks");
 }
 
+export async function toggleSelfieRequiredAction(
+  formData: FormData,
+): Promise<void> {
+  const deviceId = String(formData.get("deviceId") ?? "");
+  const next = formData.get("next") === "on";
+  if (!deviceId) return;
+
+  const membership = await currentMembership();
+  if (!membership || !isAtLeastManager(membership.role)) return;
+  const tenantId = membership.tenant.id;
+
+  await forTenant(tenantId).run((tx) =>
+    tx
+      .update(scKioskDevices)
+      .set({ requireSelfie: next })
+      .where(
+        and(
+          eq(scKioskDevices.id, deviceId),
+          eq(scKioskDevices.traceyTenantId, tenantId),
+        ),
+      ),
+  );
+
+  await logAuditEvent({
+    action: next
+      ? "shiftcraft.kiosk.selfie_required_on"
+      : "shiftcraft.kiosk.selfie_required_off",
+    targetKind: "sc_kiosk_device",
+    targetId: deviceId,
+  });
+
+  revalidatePath("/app/admin/kiosks");
+  revalidatePath(`/app/admin/kiosks/${deviceId}`);
+}
+
 // Used when a pairing code expires before the device claims it — the
 // operator can mint a new 15-min window without recreating the device.
 // Also resets revoked_at so a previously-revoked device can be re-paired.

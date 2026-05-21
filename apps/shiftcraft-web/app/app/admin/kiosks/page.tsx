@@ -247,7 +247,12 @@ export default async function KiosksAdminPage({
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="font-medium">{d.label}</span>
+                      <Link
+                        href={`/app/admin/kiosks/${d.id}`}
+                        className="font-medium hover:underline"
+                      >
+                        {d.label}
+                      </Link>
                       <span
                         className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${badge.classes}`}
                       >
@@ -268,6 +273,9 @@ export default async function KiosksAdminPage({
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    <Button asChild variant="outline" size="sm">
+                      <Link href={`/app/admin/kiosks/${d.id}`}>Manage</Link>
+                    </Button>
                     {(codeExpired || d.revokedAt) ? (
                       <form action={regeneratePairingCodeAction}>
                         <input
