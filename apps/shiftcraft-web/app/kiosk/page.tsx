@@ -11,6 +11,7 @@ import {
   KIOSK_DEVICE_COOKIE,
   verifyDeviceCookie,
 } from "~/lib/kiosk/cookies";
+import { KioskNumpad } from "./_numpad";
 
 export const metadata = { title: "Kiosk" };
 // The kiosk surface is always fresh — clock state, who's-here, last-seen
@@ -127,30 +128,17 @@ export default async function KioskHome({
     );
   }
 
-  // Paired but no numpad yet — Slice 5 will replace this placeholder with
-  // the real PIN entry experience.
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center px-6">
-      <div className="w-full max-w-lg space-y-3 text-center">
+    <main className="flex min-h-screen flex-col items-center justify-center gap-10 px-6 py-12">
+      <header className="space-y-1 text-center">
         <div className="text-xs uppercase tracking-[0.2em] text-zinc-500">
           {paired.tenantName}
         </div>
-        <h1 className="text-4xl font-semibold tracking-tight">
+        <h1 className="text-3xl font-semibold tracking-tight">
           {paired.locationName}
         </h1>
-        <p className="text-sm text-zinc-400">
-          Kiosk paired. PIN entry arrives in the next update.
-        </p>
-        {paired.requireSelfie ? (
-          <p className="text-xs text-zinc-500">
-            Selfie required on clock-in / clock-out.
-          </p>
-        ) : (
-          <p className="text-xs text-zinc-500">
-            Selfie disabled on this device.
-          </p>
-        )}
-      </div>
+      </header>
+      <KioskNumpad />
     </main>
   );
 }

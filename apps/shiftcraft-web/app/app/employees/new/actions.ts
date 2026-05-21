@@ -11,7 +11,7 @@ import {
   scEmployees,
 } from "@tracey/db";
 import { currentMembership, currentUser } from "~/lib/auth/current";
-import { hashPassword } from "~/lib/auth/passwords";
+import { hashPassword, verifyPassword } from "~/lib/auth/passwords";
 import { logAuditEvent } from "~/lib/audit";
 import { notifyTenantAdmins } from "~/lib/notifications";
 import { isAtLeastManager } from "~/lib/roles";
@@ -404,6 +404,35 @@ export async function setPinAction(
       status: "error",
       message: "Employee not found in this workspace.",
     };
+  }
+
+  // Collision check. PIN uniqueness is intentionally NOT enforced at the
+  // DB level (no unique index on the hash — which couldn't exist anyway
+  // since bcrypt salts every hash differently). We catch collisions HERE
+  // in the manager-facing action so the kiosk surface itself can rely on
+  // "one PIN matches at most one user". The original "no enumeration"
+  // property is preserved on the kiosk (a wrong PIN at /kiosk always
+  // returns generic "Wrong PIN" — never "this PIN is taken"); leaking
+  // collision presence to a Manager+ is the right trade.
+  const others = await forTenant(tenantId).run((tx) =>
+    tx
+      .select({ pinHash: scEmployeePins.pinHash })
+      .from(scEmployeePins)
+      .where(
+        and(
+          eq(scEmployeePins.traceyTenantId, tenantId),
+          sql`${scEmployeePins.appUserId} <> ${appUserId}`,
+        ),
+      ),
+  );
+  for (const o of others) {
+    if (await verifyPassword(parsed.data.pin, o.pinHash)) {
+      return {
+        status: "error",
+        message:
+          "Another employee already uses that PIN — pick a different one.",
+      };
+    }
   }
 
   const me = await currentUser();
