@@ -5,6 +5,7 @@ import { requireAdmin } from "~/lib/auth/admin";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
+import { PageHeader } from "~/components/page-header";
 import { NameCrudForm } from "../_components/NameCrudForm";
 import { DeleteRowForm } from "../_components/DeleteRowForm";
 import { createDepartmentAction, deleteDepartmentAction } from "./actions";
@@ -23,18 +24,15 @@ export default async function DepartmentsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Departments</h1>
-          <p className="text-sm text-[color:var(--muted-foreground)]">
-            The teams staff belong to. Pick which modules each department
-            auto-assigns to new staff via the policies grid.
-          </p>
-        </div>
-        <Button asChild variant="outline">
-          <Link href="/app/admin/departments/policies">Module policies →</Link>
-        </Button>
-      </div>
+      <PageHeader
+        title="Departments"
+        description="The teams staff belong to. Pick which modules each department auto-assigns to new staff via the policies grid."
+        actions={
+          <Button asChild variant="outline">
+            <Link href="/app/admin/departments/policies">Module policies →</Link>
+          </Button>
+        }
+      />
 
       <Card>
         <CardHeader>

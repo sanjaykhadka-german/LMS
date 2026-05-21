@@ -16,6 +16,7 @@ import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { HelpPopover } from "~/components/ui/help-popover";
+import { PageHeader } from "~/components/page-header";
 import { NewEmployeeForm } from "./_new-form";
 import { RowActions } from "./_row-actions";
 import { StatusPicker } from "./_status-picker";
@@ -101,19 +102,17 @@ export default async function EmployeesPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Employees</h1>
-          <p className="text-sm text-[color:var(--muted-foreground)]">
-            {employees.length} total · {statusCounts.active} active · {statusCounts.disabled} disabled · {statusCounts.terminated} terminated
-          </p>
-        </div>
-        <Button asChild variant="outline">
-          <Link href="/app/admin/employees/bulk">
-            <Upload className="mr-1 h-4 w-4" /> Bulk upload
-          </Link>
-        </Button>
-      </div>
+      <PageHeader
+        title="Employees"
+        description={`${employees.length} total · ${statusCounts.active} active · ${statusCounts.disabled} disabled · ${statusCounts.terminated} terminated`}
+        actions={
+          <Button asChild variant="outline">
+            <Link href="/app/admin/employees/bulk">
+              <Upload className="mr-1 h-4 w-4" /> Bulk upload
+            </Link>
+          </Button>
+        }
+      />
 
       {error && <ErrorBanner code={error} />}
 

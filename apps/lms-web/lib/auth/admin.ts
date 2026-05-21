@@ -38,6 +38,7 @@ export async function requireAdmin(): Promise<LearnerContext & { role: "owner" |
     traceyUserId: user.id,
     traceyTenantId: tenant.id,
     tenantTimezone: tenant.timezone,
+    tenantAuditMode: tenant.auditMode,
     lmsUser,
     role,
     db: forTenant(tenant.id),

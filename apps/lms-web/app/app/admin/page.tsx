@@ -154,7 +154,7 @@ export default async function AdminOverviewPage({
         .where(tenantWhere(lmsModules, tid))
         .orderBy(asc(lmsModules.title)),
     ),
-    buildDashboardModel({ tid, from, to, deptId, moduleId }),
+    buildDashboardModel({ tid, from, to, deptId, moduleId, auditMode: ctx.tenantAuditMode }),
   ]);
 
   const fromStr = toIsoDate(from);

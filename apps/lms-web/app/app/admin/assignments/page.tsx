@@ -1,16 +1,20 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import {
-  lmsAssignments,
   lmsDepartments,
   lmsModules,
   lmsUsers,
 } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
 import { formatDateTime } from "~/lib/format/datetime";
+import {
+  listAdminAssignments,
+  listRecentAdminAssignments,
+} from "~/lib/lms/queries/assignments";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
 import { Badge } from "~/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { HelpPopover } from "~/components/ui/help-popover";
+import { PageHeader } from "~/components/page-header";
 import { deleteAssignmentAction } from "./actions";
 import { bulkAssignModuleAction } from "../modules/[id]/assign/actions";
 import { AssignmentsTable, BulkAssign } from "./_filtered";
@@ -22,42 +26,8 @@ export default async function AssignmentsPage() {
   const tid = ctx.traceyTenantId;
 
   const [rows, recent, employees, modulesList] = await Promise.all([
-    ctx.db.run((tx) =>
-      tx
-        .select({
-          id: lmsAssignments.id,
-          moduleId: lmsAssignments.moduleId,
-          moduleTitle: lmsModules.title,
-          userId: lmsAssignments.userId,
-          userName: lmsUsers.name,
-          userEmail: lmsUsers.email,
-          assignedAt: lmsAssignments.assignedAt,
-          dueAt: lmsAssignments.dueAt,
-          completedAt: lmsAssignments.completedAt,
-          departmentName: lmsDepartments.name,
-        })
-        .from(lmsAssignments)
-        .innerJoin(lmsModules, eq(lmsModules.id, lmsAssignments.moduleId))
-        .innerJoin(lmsUsers, eq(lmsUsers.id, lmsAssignments.userId))
-        .leftJoin(lmsDepartments, eq(lmsDepartments.id, lmsUsers.departmentId))
-        .where(tenantWhere(lmsAssignments, tid))
-        .orderBy(asc(lmsModules.title), asc(lmsUsers.name)),
-    ),
-    ctx.db.run((tx) =>
-      tx
-        .select({
-          id: lmsAssignments.id,
-          moduleTitle: lmsModules.title,
-          userName: lmsUsers.name,
-          assignedAt: lmsAssignments.assignedAt,
-        })
-        .from(lmsAssignments)
-        .innerJoin(lmsModules, eq(lmsModules.id, lmsAssignments.moduleId))
-        .innerJoin(lmsUsers, eq(lmsUsers.id, lmsAssignments.userId))
-        .where(tenantWhere(lmsAssignments, tid))
-        .orderBy(desc(lmsAssignments.assignedAt))
-        .limit(5),
-    ),
+    listAdminAssignments(ctx),
+    listRecentAdminAssignments(ctx, 5),
     ctx.db.run((tx) =>
       tx
         .select({
@@ -109,24 +79,23 @@ export default async function AssignmentsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="flex items-center gap-1.5 text-2xl font-semibold tracking-tight">
-          Assignments
-          <HelpPopover label="About assignments">
-            An <strong>assignment</strong> means a specific employee is
-            expected to complete a specific module. Assign in bulk from the
-            card below, or auto-assign via department policy. Statuses:
-            <strong> Open</strong> = not yet attempted,
-            <strong> Due ≤14d</strong> = due within two weeks,
-            <strong> Overdue</strong> = past the due date,
-            <strong> Completed</strong> = passed the quiz.
-          </HelpPopover>
-        </h1>
-        <p className="text-sm text-[color:var(--muted-foreground)]">
-          Pick a module and the staff to enrol in one go below. Use the table
-          to spot-check status and unassign individual rows.
-        </p>
-      </div>
+      <PageHeader
+        title={
+          <>
+            Assignments
+            <HelpPopover label="About assignments">
+              An <strong>assignment</strong> means a specific employee is
+              expected to complete a specific module. Assign in bulk from the
+              card below, or auto-assign via department policy. Statuses:
+              <strong> Open</strong> = not yet attempted,
+              <strong> Due ≤14d</strong> = due within two weeks,
+              <strong> Overdue</strong> = past the due date,
+              <strong> Completed</strong> = passed the quiz.
+            </HelpPopover>
+          </>
+        }
+        description="Pick a module and the staff to enrol in one go below. Use the table to spot-check status and unassign individual rows."
+      />
 
       <Card>
         <CardHeader>

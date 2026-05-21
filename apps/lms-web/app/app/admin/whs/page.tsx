@@ -1,8 +1,6 @@
 import Link from "next/link";
-import { and, asc, desc, eq } from "drizzle-orm";
-import { lmsUsers, lmsWhsRecords } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
-import { tenantWhere } from "~/lib/lms/tenant-scope";
+import { listAdminWhsRecords } from "~/lib/lms/queries/whs";
 import { ensureSystemKinds, listWhsKinds } from "~/lib/lms/whs-kinds";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -34,29 +32,8 @@ export default async function WhsPage({
   const kindRows = await listWhsKinds({ db: ctx.db, traceyTenantId: tid });
   const kindBySlug = new Map(kindRows.map((k) => [k.slug, k]));
 
-  const baseFilter =
-    sp.kind && kindBySlug.has(sp.kind) ? eq(lmsWhsRecords.kind, sp.kind) : undefined;
-
-  const records = await ctx.db.run((tx) =>
-    tx
-      .select({
-        id: lmsWhsRecords.id,
-        kind: lmsWhsRecords.kind,
-        title: lmsWhsRecords.title,
-        issuedOn: lmsWhsRecords.issuedOn,
-        expiresOn: lmsWhsRecords.expiresOn,
-        severity: lmsWhsRecords.severity,
-        incidentDate: lmsWhsRecords.incidentDate,
-        documentFilename: lmsWhsRecords.documentFilename,
-        userName: lmsUsers.name,
-      })
-      .from(lmsWhsRecords)
-      .leftJoin(lmsUsers, eq(lmsUsers.id, lmsWhsRecords.userId))
-      .where(
-        baseFilter ? and(baseFilter, tenantWhere(lmsWhsRecords, tid)) : tenantWhere(lmsWhsRecords, tid),
-      )
-      .orderBy(desc(lmsWhsRecords.expiresOn), asc(lmsWhsRecords.title)),
-  );
+  const kindFilter = sp.kind && kindBySlug.has(sp.kind) ? sp.kind : undefined;
+  const records = await listAdminWhsRecords(ctx, { kindFilter });
 
   const today = new Date();
   const soonMs = 30 * 24 * 60 * 60 * 1000;

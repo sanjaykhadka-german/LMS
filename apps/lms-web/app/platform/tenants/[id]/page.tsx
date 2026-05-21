@@ -14,6 +14,7 @@ import {
   getTenantLmsCounts,
   getTenantSchemaInfo,
 } from "~/lib/tenancy/cross-schema";
+import { SubscriptionOverrideForm } from "./SubscriptionOverrideForm";
 
 const statusVariant = {
   trialing: "warning",
@@ -188,6 +189,24 @@ export default async function PlatformTenantDetailPage({ params }: PageProps) {
                 "—"
               )
             }
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Subscription override</CardTitle>
+          <CardDescription>
+            Force a billing status or extend the trial without going through
+            Stripe. Useful for local dev, comp accounts, and webhook misses.
+            Stripe webhooks remain authoritative — a later delivery overwrites
+            an override.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <SubscriptionOverrideForm
+            tenantId={tenant.id}
+            currentStatus={tenant.status}
           />
         </CardContent>
       </Card>

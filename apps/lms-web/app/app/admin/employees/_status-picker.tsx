@@ -19,11 +19,11 @@ const STATUS_LABEL: Record<EmployeeStatus, string> = {
 // gets a colour hint without needing a separate badge.
 const STATUS_CLASS: Record<EmployeeStatus, string> = {
   active:
-    "border-emerald-500/40 bg-emerald-500/10 text-emerald-800 dark:text-emerald-200",
+    "border-emerald-600 bg-emerald-100 text-emerald-900 dark:border-emerald-500/60 dark:bg-emerald-900/40 dark:text-emerald-100",
   disabled:
-    "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-200",
+    "border-amber-600 bg-amber-100 text-amber-900 dark:border-amber-500/60 dark:bg-amber-900/40 dark:text-amber-100",
   terminated:
-    "border-[color:var(--border)] bg-[color:var(--secondary)] text-[color:var(--muted-foreground)]",
+    "border-[color:var(--border)] bg-[color:var(--muted)] text-[color:var(--foreground)]",
 };
 
 export function StatusPicker({ id, status, terminationDate }: Props) {

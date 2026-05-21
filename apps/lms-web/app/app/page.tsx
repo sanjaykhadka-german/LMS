@@ -55,17 +55,28 @@ export default async function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-[1800px] px-4 py-10">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{tenant.name}</h1>
-          <p className="text-sm text-[color:var(--muted-foreground)]">
-            Welcome back.
-          </p>
+      <div className="relative overflow-hidden rounded-xl border border-[color:var(--border)] bg-gradient-to-br from-[color:var(--primary)]/8 via-[color:var(--card)] to-[color:var(--accent)]/8 p-8">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-[color:var(--primary)]/10 blur-3xl"
+        />
+        <div className="relative flex flex-wrap items-center justify-between gap-6">
+          <div>
+            <Badge variant={statusVariant[tenant.status as keyof typeof statusVariant]}>
+              {statusLabel[tenant.status as keyof typeof statusLabel]}
+              {trialDaysLeft !== null && ` — ${trialDaysLeft}d left`}
+            </Badge>
+            <h1 className="mt-3 text-3xl font-semibold tracking-tight">
+              Welcome back, {tenant.name}
+            </h1>
+            <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
+              Pick up where you left off, or check your team&apos;s progress.
+            </p>
+          </div>
+          <Button asChild size="lg">
+            <Link href="/app/my/modules">Go to my training</Link>
+          </Button>
         </div>
-        <Badge variant={statusVariant[tenant.status as keyof typeof statusVariant]}>
-          {statusLabel[tenant.status as keyof typeof statusLabel]}
-          {trialDaysLeft !== null && ` — ${trialDaysLeft}d left`}
-        </Badge>
       </div>
 
       {showPendingCancel && (

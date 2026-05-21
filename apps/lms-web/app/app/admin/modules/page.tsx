@@ -1,12 +1,14 @@
 import Link from "next/link";
-import { and, asc, inArray, sql } from "drizzle-orm";
-import { lmsAssignments, lmsModules, lmsQuestions } from "@tracey/db";
+import { and, inArray, sql } from "drizzle-orm";
+import { lmsAssignments, lmsQuestions } from "@tracey/db";
 import { requireAdmin } from "~/lib/auth/admin";
+import { listAdminModules } from "~/lib/lms/queries/modules";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { HelpPopover } from "~/components/ui/help-popover";
+import { PageHeader } from "~/components/page-header";
 import { NameCrudForm } from "../_components/NameCrudForm";
 import { DeleteRowForm } from "../_components/DeleteRowForm";
 import { createModuleAction, deleteModuleAction } from "./actions";
@@ -17,25 +19,11 @@ export default async function ModulesPage() {
   const ctx = await requireAdmin();
   const tid = ctx.traceyTenantId;
 
-  // Fetch modules first, then compute question + assignment counts in
-  // separate aggregated queries. The previous correlated-subquery shape
-  // returned 0 in the rendered count column for every module — drizzle
-  // interpolated the inner table reference in a way that escaped the
-  // outer tenant context. GROUP BY on a tenant-filtered SELECT is the
-  // bulletproof shape and avoids the inline-subquery edge case.
-  const baseRows = await ctx.db.run((tx) =>
-    tx
-      .select({
-        id: lmsModules.id,
-        title: lmsModules.title,
-        description: lmsModules.description,
-        isPublished: lmsModules.isPublished,
-        createdAt: lmsModules.createdAt,
-      })
-      .from(lmsModules)
-      .where(tenantWhere(lmsModules, tid))
-      .orderBy(asc(lmsModules.title)),
-  );
+  // Fetch modules via the data-access helper so the Audit Mode filter
+  // (hide unpublished) is enforced centrally rather than inline in this
+  // page. Question + assignment counts are computed separately because
+  // they're scoped joins and don't need the audit-mode filter.
+  const baseRows = await listAdminModules(ctx);
 
   const moduleIds = baseRows.map((m) => m.id);
   const [questionCounts, assignmentCounts] = await Promise.all([
@@ -88,9 +76,9 @@ export default async function ModulesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="flex items-center gap-1.5 text-2xl font-semibold tracking-tight">
+      <PageHeader
+        title={
+          <>
             Modules
             <HelpPopover label="About modules">
               A <strong>module</strong> is one unit of training — e.g. &quot;Knife
@@ -99,17 +87,15 @@ export default async function ModulesPage() {
               or auto-assign it via department policy. New modules start as
               <em> drafts</em>; publish from the edit page when ready.
             </HelpPopover>
-          </h1>
-          <p className="text-sm text-[color:var(--muted-foreground)]">
-            The training units staff complete. Each module has content sections, an
-            optional quiz, and can be assigned to specific staff or auto-assigned
-            via department policy.
-          </p>
-        </div>
-        <Button asChild variant="outline" tooltip="Open the AI module-authoring studio">
-          <Link href="/app/admin/modules/ai-studio">AI Studio →</Link>
-        </Button>
-      </div>
+          </>
+        }
+        description="The training units staff complete. Each module has content sections, an optional quiz, and can be assigned to specific staff or auto-assigned via department policy."
+        actions={
+          <Button asChild variant="outline" tooltip="Open the AI module-authoring studio">
+            <Link href="/app/admin/modules/ai-studio">AI Studio →</Link>
+          </Button>
+        }
+      />
 
       <Card>
         <CardHeader>

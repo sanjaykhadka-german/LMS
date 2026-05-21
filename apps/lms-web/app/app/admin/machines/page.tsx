@@ -5,6 +5,7 @@ import { requireAdmin } from "~/lib/auth/admin";
 import { tenantWhere } from "~/lib/lms/tenant-scope";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
+import { PageHeader } from "~/components/page-header";
 import { NameCrudForm } from "../_components/NameCrudForm";
 import { DeleteRowForm } from "../_components/DeleteRowForm";
 import { createMachineAction, deleteMachineAction } from "./actions";
@@ -33,14 +34,10 @@ export default async function MachinesPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Machines</h1>
-        <p className="text-sm text-[color:var(--muted-foreground)]">
-          Equipment that requires training to operate. Link a machine to one or
-          more modules — staff become qualified on it once they pass every
-          linked module.
-        </p>
-      </div>
+      <PageHeader
+        title="Machines"
+        description="Equipment that requires training to operate. Link a machine to one or more modules — staff become qualified on it once they pass every linked module."
+      />
 
       <Card>
         <CardHeader>

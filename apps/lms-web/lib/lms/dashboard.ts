@@ -20,6 +20,15 @@ export type DashboardFilters = {
   to: Date;
   deptId: number | null;
   moduleId: number | null;
+  /** When true (workspace Audit Mode), the dashboard queries drop:
+   *   - inactive/terminated employees from the user scope
+   *   - unpublished modules from the module list
+   *   - failed attempts from the window
+   *   - incomplete assignments from the compliance population
+   *  KPIs recompute over the filtered set — by construction
+   *  completionPct becomes 100% in audit mode. The page labels the
+   *  affected cards "Audit view" so the consistency is visible. */
+  auditMode: boolean;
 };
 
 export type AssignmentStatus = "completed" | "overdue" | "due_soon" | "open";
@@ -92,7 +101,15 @@ export type LatestAttemptCell = { passed: boolean; passedAt: Date | null };
  */
 export async function latestAttemptsByUserModule(
   tid: string,
+  opts: { auditMode?: boolean } = {},
 ): Promise<Map<number, Map<number, LatestAttemptCell>>> {
+  // Audit Mode: only consider passing attempts when computing the
+  // "latest" row. A user with a recent failed attempt then appears as
+  // either their last passing attempt (clean) or "not yet attempted"
+  // (cell renders as empty), instead of a red ❌.
+  const innerWhere = opts.auditMode
+    ? sql`tracey_tenant_id = ${tid} and passed = true`
+    : sql`tracey_tenant_id = ${tid}`;
   const rows = (await forTenant(tid).run((tx) =>
     tx.execute(sql`
     select user_id, module_id, passed, created_at
@@ -100,7 +117,7 @@ export async function latestAttemptsByUserModule(
       select user_id, module_id, passed, created_at,
              row_number() over (partition by user_id, module_id order by created_at desc) as rn
       from attempts
-      where tracey_tenant_id = ${tid}
+      where ${innerWhere}
     ) t
     where rn = 1
   `),
@@ -140,6 +157,15 @@ export async function buildDashboardModel(
   const { userRows, deptRows, moduleRows, windowAttempts, scopedAssignments, recentRows } =
     await forTenant(f.tid).run(async (tx) => {
       // 1) Resolve scoped users (always — we need names + dept for charts/tables).
+      const userFilters = [eq(lmsUsers.traceyTenantId, f.tid)];
+      if (f.deptId != null) userFilters.push(eq(lmsUsers.departmentId, f.deptId));
+      if (f.auditMode) {
+        // Drop disabled / terminated employees from the compliance population.
+        userFilters.push(eq(lmsUsers.isActiveFlag, true));
+        userFilters.push(
+          sql`(${lmsUsers.terminationDate} is null or ${lmsUsers.terminationDate} >= current_date)`,
+        );
+      }
       const userRows = await tx
         .select({
           id: lmsUsers.id,
@@ -148,15 +174,12 @@ export async function buildDashboardModel(
           isActive: lmsUsers.isActiveFlag,
         })
         .from(lmsUsers)
-        .where(
-          and(
-            eq(lmsUsers.traceyTenantId, f.tid),
-            ...(f.deptId != null ? [eq(lmsUsers.departmentId, f.deptId)] : []),
-          ),
-        );
+        .where(and(...userFilters));
       const scopedUserIds = userRows.map((u) => u.id);
 
       // 2) Departments + modules (for charting joins).
+      const moduleFilters = [eq(lmsModules.traceyTenantId, f.tid)];
+      if (f.auditMode) moduleFilters.push(eq(lmsModules.isPublished, true));
       const [deptRows, moduleRows] = await Promise.all([
         tx
           .select({ id: lmsDepartments.id, name: lmsDepartments.name })
@@ -169,7 +192,7 @@ export async function buildDashboardModel(
             validForDays: lmsModules.validForDays,
           })
           .from(lmsModules)
-          .where(eq(lmsModules.traceyTenantId, f.tid)),
+          .where(and(...moduleFilters)),
       ]);
 
       // 3) Attempts in window — fetch full rows then aggregate in JS.
@@ -188,6 +211,7 @@ export async function buildDashboardModel(
           attemptWindowFilters.push(inArray(lmsAttempts.userId, scopedUserIds));
         }
       }
+      if (f.auditMode) attemptWindowFilters.push(eq(lmsAttempts.passed, true));
       const windowAttempts = await tx
         .select({
           id: lmsAttempts.id,
@@ -211,7 +235,17 @@ export async function buildDashboardModel(
         } else {
           assignmentFilters.push(inArray(lmsAssignments.userId, scopedUserIds));
         }
+      } else if (f.auditMode) {
+        // Even without dept scope, audit mode must restrict assignments to
+        // the active-employee user set computed above. Otherwise an
+        // assignment owned by a terminated employee would still count.
+        if (scopedUserIds.length === 0) {
+          assignmentFilters.push(sql`false`);
+        } else {
+          assignmentFilters.push(inArray(lmsAssignments.userId, scopedUserIds));
+        }
       }
+      if (f.auditMode) assignmentFilters.push(isNotNull(lmsAssignments.completedAt));
       const scopedAssignments = await tx
         .select({
           id: lmsAssignments.id,
@@ -229,7 +263,11 @@ export async function buildDashboardModel(
       if (userScope) {
         if (scopedUserIds.length === 0) recentFilters.push(sql`false`);
         else recentFilters.push(inArray(lmsAttempts.userId, scopedUserIds));
+      } else if (f.auditMode) {
+        if (scopedUserIds.length === 0) recentFilters.push(sql`false`);
+        else recentFilters.push(inArray(lmsAttempts.userId, scopedUserIds));
       }
+      if (f.auditMode) recentFilters.push(eq(lmsAttempts.passed, true));
       const recentRows = await tx
         .select({
           id: lmsAttempts.id,

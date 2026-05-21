@@ -9,6 +9,7 @@ import {
 import { formatDate, formatDateTime } from "~/lib/format/datetime";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
+import { PageHeader } from "~/components/page-header";
 import { StatCard } from "../_components/StatCard";
 import { ModuleCard, type ModuleStatus } from "../_components/ModuleCard";
 
@@ -41,15 +42,15 @@ export default async function MyModulesPage() {
 
   return (
     <div className="mx-auto max-w-[1800px] space-y-8 px-4 py-10">
-      <header>
-        <div className="text-xs font-semibold uppercase tracking-wider text-[color:var(--muted-foreground)]">
-          01 / Your training
-        </div>
-        <h1 className="mt-1 text-3xl font-semibold tracking-tight">My training</h1>
-        <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
-          Track your progress, pick up where you left off, and review past results.
-        </p>
-      </header>
+      <PageHeader
+        title="My training"
+        description="Track your progress, pick up where you left off, and review past results."
+        badge={
+          <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--muted-foreground)]">
+            01 / Your training
+          </span>
+        }
+      />
 
       {total === 0 ? (
         <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] p-8 text-center">

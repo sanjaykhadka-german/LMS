@@ -71,6 +71,12 @@ export interface LearnerContext {
   traceyUserId: string;
   traceyTenantId: string;
   tenantTimezone: string;
+  /** Workspace-level "Audit Mode" flag. When true, admin/manager surfaces
+   *  filter out presentation-layer noise (incomplete assignments, failed
+   *  attempts, unpublished modules, expired certs, inactive employees in
+   *  compliance denominators). Read on every admin request — flips take
+   *  effect on the next page render. */
+  tenantAuditMode: boolean;
   lmsUser: LmsUser;
   /** Tenant-scoped transaction runner. Use `ctx.db.run(tx => ...)` for any
    *  query that touches a `tracey_tenant_id`-bearing table — it injects
@@ -183,6 +189,7 @@ export async function requireLearner(): Promise<LearnerContext> {
     traceyUserId: user.id,
     traceyTenantId: tenant.id,
     tenantTimezone: tenant.timezone,
+    tenantAuditMode: tenant.auditMode,
     lmsUser,
     db: forTenant(tenant.id),
   };
