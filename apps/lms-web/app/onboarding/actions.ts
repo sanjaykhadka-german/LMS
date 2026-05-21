@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db, tenants, members, type Tenant } from "@tracey/db";
 import { requireUser, setActiveTenant } from "~/lib/auth/current";
+import { findPendingInvitationForEmail } from "~/lib/auth/invitations";
 import { logAuditEvent } from "~/lib/audit";
 import { provisionTenant } from "~/lib/tenancy/provision";
 
@@ -21,6 +22,14 @@ export async function createTenantAction(
   formData: FormData,
 ): Promise<CreateTenantState> {
   const user = await requireUser();
+
+  // Safety net for the page-level intercept in onboarding/page.tsx. Catches
+  // the back-button race where an invite arrives between page load and submit.
+  const pending = await findPendingInvitationForEmail(user.email);
+  if (pending) {
+    redirect(`/accept-invite?token=${encodeURIComponent(pending.token)}`);
+  }
+
   const parsed = schema.safeParse({ name: formData.get("name") });
   if (!parsed.success) {
     return {
