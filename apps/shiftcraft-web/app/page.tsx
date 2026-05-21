@@ -80,19 +80,19 @@ export default function MarketingHome() {
         <div className="grid items-center gap-12 lg:grid-cols-2">
           <div>
             <span className="inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary ring-1 ring-primary/20">
-              For hospitality teams
+              Built for every shift-based team
             </span>
             <h1
               className="mt-5 text-5xl leading-[1.05] tracking-tight md:text-6xl"
               style={{ fontFamily: "var(--font-heading), ui-serif, Georgia, serif" }}
             >
               Rosters that move at the
-              <span className="italic text-primary"> speed</span> of your floor.
+              <span className="italic text-primary"> speed</span> of your team.
             </h1>
             <p className="mt-6 max-w-xl text-lg leading-relaxed text-muted-foreground">
               ShiftCraft brings time-tracking, rostering, timesheets, leave, and tasks into
-              one workforce studio — built for shops, cafés, and production floors that
-              need to move fast.
+              one workforce studio — built for any business that runs on shifts and
+              needs to move fast.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link
@@ -125,7 +125,7 @@ export default function MarketingHome() {
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <div className="text-xs uppercase tracking-wider text-muted-foreground">
-                  On the floor now
+                  On shift now
                 </div>
                 <div
                   className="text-2xl"
@@ -200,7 +200,7 @@ export default function MarketingHome() {
       <section className="border-y border-border bg-muted/40">
         <div className="mx-auto max-w-6xl px-6 py-20">
           <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-            Everything your floor needs
+            Everything your team needs
           </div>
           <h2
             className="mt-2 text-3xl md:text-4xl"

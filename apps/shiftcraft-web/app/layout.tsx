@@ -11,7 +11,7 @@ const headingFont = Cormorant_Garamond({
 
 export const metadata: Metadata = {
   title: { default: "ShiftCraft", template: "%s — ShiftCraft" },
-  description: "Employee shift scheduling for hospitality teams",
+  description: "Employee shift scheduling for any team",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
