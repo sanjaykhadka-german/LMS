@@ -71,7 +71,21 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 className="text-[2.7rem] leading-none tracking-tight"
                 style={{ fontFamily: "var(--font-heading), ui-serif, Georgia, serif" }}
               >
-                tr<span className="text-[color:var(--primary)]">a</span>cey
+                {/* The accented "a" turns emerald when workspace Audit Mode is
+                    ON. Deliberately unlabelled — an auditor watching the
+                    screen sees only a brand colour, the admin who set the
+                    toggle knows what it means. */}
+                tr
+                <span
+                  className={
+                    membership.tenant.auditMode
+                      ? "text-emerald-500"
+                      : "text-[color:var(--primary)]"
+                  }
+                >
+                  a
+                </span>
+                cey
               </span>
             </Link>
             <TenantSwitcher
@@ -134,7 +148,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           timezone={membership.tenant.timezone}
         />
       )}
-      <main className="flex-1">{children}</main>
+      <main className="flex-1 bg-gradient-to-b from-[color:var(--background)] via-[color:var(--background)] to-[color:var(--primary)]/[0.06]">{children}</main>
     </div>
     </TooltipProvider>
   );

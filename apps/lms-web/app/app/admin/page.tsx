@@ -217,14 +217,7 @@ export default async function AdminOverviewPage({
         <WorkspaceChip icon={Wrench} label="Machines" value={machineCount} href="/app/admin/machines" />
       </div>
 
-      <div className="flex items-center gap-3">
-        <SectionTitle>Training insights</SectionTitle>
-        {ctx.tenantAuditMode ? (
-          <span className="rounded bg-amber-500 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-white">
-            Audit view
-          </span>
-        ) : null}
-      </div>
+      <SectionTitle>Training insights</SectionTitle>
       <DashboardFilters
         from={fromStr}
         to={toStr}

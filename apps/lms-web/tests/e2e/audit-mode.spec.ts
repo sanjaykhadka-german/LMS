@@ -72,9 +72,18 @@ test.describe("Audit Mode", () => {
     await adminPage.getByRole("button", { name: /save/i }).click();
     await adminPage.waitForLoadState("networkidle");
 
+    // Stealth indicator: the "a" in the brand logo tints emerald-500. No
+    // text label is rendered — an auditor watching the screen sees only
+    // a brand colour. We assert on the computed CSS class.
+    const accentLetter = adminPage.locator(
+      'a[href="/app"] span span',
+    ).first();
+    await expect(accentLetter).toHaveClass(/text-emerald-500/, {
+      timeout: 10_000,
+    });
     await expect(
       adminPage.getByText(/Audit Mode — limited view/i),
-    ).toBeVisible({ timeout: 10_000 });
+    ).toHaveCount(0);
 
     expect(await latestAuditAction(tenantId)).toBe(
       "workspace.audit_mode.enabled",
@@ -118,9 +127,13 @@ test.describe("Audit Mode", () => {
     await adminPage.getByRole("button", { name: /save/i }).click();
     await adminPage.waitForLoadState("networkidle");
 
-    await expect(
-      adminPage.getByText(/Audit Mode — limited view/i),
-    ).toHaveCount(0, { timeout: 10_000 });
+    // Verify the green accent reverts to the brand --primary colour.
+    const accentLetter = adminPage.locator(
+      'a[href="/app"] span span',
+    ).first();
+    await expect(accentLetter).not.toHaveClass(/text-emerald-500/, {
+      timeout: 10_000,
+    });
 
     expect(await latestAuditAction(tenantId)).toBe(
       "workspace.audit_mode.disabled",

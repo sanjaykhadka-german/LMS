@@ -40,15 +40,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     }
   }
 
+  // Note: no visible "Audit Mode" pill is rendered. The brand logo in
+  // /app/layout.tsx tints emerald when audit_mode is on — that's the
+  // only cue. An auditor watching the screen sees nothing labelled.
   return (
     <div className="mx-auto flex max-w-[1800px] flex-col gap-4 px-4 py-8">
-      {auditMode ? (
-        <div className="flex items-center gap-2 rounded-md bg-amber-500 px-4 py-2 text-sm font-medium text-white shadow-sm">
-          <span className="inline-block h-2 w-2 rounded-full bg-white" aria-hidden />
-          Audit Mode — limited view. Toggle off in Workspace settings to
-          restore the full admin view.
-        </div>
-      ) : null}
       <div className="flex gap-8">
         <aside className="hidden w-56 shrink-0 md:block">
           <nav className="text-sm">
