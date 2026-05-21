@@ -13,6 +13,7 @@ import { getOrProvisionLmsUser } from "~/lib/lms/learner";
 import { accessLevelFor } from "~/lib/billing/access";
 import { UserMenu } from "./_components/user-menu";
 import { TenantSwitcher } from "./_components/tenant-switcher";
+import { MobileMenu } from "./_components/mobile-menu";
 import { GlobalSearch } from "./_components/global-search";
 import { NotificationBell } from "./_components/notification-bell";
 import { ReadOnlyBanner } from "./_components/read-only-banner";
@@ -66,6 +67,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <header className="sticky top-0 z-40 w-full border-b border-[color:var(--border)] bg-[color:var(--background)]/80 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-[1800px] items-center justify-between px-4">
           <div className="flex items-center gap-4">
+            <MobileMenu
+              isAdminOrOwner={membership.role === "owner" || membership.role === "admin"}
+            />
             <Link href="/app" className="flex items-center" aria-label={siteConfig.name}>
               <span
                 className="text-[2.7rem] leading-none tracking-tight"

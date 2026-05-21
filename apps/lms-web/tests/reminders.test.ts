@@ -13,7 +13,7 @@
 //   - Notifications fired against the wrong tenant if the tenant filter
 //     ever falls off the inner SELECT.
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { and, eq, sql as drizzleSql } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import {
@@ -27,6 +27,23 @@ import {
   tenants,
   users,
 } from "@tracey/db";
+
+// Stub the Resend senders so a populated RESEND_API_KEY in the test shell
+// can't deliver mail to the seeded reminders-*@example.test fixtures. The
+// in-app notification + cooldown assertions below are unaffected because
+// the production callers only branch on the sender's return value.
+vi.mock("../lib/lms/notify-admin", async () => {
+  const actual =
+    await vi.importActual<typeof import("../lib/lms/notify-admin")>(
+      "../lib/lms/notify-admin",
+    );
+  return {
+    ...actual,
+    sendAssignmentReminderEmail: vi.fn(async () => true),
+    sendWhsExpiryReminderEmail: vi.fn(async () => true),
+  };
+});
+
 import { runAssignmentReminders, runWhsReminders } from "../lib/lms/reminders";
 
 const isLiveDb =
@@ -236,8 +253,8 @@ describe.skipIf(!isLiveDb)("runWhsReminders trigger", () => {
   });
 
   it("fires a whs.expiring notification regardless of email status", async () => {
-    // Locally RESEND_API_KEY is unset, so the email path no-ops. The
-    // refactored runWhsReminders fires the in-app notification anyway.
+    // The email sender is mocked at the top of this file, so this asserts
+    // the in-app notification fires regardless of what the email path did.
     await runWhsReminders(seeded.tenantId);
 
     const rows = await db

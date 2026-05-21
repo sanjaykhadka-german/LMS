@@ -82,13 +82,13 @@ export default function MarketingHome() {
         </div>
       </header>
 
-      <section className="mx-auto max-w-5xl px-6 py-20">
-        <h1 className="max-w-3xl text-4xl font-semibold tracking-tight md:text-5xl">
-          Staff training and scheduling, one platform.
+      <section className="mx-auto max-w-6xl px-6 pt-20 pb-12">
+        <h1 className="max-w-4xl text-4xl font-semibold tracking-tight md:text-5xl">
+          Staff training, scheduling, planning, sales, and manufacturing — one platform.
         </h1>
         <p className="mt-6 max-w-2xl text-lg text-muted-foreground">
-          Tracey is a single platform for staff training and shift scheduling, built for
-          hospitality teams.
+          Tracey unifies staff training, shift scheduling, production planning, sales,
+          and manufacturing — built for operations teams in food and hospitality.
         </p>
         <div className="mt-8 flex flex-wrap items-center gap-5">
           <Link
@@ -106,7 +106,7 @@ export default function MarketingHome() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-6xl px-6 py-20">
+      <section className="mx-auto max-w-6xl px-6 pb-20">
         <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
           <article className="flex flex-col rounded-lg border bg-card p-8 shadow-sm">
             <div className="mb-5 inline-flex h-10 w-10 items-center justify-center rounded-md bg-sky-50 text-sky-700">
@@ -135,7 +135,7 @@ export default function MarketingHome() {
           </article>
 
           <article className="flex flex-col rounded-lg border bg-card p-8 shadow-sm">
-            <div className="mb-5 inline-flex h-10 w-10 items-center justify-center rounded-md bg-blue-50 text-blue-700">
+            <div className="mb-5 inline-flex h-10 w-10 items-center justify-center rounded-md bg-violet-50 text-violet-700">
               <CalendarDays className="h-5 w-5" />
             </div>
             <h2 className="text-2xl font-semibold tracking-tight">
@@ -163,7 +163,7 @@ export default function MarketingHome() {
           </article>
 
           <article className="flex flex-col rounded-lg border bg-card p-8 shadow-sm">
-            <div className="mb-5 inline-flex h-10 w-10 items-center justify-center rounded-md bg-cyan-50 text-cyan-700">
+            <div className="mb-5 inline-flex h-10 w-10 items-center justify-center rounded-md bg-emerald-50 text-emerald-700">
               <Factory className="h-5 w-5" />
             </div>
             <h2 className="text-2xl font-semibold tracking-tight">

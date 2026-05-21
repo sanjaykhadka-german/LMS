@@ -21,6 +21,11 @@ function client(): Resend {
   return resend;
 }
 
+// RFC 2606 / RFC 6761 reserved domains — never deliver real mail to these.
+function isReservedTestRecipient(to: string): boolean {
+  return /@(example\.(test|com|org|net)|invalid|localhost|test)$/i.test(to.trim());
+}
+
 export async function notifyAttempt(opts: {
   tenantId: string;
   learnerEmail: string;
@@ -30,7 +35,9 @@ export async function notifyAttempt(opts: {
   passed: boolean;
 }): Promise<void> {
   if (!apiKey) return;
-  const recipients = await getTenantOwnerEmails(opts.tenantId);
+  const recipients = (await getTenantOwnerEmails(opts.tenantId)).filter(
+    (e) => !isReservedTestRecipient(e),
+  );
   if (recipients.length === 0) return;
   const verdict = opts.passed ? "PASSED" : "did NOT pass";
   const subject = `[${siteConfig.name}] ${opts.learnerName} ${verdict} ${opts.moduleTitle} (${opts.score}%)`;
